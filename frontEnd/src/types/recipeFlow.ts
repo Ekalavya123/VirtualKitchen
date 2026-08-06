@@ -123,6 +123,7 @@ export type FlowNodePayload = {
   draggable?: boolean
   selectable?: boolean
   deletable?: boolean
+  connectable?: boolean
   style?: Record<string, unknown>
 }
 
