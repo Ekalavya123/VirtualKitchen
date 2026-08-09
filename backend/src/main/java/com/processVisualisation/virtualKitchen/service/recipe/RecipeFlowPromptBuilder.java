@@ -36,22 +36,104 @@ public class RecipeFlowPromptBuilder {
     }
 
     private String buildSchemaAndRulesBlock() {
-        return "Return JSON with exactly two arrays: steps, edges.\n"
-                + "Step schema (all string fields): id, action, ingredientId, quantity, unit, style, duration, flame, temperature, notes.\n"
-                + "Edge schema: from, to.\n"
-                + "Use these controlled vocabularies:\n"
-                + "- action in [" + ACTION_IDS + "]\n"
-                + "- ingredientId in [" + INGREDIENT_IDS + "] when possible, else custom\n"
-                + "- unit in [" + UNIT_IDS + "]\n"
-                + "- style in [" + PREPARATION_STYLE_IDS + "]\n"
-                + "- flame in [" + FLAME_LEVEL_IDS + "]\n"
-                + "Rules:\n"
-                + "- unique step ids\n"
-                + "- edges reference existing step ids\n"
-                + "- keep steps semantically complete for cooking execution\n"
-                + "- no UI data (position,width,height,style,icons,handles,type,data,source,target,id on edges)\n"
-                + "- unknown optional values must be empty string\n"
-                + "Example:\n"
-                + "{\"steps\":[{\"id\":\"s1\",\"action\":\"add\",\"ingredientId\":\"rice\",\"quantity\":\"2\",\"unit\":\"cup\",\"style\":\"\",\"duration\":\"\",\"flame\":\"\",\"temperature\":\"\",\"notes\":\"\"}],\"edges\":[]}";
+                return """
+                                Return ONLY valid JSON.
+
+                                The JSON must contain exactly:
+                                {
+                                    "steps": [],
+                                    "edges": []
+                                }
+
+                                STEP NODE SCHEMA
+                                Each item in "steps" must be:
+                                {
+                                    "id": "unique id",
+                                    "nodeType": "recipeStep|condition|parallelStart|parallelEnd",
+                                    "data": { ... }
+                                }
+
+                                NODE TYPE: recipeStep
+                                Use for normal cooking actions (add, mix, boil, wait, serve, etc.).
+                                Data schema:
+                                {
+                                    "action": "",
+                                    "ingredientId": "",
+                                    "quantity": "",
+                                    "unit": "",
+                                    "style": "",
+                                    "duration": "",
+                                    "flame": "",
+                                    "temperature": "",
+                                    "notes": ""
+                                }
+
+                                Controlled vocabularies for recipeStep:
+                                - action in [%s]
+                                - ingredientId in [%s] (or "custom")
+                                - unit in [%s]
+                                - style in [%s]
+                                - flame in [%s]
+
+                                NODE TYPE: condition
+                                Use when text contains decisions like:
+                                - if, else, otherwise, until, unless, check, verify, repeat until, when
+
+                                Data schema:
+                                {
+                                    "title": "condition question",
+                                    "notes": "",
+                                    "expectedResult": "success"
+                                }
+
+                                Condition behavior:
+                                - condition nodes should branch using YES/NO labeled edges.
+
+                                NODE TYPE: parallelStart
+                                Use when text indicates parallel work like:
+                                - meanwhile, while, simultaneously, at the same time, in another pan
+
+                                Data schema:
+                                {
+                                    "title": ""
+                                }
+
+                                NODE TYPE: parallelEnd
+                                Use to merge/synchronize previously opened parallel branches.
+
+                                Data schema:
+                                {
+                                    "title": ""
+                                }
+
+                                EDGE SCHEMA
+                                Each item in "edges" must be:
+                                {
+                                    "from": "source step id",
+                                    "to": "target step id",
+                                    "label": ""
+                                }
+
+                                Edge label rules:
+                                - For condition outgoing branches, use label "YES" or "NO".
+                                - For non-condition edges, label may be empty string.
+
+                                Global rules:
+                                - step ids must be unique
+                                - every edge must reference existing step ids
+                                - every step must include nodeType and data
+                                - every parallelStart must eventually connect to a parallelEnd
+                                - keep content semantically complete for cooking execution
+                                - no UI graph fields (no position, x, y, width, height, style, handles, react-flow props)
+                                - unknown optional values should be empty string
+
+                                Return ONLY JSON.
+                                """.formatted(
+                                ACTION_IDS,
+                                INGREDIENT_IDS,
+                                UNIT_IDS,
+                                PREPARATION_STYLE_IDS,
+                                FLAME_LEVEL_IDS
+                );
     }
 }

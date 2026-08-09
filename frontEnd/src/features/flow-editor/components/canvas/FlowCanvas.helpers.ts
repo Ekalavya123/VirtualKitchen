@@ -25,7 +25,7 @@ import {
 import {
   convertRecipeExecutionModelToFlowData,
   normalizeRecipeExecutionModel,
-} from './RecipeExecutionGraphConverter'
+} from './RecipeExecutionGraphConverter.ts'
 
 export type EdgeKind = 'step' | 'yes' | 'no' | 'parallel'
 
@@ -332,8 +332,7 @@ export const normalizeGeneratedFlowData = (value: unknown): FlowData => {
     throw new Error('Generated flow response is invalid.')
   }
 
-  //return buildFlowDataUsingNodesAndEdges(value.nodes, value.edges)
-  return null as unknown as FlowData // TODO: Remove this line once the backend is updated to return a proper execution model.
+  return buildFlowDataUsingNodesAndEdges(value.nodes, value.edges)
 }
 
 export const createFlowDataPayload = (nodes: Node[], edges: Edge[]): FlowData => {
