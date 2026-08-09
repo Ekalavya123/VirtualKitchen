@@ -16,6 +16,9 @@ import com.processVisualisation.virtualKitchen.service.recipe.RecipeFlowValidati
 import com.processVisualisation.virtualKitchen.service.recipe.RecipeValidator;
 
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import com.processVisualisation.virtualKitchen.dto.AIResponseRecordDTO;
 import org.springframework.util.StringUtils;
 
 import java.util.LinkedHashMap;
@@ -34,30 +37,31 @@ public class RecipeGenerationService {
     private final AIClient aiClient;
     private final RecipeFlowPromptBuilder promptBuilder;
     private final RecipeValidator recipeValidator;
+    private final IAIResponseService aiResponseService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final Logger logger = LoggerFactory.getLogger(RecipeGenerationService.class);
 
     public RecipeGenerationService(
             AIClient aiClient,
             RecipeFlowPromptBuilder promptBuilder,
-            RecipeValidator recipeValidator
+            RecipeValidator recipeValidator,
+            IAIResponseService aiResponseService
     ) {
         this.aiClient = aiClient;
         this.promptBuilder = promptBuilder;
         this.recipeValidator = recipeValidator;
+        this.aiResponseService = aiResponseService;
     }
 
     public RecipeFlowGenerationResponseDTO generateFlow(String recipeText) {
         System.out.println("[RECIPE-GEN] Start generate flow");
-
-        String firstPrompt = promptBuilder.buildInitialPrompt(recipeText);
-        AttemptResult firstAttempt = runAttempt(firstPrompt);
+        AttemptResult firstAttempt = runAttempt(recipeText, null);
         if (firstAttempt.valid()) {
             return firstAttempt.response();
         }
 
         System.out.println("[RECIPE-GEN] Validation failed on first attempt. Retrying once.");
-        String retryPrompt = promptBuilder.buildRetryPrompt(recipeText, firstAttempt.rawContent(), firstAttempt.errors());
-        AttemptResult secondAttempt = runAttempt(retryPrompt);
+        AttemptResult secondAttempt = runAttempt(recipeText, firstAttempt);
         if (secondAttempt.valid()) {
             return secondAttempt.response();
         }
@@ -67,19 +71,25 @@ public class RecipeGenerationService {
         throw new RecipeFlowGenerationException("Unable to generate valid recipe flow: " + errorMessage);
     }
 
-    private AttemptResult runAttempt(String userPrompt) {
+    private AttemptResult runAttempt(String userPrompt, AttemptResult prevAttempt) {
+        String refinedPrompt = prevAttempt != null ? promptBuilder.buildRetryPrompt(userPrompt, prevAttempt.rawContent(), prevAttempt.errors()) : promptBuilder.buildInitialPrompt(userPrompt);
         AIRequest request = AIRequest.builder()
                 .systemPrompt(promptBuilder.buildSystemPrompt())
-                .userPrompt(userPrompt)
+                .userPrompt(refinedPrompt)
                 .temperature(0.1d)
                 .maxTokens(3000)
                 .build();
 
+        long startNs = System.nanoTime();
         AIResponse response = aiClient.chat(request);
+        long durationMs = (System.nanoTime() - startNs) / 1_000_000L;
         String content = response == null ? null : response.getContent();
 
         if (!StringUtils.hasText(content)) {
-            return AttemptResult.invalid(content, List.of("AI response content is empty"));
+            AttemptResult invalidResult = AttemptResult.invalid(content, List.of("AI response content is empty"));
+            // persist attempt (even failures)
+            persistAIResponse(userPrompt, response, invalidResult.valid, durationMs, List.of("AI response content is empty"));
+            return invalidResult;
         }
 
         try {
@@ -98,13 +108,44 @@ public class RecipeGenerationService {
 
              RecipeFlowValidationResult validationResult = recipeValidator.validate(steps, edges);
             if (!validationResult.isValid()) {
-                return AttemptResult.invalid(content, validationResult.getErrors());
+                AttemptResult invalidResult = AttemptResult.invalid(content, validationResult.getErrors());
+                persistAIResponse(userPrompt, response, invalidResult.valid, durationMs, validationResult.getErrors());
+                return invalidResult;
             }
 
             RecipeFlowGenerationResponseDTO generated = new RecipeFlowGenerationResponseDTO(steps, edges);
-            return AttemptResult.valid(content, generated);
+            AttemptResult validResult = AttemptResult.valid(content, generated);
+            persistAIResponse(userPrompt, response, validResult.valid, durationMs, List.of());
+            return validResult;
         } catch (JsonProcessingException ex) {
-            return AttemptResult.invalid(content, List.of("Invalid JSON format: " + ex.getOriginalMessage()));
+            AttemptResult invalidResult = AttemptResult.invalid(content, List.of("Invalid JSON format: " + ex.getOriginalMessage()));
+            persistAIResponse(userPrompt, response, invalidResult.valid, durationMs, List.of("Invalid JSON format: " + ex.getOriginalMessage()));
+            return invalidResult;
+        }
+    }
+
+    private void persistAIResponse(String userPrompt, AIResponse response, boolean success, long durationMs, List<String> errors) {
+        try {
+            AIResponseRecordDTO record = new AIResponseRecordDTO();
+            record.setContext("flow-generation");
+            record.setInput(userPrompt);
+            record.setSuccess(success);
+
+            Map<String, Object> respData = new LinkedHashMap<>();
+            respData.put("content", response == null ? null : response.getContent());
+            respData.put("model", response == null ? null : response.getModel());
+            respData.put("promptTokens", response == null ? null : response.getPromptTokens());
+            respData.put("completionTokens", response == null ? null : response.getCompletionTokens());
+            respData.put("totalTokens", response == null ? null : response.getTotalTokens());
+            respData.put("finishReason", response == null ? null : response.getFinishReason());
+            respData.put("rawResponse", response == null ? null : response.getRawResponse());
+            respData.put("durationMs", durationMs);
+            if (errors != null && !errors.isEmpty()) respData.put("errors", errors);
+
+            record.setResponseData(respData);
+            aiResponseService.save(record);
+        } catch (Exception ex) {
+            logger.error("Failed to persist AI response for flow generation", ex);
         }
     }
 
