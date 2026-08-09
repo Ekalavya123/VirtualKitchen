@@ -23,6 +23,7 @@ export interface ShopItem {
   itemType: string
   description?: string
   basePrice?: number
+  defaultUnit?: string
 }
 
 export const InventoryApi = {

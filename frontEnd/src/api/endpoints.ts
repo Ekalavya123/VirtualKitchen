@@ -28,6 +28,12 @@ export const API = {
     equipment: '/api/v1/equipments',
   },
 
+  // Orders
+  orders: {
+    list: '/api/v1/orders',
+    byUserId: (userId: number) => `/api/v1/orders/user/${userId}`,
+  },
+
   // Recipes / Process Templates
   recipes: {
     list: '/api/v1/process-templates',

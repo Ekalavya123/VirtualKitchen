@@ -113,6 +113,29 @@
   color: #999;
 }
 
+.profile-action-button {
+  padding: 8px 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  color: #666;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.profile-action-button:hover {
+  border-color: #6073dd;
+  color: #6073dd;
+}
+
+.profile-action-button.active {
+  background: #6073dd;
+  border-color: #6073dd;
+  color: #fff;
+}
+
 .logout-button {
   padding: 8px 16px;
   border: 1px solid #ddd;
