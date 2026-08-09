@@ -11,4 +11,5 @@ public class RecipeExecutionEdgeDTO {
 
     private String from;
     private String to;
+    private String label;
 }

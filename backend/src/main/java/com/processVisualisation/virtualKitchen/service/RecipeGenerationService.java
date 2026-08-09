@@ -18,7 +18,9 @@ import com.processVisualisation.virtualKitchen.service.recipe.RecipeValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class RecipeGenerationService {
@@ -70,7 +72,7 @@ public class RecipeGenerationService {
                 .systemPrompt(promptBuilder.buildSystemPrompt())
                 .userPrompt(userPrompt)
                 .temperature(0.1d)
-                .maxTokens(2000)
+                .maxTokens(3000)
                 .build();
 
         AIResponse response = aiClient.chat(request);
@@ -134,23 +136,29 @@ public class RecipeGenerationService {
          for (RecipeExecutionStepDTO step : steps) {
              if (step == null) continue;
              step.setId(toStringValue(step.getId()));
-             step.setAction(toStringValue(step.getAction()));
-             step.setIngredientId(toStringValue(step.getIngredientId()));
-             step.setQuantity(toStringValue(step.getQuantity()));
-             step.setUnit(toStringValue(step.getUnit()));
-             step.setStyle(toStringValue(step.getStyle()));
-             step.setDuration(toStringValue(step.getDuration()));
-             step.setFlame(toStringValue(step.getFlame()));
-             step.setTemperature(toStringValue(step.getTemperature()));
-             step.setNotes(toStringValue(step.getNotes()));
+             step.setNodeType(toStringValue(step.getNodeType()));
+             step.setData(normalizeDataMap(step.getData()));
          }
 
          for (RecipeExecutionEdgeDTO edge : edges) {
              if (edge == null) continue;
              edge.setFrom(toStringValue(edge.getFrom()));
              edge.setTo(toStringValue(edge.getTo()));
+             edge.setLabel(toStringValue(edge.getLabel()));
          }
      }
+
+    private Map<String, Object> normalizeDataMap(Map<String, Object> data) {
+        if (data == null) {
+            return new LinkedHashMap<>();
+        }
+
+        Map<String, Object> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            normalized.put(entry.getKey(), toStringValue(entry.getValue()));
+        }
+        return normalized;
+    }
 
     private String toStringValue(Object value) {
         if (value == null) return "";

@@ -4,19 +4,14 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class RecipeExecutionStepDTO {
 
     private String id;
-    private String action;
-    private String ingredientId;
-    private String quantity;
-    private String unit;
-    private String style;
-    private String duration;
-    private String flame;
-    private String temperature;
-    private String notes;
+    private String nodeType;
+    private Map<String, Object> data;
 }

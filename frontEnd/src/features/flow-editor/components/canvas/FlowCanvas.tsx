@@ -729,6 +729,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
       const normalizedFlowData = normalizeGeneratedFlowData(generated)
 
       replaceCanvasFlow(normalizedFlowData)
+      setBuilderCollapsed(true)
     } catch (error) {
       console.error(error)
 
@@ -873,6 +874,9 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
                 nodeTypes={nodeTypes}
                 onConnect={onConnect}
                 isValidConnection={isValidConnection}
+                nodesDraggable
+                nodesConnectable
+                elementsSelectable
                 fitView
                 fitViewOptions={{ padding: 0.12 }}
                 style={{ width: '100%', height: '100%', background: 'var(--flow-canvas-bg)' }}

@@ -123,6 +123,7 @@ export type FlowNodePayload = {
   draggable?: boolean
   selectable?: boolean
   deletable?: boolean
+  connectable?: boolean
   style?: Record<string, unknown>
 }
 
@@ -151,22 +152,18 @@ export interface FlowDraftStorage {
   data: FlowData
 }
 
+export type RecipeExecutionNodeType = 'recipeStep' | 'condition' | 'parallelStart' | 'parallelEnd'
+
 export type RecipeExecutionStep = {
   id: string
-  action: string
-  ingredientId: string
-  quantity: string
-  unit: string
-  style: string
-  duration: string
-  flame: string
-  temperature: string
-  notes: string
+  nodeType: RecipeExecutionNodeType
+  data: Record<string, string>
 }
 
 export type RecipeExecutionEdge = {
   from: string
   to: string
+  label?: string
 }
 
 export interface RecipeExecutionModel {

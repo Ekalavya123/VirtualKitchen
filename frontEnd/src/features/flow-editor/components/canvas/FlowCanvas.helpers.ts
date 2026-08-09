@@ -25,7 +25,7 @@ import {
 import {
   convertRecipeExecutionModelToFlowData,
   normalizeRecipeExecutionModel,
-} from './RecipeExecutionGraphConverter'
+} from './RecipeExecutionGraphConverter.ts'
 
 export type EdgeKind = 'step' | 'yes' | 'no' | 'parallel'
 
@@ -205,6 +205,11 @@ export const serializeFlowData = (nodes: Node[], edges: Edge[]) => {
       type: n.type,
       position: n.position,
       data: normalizeNodeDataForSerialize(n),
+      draggable: n.draggable !== false,
+      selectable: n.selectable !== false,
+      deletable: n.deletable !== false,
+      connectable: n.connectable !== false,
+      style: (n.style ?? undefined) as Record<string, unknown> | undefined,
     }))
 
   const edgePayload = edges.map(e => ({
@@ -226,6 +231,8 @@ export const serializeFlowData = (nodes: Node[], edges: Edge[]) => {
 
 export const normalizeFlowNode = (node: FlowNodePayload): Node => {
   const baseData = node.data ?? {}
+  const nodeType = node.type ?? FLOW_NODE_TYPES.recipeStep
+  const shouldForceInteractive = nodeType !== FLOW_NODE_TYPES.section
   const normalizedData = node.type === FLOW_NODE_TYPES.recipeStep
     ? normalizeStepNodeData(baseData)
     : node.type === FLOW_NODE_TYPES.condition
@@ -238,46 +245,33 @@ export const normalizeFlowNode = (node: FlowNodePayload): Node => {
 
   return {
     id: node.id,
-    type: node.type ?? FLOW_NODE_TYPES.recipeStep,
+    type: nodeType,
     position: node.position ?? { x: 0, y: 0 },
     data: normalizedData,
     measured: node.measured as Node['measured'],
     parentId: node.parentId,
     extent: node.extent as Node['extent'],
-    draggable: node.draggable,
-    selectable: node.selectable,
-    deletable: node.deletable,
+    draggable: shouldForceInteractive ? node.draggable !== false : node.draggable,
+    selectable: shouldForceInteractive ? node.selectable !== false : node.selectable,
+    deletable: shouldForceInteractive ? node.deletable !== false : node.deletable,
+    connectable: shouldForceInteractive ? node.connectable !== false : node.connectable,
     style: node.style as Node['style'],
   }
 }
 
-export const normalizeGeneratedFlowData = (value: unknown): FlowData => {
-  if (!isRecord(value)) {
-    throw new Error('Generated flow response is invalid.')
-  }
-
-  // New contract: AI returns lightweight execution model.
-  if (Array.isArray(value.steps) && Array.isArray(value.edges)) {
-    const executionModel = normalizeRecipeExecutionModel(value)
-    return convertRecipeExecutionModelToFlowData(executionModel)
-  }
-
-  // Backward compatibility for older backend/AI responses.
-  if (!Array.isArray(value.nodes) || !Array.isArray(value.edges)) {
-    throw new Error('Generated flow response is invalid.')
-  }
-
+// a old function to convert flow data back to a recipe execution model, using only the nodes and edges in the flow data for now mostly no use
+export const buildFlowDataUsingNodesAndEdges = (nodeData: Array<unknown>, edgeData: Array<unknown>): FlowData => {
   return {
-    nodes: value.nodes.map((entry, index) => {
+    nodes: nodeData.map((entry, index) => {
       if (!isRecord(entry)) {
         throw new Error(`Generated node ${index + 1} is invalid.`)
       }
 
       const position = isRecord(entry.position)
         ? {
-            x: typeof entry.position.x === 'number' ? entry.position.x : 0,
-            y: typeof entry.position.y === 'number' ? entry.position.y : 0,
-          }
+          x: typeof entry.position.x === 'number' ? entry.position.x : 0,
+          y: typeof entry.position.y === 'number' ? entry.position.y : 0,
+        }
         : { x: 0, y: index * 140 }
 
       return {
@@ -294,7 +288,7 @@ export const normalizeGeneratedFlowData = (value: unknown): FlowData => {
         style: asOptionalRecord(entry.style),
       }
     }),
-    edges: value.edges.map((entry, index) => {
+    edges: edgeData.map((entry, index) => {
       if (!isRecord(entry)) {
         throw new Error(`Generated edge ${index + 1} is invalid.`)
       }
@@ -320,6 +314,25 @@ export const normalizeGeneratedFlowData = (value: unknown): FlowData => {
       }
     }),
   }
+}
+
+export const normalizeGeneratedFlowData = (value: unknown): FlowData => {
+  if (!isRecord(value)) {
+    throw new Error('Generated flow response is invalid.')
+  }
+
+  // New contract: AI returns lightweight execution model.
+  if (Array.isArray(value.steps) && Array.isArray(value.edges)) {
+    const executionModel = normalizeRecipeExecutionModel(value)
+    return convertRecipeExecutionModelToFlowData(executionModel)
+  }
+
+  // Backward compatibility for older backend/AI responses.
+  if (!Array.isArray(value.nodes) || !Array.isArray(value.edges)) {
+    throw new Error('Generated flow response is invalid.')
+  }
+
+  return buildFlowDataUsingNodesAndEdges(value.nodes, value.edges)
 }
 
 export const createFlowDataPayload = (nodes: Node[], edges: Edge[]): FlowData => {
