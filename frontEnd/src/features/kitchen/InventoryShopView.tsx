@@ -184,11 +184,6 @@ export default function InventoryShopView({ userId, onOrderPlaced }: InventorySh
 
   const handleQuantityChange = (item: CartItem, quantity: number) => {
     const safeQuantity = Number.isFinite(quantity) ? quantity : 0
-    if (safeQuantity <= 0) {
-      setCartItems((current) => current.filter((cartItem) => getItemKey(cartItem.itemType, cartItem.itemId) !== getItemKey(item.itemType, item.itemId)))
-      return
-    }
-
     setCartItems((current) => current.map((cartItem) => {
       if (getItemKey(cartItem.itemType, cartItem.itemId) !== getItemKey(item.itemType, item.itemId)) {
         return cartItem

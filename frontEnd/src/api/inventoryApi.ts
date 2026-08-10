@@ -8,8 +8,9 @@ import { API } from './endpoints'
 
 export interface InventoryItem {
   id: number
-  kitchenId: number
-  inventoryId: number
+  kitchenId?: number
+  userId?: number
+  itemId?: number
   itemName?: string
   itemType?: string
   quantity?: number

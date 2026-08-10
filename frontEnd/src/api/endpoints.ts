@@ -19,7 +19,7 @@ export const API = {
 
   // Inventory
   inventory: {
-    byKitchenId: (kitchenId: number) => `/api/v1/kitchen-inventory/${kitchenId}`,
+    byKitchenId: (kitchenId: number) => `/api/v1/inventory/kitchen/${kitchenId}`,
   },
 
   // Shop Items

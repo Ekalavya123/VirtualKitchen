@@ -19,6 +19,9 @@ public class Inventory {
     @Indexed
     private Long userId;
 
+    @Indexed
+    private Long kitchenId;
+
     private ItemType itemType;
     private Long itemId;
 

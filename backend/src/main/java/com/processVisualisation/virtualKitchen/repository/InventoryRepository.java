@@ -11,7 +11,13 @@ public interface InventoryRepository extends MongoRepository<Inventory, Long> {
 
     List<Inventory> findByUserId(Long userId);
 
+    List<Inventory> findByKitchenId(Long kitchenId);
+
     Optional<Inventory> findByUserIdAndItemTypeAndItemId(
             Long userId, ItemType itemType, Long itemId
+    );
+
+    Optional<Inventory> findByKitchenIdAndItemTypeAndItemId(
+            Long kitchenId, ItemType itemType, Long itemId
     );
 }

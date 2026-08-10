@@ -12,9 +12,11 @@ import java.time.LocalDateTime;
 public class InventoryResponseDTO {
 
     private Long id;
+    private Long kitchenId;
     private Long userId;
     private ItemType itemType;
     private Long itemId;
+    private String itemName;
     private double quantity;
     private UnitType unit;
     private LocalDateTime lastUpdated;

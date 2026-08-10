@@ -11,6 +11,8 @@ import com.processVisualisation.virtualKitchen.service.IOrderService;
 import com.processVisualisation.virtualKitchen.service.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.service.IInventoryService;
 import com.processVisualisation.virtualKitchen.dto.InventoryRequestDTO;
+import com.processVisualisation.virtualKitchen.model.Kitchen;
+import com.processVisualisation.virtualKitchen.repository.KitchenRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +40,9 @@ public class OrderServiceImpl implements IOrderService {
     @Autowired
     private IInventoryService inventoryService;
 
+    @Autowired
+    private KitchenRepository kitchenRepository;
+
     private static final Logger logger = LoggerFactory.getLogger(OrderServiceImpl.class);
     @Override
     public OrderResponseDTO createOrder(OrderCreateRequestDTO dto) {
@@ -58,13 +63,21 @@ public class OrderServiceImpl implements IOrderService {
 
         Order saved = orderRepository.save(order);
 
-        // After successfully creating the order, add ordered items to the user's inventory
+        // After successfully creating the order, add ordered items to the user's kitchen inventory
         try {
+            // fetch kitchen for the user
+            List<Kitchen> kitchens = kitchenRepository.findByOwnerId(saved.getUserId());
+            if (kitchens == null || kitchens.isEmpty()) {
+                throw new IllegalStateException("Kitchen not found for userId=" + saved.getUserId());
+            }
+            Kitchen kitchen = kitchens.get(0);
+
             if (saved.getItems() != null) {
                 for (OrderItem item : saved.getItems()) {
                     if (item == null) continue;
                     InventoryRequestDTO invReq = new InventoryRequestDTO();
                     invReq.setUserId(saved.getUserId());
+                    invReq.setKitchenId(kitchen.getId());
                     invReq.setItemType(item.getItemType());
                     invReq.setItemId(item.getItemId());
                     invReq.setQuantity(item.getQuantity());
@@ -75,6 +88,10 @@ public class OrderServiceImpl implements IOrderService {
         } catch (Exception ex) {
             // Log and continue - order creation should not fail because inventory update failed
             logger.error("Failed to add ordered items to user inventory for orderId={}", saved.getOrderId(), ex);
+            // if the exception is due to missing kitchen we rethrow as requested
+            if (ex instanceof IllegalStateException && ex.getMessage().startsWith("Kitchen not found")) {
+                throw ex;
+            }
         }
 
         return orderMapper.toDTO(saved);

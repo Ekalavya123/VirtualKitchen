@@ -8,6 +8,7 @@ import lombok.Data;
 public class InventoryRequestDTO {
 
     private Long userId;
+    private Long kitchenId;
     private ItemType itemType;
     private Long itemId;
     private double quantity;

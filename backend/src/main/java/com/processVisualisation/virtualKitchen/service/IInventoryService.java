@@ -9,4 +9,6 @@ public interface IInventoryService {
     InventoryResponseDTO addOrUpdate(InventoryRequestDTO dto);
 
     List<InventoryResponseDTO> getByUser(Long userId);
+
+    List<InventoryResponseDTO> getByKitchen(Long kitchenId);
 }
