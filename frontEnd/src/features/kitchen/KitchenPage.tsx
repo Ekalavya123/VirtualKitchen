@@ -3,6 +3,7 @@ import type { User } from '../../types/User'
 import KitchenNavbar from './KitchenNavbar'
 import InventoryView from './InventoryView'
 import InventoryShopView from './InventoryShopView'
+import OrderHistoryView from './OrderHistoryView'
 import './KitchenPage.css'
 
 interface Kitchen {
@@ -19,7 +20,7 @@ interface KitchenPageProps {
 }
 
 export default function KitchenPage({ user, kitchen, onLogout, onCreateRecipe }: KitchenPageProps) {
-  const [activeView, setActiveView] = useState<'inventory' | 'shop'>('inventory')
+  const [activeView, setActiveView] = useState<'inventory' | 'shop' | 'orderHistory'>('inventory')
   const [inventoryFilter, setInventoryFilter] = useState<'ingredients' | 'equipment'>('ingredients')
 
   return (
@@ -40,8 +41,10 @@ export default function KitchenPage({ user, kitchen, onLogout, onCreateRecipe }:
             filter={inventoryFilter}
             onFilterChange={setInventoryFilter}
           />
+        ) : activeView === 'shop' ? (
+          <InventoryShopView userId={user.id} onOrderPlaced={() => setActiveView('orderHistory')} />
         ) : (
-          <InventoryShopView />
+          <OrderHistoryView userId={user.id} />
         )}
       </div>
 

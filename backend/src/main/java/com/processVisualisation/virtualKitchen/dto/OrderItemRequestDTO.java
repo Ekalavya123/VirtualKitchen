@@ -2,22 +2,15 @@ package com.processVisualisation.virtualKitchen.dto;
 
 import com.processVisualisation.virtualKitchen.model.ItemType;
 import com.processVisualisation.virtualKitchen.model.UnitType;
-import lombok.Builder;
 import lombok.Data;
 
-import java.time.LocalDateTime;
-
 @Data
-@Builder
-public class InventoryResponseDTO {
+public class OrderItemRequestDTO {
 
-    private Long id;
-    private Long kitchenId;
-    private Long userId;
-    private ItemType itemType;
     private Long itemId;
+    private ItemType itemType;
     private String itemName;
     private double quantity;
     private UnitType unit;
-    private LocalDateTime lastUpdated;
+    private double price;
 }

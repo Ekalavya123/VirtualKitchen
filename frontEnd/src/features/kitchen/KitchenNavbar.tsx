@@ -9,8 +9,8 @@ interface Kitchen {
 interface KitchenNavbarProps {
   user: User
   kitchen: Kitchen
-  activeView: 'inventory' | 'shop'
-  onViewChange: (view: 'inventory' | 'shop') => void
+  activeView: 'inventory' | 'shop' | 'orderHistory'
+  onViewChange: (view: 'inventory' | 'shop' | 'orderHistory') => void
   onLogout: () => void
   onCreateRecipe: () => void
 }
@@ -58,6 +58,12 @@ export default function KitchenNavbar({
             <div className="profile-name">{user.name}</div>
             <div className="profile-email">{user.email}</div>
           </div>
+          <button
+            className={`profile-action-button ${activeView === 'orderHistory' ? 'active' : ''}`}
+            onClick={() => onViewChange('orderHistory')}
+          >
+            Order History
+          </button>
           <button className="logout-button" onClick={onLogout}>
             Logout
           </button>

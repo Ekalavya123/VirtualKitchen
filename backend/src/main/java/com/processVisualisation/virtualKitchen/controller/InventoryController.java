@@ -27,6 +27,11 @@ public class InventoryController {
         return build(service.getByUser(userId), "fetched");
     }
 
+    @GetMapping("/kitchen/{kitchenId}")
+    public ApiResponse<List<InventoryResponseDTO>> getByKitchen(@PathVariable Long kitchenId){
+        return build(service.getByKitchen(kitchenId), "fetched");
+    }
+
     private <T> ApiResponse<T> build(T data, String msg){
         return ApiResponse.<T>builder()
                 .success(true)

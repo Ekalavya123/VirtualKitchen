@@ -4,6 +4,8 @@ import com.processVisualisation.virtualKitchen.dto.*;
 import com.processVisualisation.virtualKitchen.mapper.InventoryMapper;
 import com.processVisualisation.virtualKitchen.model.Inventory;
 import com.processVisualisation.virtualKitchen.repository.InventoryRepository;
+import com.processVisualisation.virtualKitchen.repository.IngredientRepository;
+import com.processVisualisation.virtualKitchen.repository.EquipmentRepository;
 import com.processVisualisation.virtualKitchen.service.IInventoryService;
 import com.processVisualisation.virtualKitchen.service.SequenceGeneratorService;
 
@@ -24,20 +26,43 @@ public class InventoryServiceImpl implements IInventoryService {
     private InventoryMapper mapper;
 
     @Autowired
+    private IngredientRepository ingredientRepository;
+
+    @Autowired
+    private EquipmentRepository equipmentRepository;
+
+    @Autowired
     private SequenceGeneratorService seq;
 
     @Override
     public InventoryResponseDTO addOrUpdate(InventoryRequestDTO dto){
 
-        Inventory inv = repo.findByUserIdAndItemTypeAndItemId(
-                dto.getUserId(), dto.getItemType(), dto.getItemId()
-        ).orElse(null);
+        Inventory inv = null;
+
+        // Prefer kitchen-scoped inventory when kitchenId is provided
+        if (dto.getKitchenId() != null) {
+            inv = repo.findByKitchenIdAndItemTypeAndItemId(
+                    dto.getKitchenId(), dto.getItemType(), dto.getItemId()
+            ).orElse(null);
+        }
+
+        // Fallback to user-scoped inventory for backward compatibility
+        if (inv == null) {
+            inv = repo.findByUserIdAndItemTypeAndItemId(
+                    dto.getUserId(), dto.getItemType(), dto.getItemId()
+            ).orElse(null);
+        }
 
         if(inv == null){
             inv = mapper.toEntity(dto);
             inv.setId(seq.generateSequence(Inventory.SEQUENCE_NAME));
         } else {
             inv.setQuantity(inv.getQuantity() + dto.getQuantity());
+        }
+
+        // If inventory existed but didn't have kitchenId set, and request provides it, persist it
+        if (inv.getKitchenId() == null && dto.getKitchenId() != null) {
+            inv.setKitchenId(dto.getKitchenId());
         }
 
         inv.setLastUpdated(LocalDateTime.now());
@@ -50,6 +75,25 @@ public class InventoryServiceImpl implements IInventoryService {
         return repo.findByUserId(userId)
                 .stream()
                 .map(mapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<InventoryResponseDTO> getByKitchen(Long kitchenId){
+        return repo.findByKitchenId(kitchenId)
+                .stream()
+                .map(inv -> {
+                    InventoryResponseDTO dto = mapper.toDTO(inv);
+
+                    // Enrich with item name similar to KitchenInventoryService
+                    if (inv.getItemType() == com.processVisualisation.virtualKitchen.model.ItemType.INGREDIENT) {
+                        ingredientRepository.findById(inv.getItemId()).ifPresent(ing -> dto.setItemName(ing.getName()));
+                    } else if (inv.getItemType() == com.processVisualisation.virtualKitchen.model.ItemType.EQUIPMENT) {
+                        equipmentRepository.findById(inv.getItemId()).ifPresent(eq -> dto.setItemName(eq.getName()));
+                    }
+
+                    return dto;
+                })
                 .collect(Collectors.toList());
     }
 }

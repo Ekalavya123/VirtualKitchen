@@ -19,13 +19,19 @@ export const API = {
 
   // Inventory
   inventory: {
-    byKitchenId: (kitchenId: number) => `/api/v1/kitchen-inventory/${kitchenId}`,
+    byKitchenId: (kitchenId: number) => `/api/v1/inventory/kitchen/${kitchenId}`,
   },
 
   // Shop Items
   shop: {
     ingredients: '/api/v1/ingredients',
     equipment: '/api/v1/equipments',
+  },
+
+  // Orders
+  orders: {
+    list: '/api/v1/orders',
+    byUserId: (userId: number) => `/api/v1/orders/user/${userId}`,
   },
 
   // Recipes / Process Templates

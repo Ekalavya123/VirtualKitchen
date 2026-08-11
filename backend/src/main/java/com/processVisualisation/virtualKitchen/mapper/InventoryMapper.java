@@ -10,6 +10,7 @@ public class InventoryMapper {
     public Inventory toEntity(InventoryRequestDTO dto){
         Inventory inv = new Inventory();
         inv.setUserId(dto.getUserId());
+        inv.setKitchenId(dto.getKitchenId());
         inv.setItemType(dto.getItemType());
         inv.setItemId(dto.getItemId());
         inv.setQuantity(dto.getQuantity());
@@ -20,6 +21,7 @@ public class InventoryMapper {
     public InventoryResponseDTO toDTO(Inventory inv){
         return InventoryResponseDTO.builder()
                 .id(inv.getId())
+                .kitchenId(inv.getKitchenId())
                 .userId(inv.getUserId())
                 .itemType(inv.getItemType())
                 .itemId(inv.getItemId())
