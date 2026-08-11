@@ -1,155 +1,520 @@
 .kitchen-navbar {
+  position: relative;
+  z-index: 50;
+
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
+  align-items: center;
+
+  min-height: 68px;
+  padding: 0 24px;
+
+  border-bottom: 1px solid var(--flow-border);
+  background: var(--flow-surface);
+
+  box-shadow:
+    0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+
+/* =========================================================
+   Brand
+   ========================================================= */
+
+.navbar-brand {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 32px;
-  height: 80px;
-  background: white;
-  border-bottom: 1px solid #e0e0e0;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  min-width: 0;
+  gap: 10px;
 }
 
-.navbar-left {
-  flex: 1;
-}
-
-.kitchen-header {
+.kitchen-logo {
   display: flex;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
   align-items: center;
-}
-
-.kitchen-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 700;
-  color: #333;
-}
-
-.navbar-center {
-  flex: 1;
-  display: flex;
   justify-content: center;
+
+  border-radius: 10px;
+
+  background:
+    linear-gradient(
+      135deg,
+      var(--flow-accent-soft),
+      #f8fafc
+    );
+
+  font-size: 20px;
 }
 
-.nav-tabs {
+.kitchen-brand-text {
   display: flex;
-  gap: 8px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
 }
 
-.nav-tab {
-  padding: 8px 20px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #666;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
+.kitchen-brand-name {
+  color: var(--flow-text);
+  font-size: 13px;
+  font-weight: 800;
 }
 
-.nav-tab:hover {
-  background: #f0f0f0;
-  color: #333;
-}
+.kitchen-name {
+  overflow: hidden;
 
-.nav-tab.active {
-  background: #667eea;
-  color: white;
-}
-
-.nav-tab.create-recipe-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  color: var(--flow-text-muted);
+  font-size: 11px;
   font-weight: 600;
-  margin-left: 12px;
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.nav-tab.create-recipe-btn:hover {
-  background: linear-gradient(135deg, #5568d3 0%, #6a3f8a 100%);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+
+/* =========================================================
+   Main navigation
+   ========================================================= */
+
+.navbar-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
-.navbar-right {
-  flex: 1;
+.navbar-nav-item {
+  position: relative;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  min-height: 38px;
+  padding: 0 13px;
+
+  border: 0;
+  border-radius: var(--flow-radius-md);
+
+  background: transparent;
+  color: var(--flow-text-muted);
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+
+  cursor: pointer;
+
+  transition:
+    background 0.18s ease,
+    color 0.18s ease;
+}
+
+.navbar-nav-item:hover {
+  background: var(--flow-surface-muted);
+  color: var(--flow-text);
+}
+
+.navbar-nav-item.active {
+  background: var(--flow-accent-soft);
+  color: var(--flow-accent-strong);
+}
+
+.navbar-nav-item.active::after {
+  position: absolute;
+  right: 12px;
+  bottom: -16px;
+  left: 12px;
+
+  height: 2px;
+
+  border-radius: 999px;
+
+  background: var(--flow-accent);
+
+  content: '';
+}
+
+
+/* =========================================================
+   Profile trigger
+   ========================================================= */
+
+.navbar-profile {
+  position: relative;
+
   display: flex;
   justify-content: flex-end;
 }
 
-.profile-section {
+.profile-trigger {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 9px;
+
+  min-width: 0;
+  padding: 5px 8px 5px 5px;
+
+  border: 1px solid transparent;
+  border-radius: var(--flow-radius-md);
+
+  background: transparent;
+
+  font-family: inherit;
+  cursor: pointer;
+
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
 }
 
-.profile-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+.profile-trigger:hover,
+.profile-trigger.open {
+  border-color: var(--flow-border);
+  background: var(--flow-surface-muted);
+}
+
+.profile-trigger-avatar {
   display: flex;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  font-weight: 600;
-  font-size: 16px;
-}
 
-.profile-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
+  border-radius: 50%;
 
-.profile-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-}
+  background:
+    linear-gradient(
+      135deg,
+      var(--flow-accent),
+      #8b5cf6
+    );
 
-.profile-email {
+  color: white;
+
   font-size: 12px;
-  color: #999;
+  font-weight: 800;
 }
 
-.profile-action-button {
-  padding: 8px 14px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background: white;
-  color: #666;
+.profile-trigger-info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.profile-trigger-name {
+  max-width: 130px;
+  overflow: hidden;
+
+  color: var(--flow-text);
+
+  font-size: 12px;
+  font-weight: 750;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-trigger-kitchen {
+  max-width: 130px;
+  overflow: hidden;
+
+  color: var(--flow-text-muted);
+
+  font-size: 10px;
+  font-weight: 600;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-trigger-chevron {
+  color: var(--flow-text-muted);
+  font-size: 12px;
+
+  transition:
+    transform 0.18s ease;
+}
+
+.profile-trigger-chevron.open {
+  transform: rotate(180deg);
+}
+
+
+/* =========================================================
+   Profile menu
+   ========================================================= */
+
+.profile-menu {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+
+  width: 290px;
+
+  overflow: hidden;
+
+  border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-lg);
+
+  background: var(--flow-surface);
+
+  box-shadow:
+    0 20px 50px rgba(15, 23, 42, 0.14);
+
+  animation:
+    profile-menu-enter 0.15s ease-out;
+}
+
+@keyframes profile-menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
+/* =========================================================
+   Profile menu header
+   ========================================================= */
+
+.profile-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+
+  padding: 15px;
+}
+
+.profile-menu-avatar {
+  display: flex;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 50%;
+
+  background:
+    linear-gradient(
+      135deg,
+      var(--flow-accent),
+      #8b5cf6
+    );
+
+  color: white;
+
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.profile-menu-user {
+  min-width: 0;
+}
+
+.profile-menu-name {
+  overflow: hidden;
+
+  color: var(--flow-text);
+
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 800;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-menu-email {
+  overflow: hidden;
+
+  margin-top: 2px;
+
+  color: var(--flow-text-muted);
+
+  font-size: 11px;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-menu-divider {
+  height: 1px;
+  background: var(--flow-border);
+}
+
+
+/* =========================================================
+   Profile menu sections
+   ========================================================= */
+
+.profile-menu-section {
+  padding: 8px;
+}
+
+.profile-menu-section-label {
+  padding: 5px 8px 6px;
+
+  color: var(--flow-text-muted);
+
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.profile-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+
+  padding: 9px 8px;
+
+  border: 0;
+  border-radius: 8px;
+
+  background: transparent;
+
+  color: var(--flow-text);
+
+  font-family: inherit;
+  text-align: left;
+
   cursor: pointer;
-  transition: all 0.3s ease;
+
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
-.profile-action-button:hover {
-  border-color: #6073dd;
-  color: #6073dd;
+.profile-menu-item:hover:not(:disabled) {
+  background: var(--flow-surface-muted);
 }
 
-.profile-action-button.active {
-  background: #6073dd;
-  border-color: #6073dd;
-  color: #fff;
+.profile-menu-item:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
-.logout-button {
-  padding: 8px 16px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  background: white;
-  color: #666;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
+.profile-menu-item-icon {
+  display: flex;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 8px;
+
+  background: var(--flow-surface-muted);
+
+  font-size: 14px;
 }
 
-.logout-button:hover {
-  border-color: #667eea;
-  color: #667eea;
-  background: #f9f9f9;
+.profile-menu-item > span:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.profile-menu-item strong {
+  color: var(--flow-text);
+
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.profile-menu-item small {
+  color: var(--flow-text-muted);
+
+  font-size: 10px;
+  line-height: 14px;
+}
+
+
+/* =========================================================
+   Logout
+   ========================================================= */
+
+.profile-menu-logout {
+  margin: 8px 0;
+  padding: 9px 16px;
+}
+
+.profile-menu-logout .profile-menu-item-icon {
+  background: var(--flow-danger-soft);
+}
+
+.profile-menu-logout strong {
+  color: var(--flow-danger);
+}
+
+
+/* =========================================================
+   Responsive
+   ========================================================= */
+
+@media (max-width: 900px) {
+  .kitchen-navbar {
+    grid-template-columns: auto 1fr auto;
+    padding: 0 16px;
+  }
+
+  .kitchen-brand-name {
+    display: none;
+  }
+
+  .navbar-nav-item {
+    padding: 0 10px;
+  }
+
+  .profile-trigger-info {
+    display: none;
+  }
+}
+
+@media (max-width: 650px) {
+  .kitchen-navbar {
+    min-height: 62px;
+  }
+
+  .kitchen-name {
+    max-width: 100px;
+  }
+
+  .navbar-navigation {
+    gap: 2px;
+  }
+
+  .navbar-nav-item {
+    width: 38px;
+    justify-content: center;
+    padding: 0;
+    font-size: 0;
+  }
+
+  .navbar-nav-item span {
+    font-size: 16px;
+  }
+
+  .navbar-nav-item.active::after {
+    right: 8px;
+    bottom: -12px;
+    left: 8px;
+  }
+
+  .profile-menu {
+    right: -4px;
+    width: min(290px, calc(100vw - 24px));
+  }
 }
