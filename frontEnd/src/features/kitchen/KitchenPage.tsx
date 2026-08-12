@@ -29,25 +29,22 @@ export default function KitchenLayout({
       />
 
       <div className="kitchen-body">
-        <Outlet />
-      </div>
-
-      <footer className="kitchen-footer">
-        <div className="footer-content">
-          <p>
-            &copy; 2024 Virtual Kitchen. All rights
-            reserved.
-          </p>
-
-          <div className="footer-links">
-            <a href="#privacy">Privacy Policy</a>
-            <span>•</span>
-            <a href="#terms">Terms of Service</a>
-            <span>•</span>
-            <a href="#contact">Contact Us</a>
-          </div>
+        <div className="kitchen-content">
+          <Outlet />
         </div>
-      </footer>
+        <footer className="kitchen-footer">
+          <div className="footer-content">
+            <p>&copy; 2024 Virtual Kitchen. All rights reserved.</p>
+            <div className="footer-links">
+              <a href="#privacy">Privacy Policy</a>
+              <span>•</span>
+              <a href="#terms">Terms of Service</a>
+              <span>•</span>
+              <a href="#contact">Contact Us</a>
+            </div>
+          </div>
+        </footer>
+      </div>
     </div>
   )
 }

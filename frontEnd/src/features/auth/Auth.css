@@ -1,10 +1,11 @@
 .login-page {
   width: 100vw;
-  height: 100vh;
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  overflow-y: auto;
 }
 
 .login-container {
@@ -142,13 +143,12 @@
 }
 
 .login-footer {
-  background: rgba(0, 0, 0, 0.15);
-  color: white;
-  padding: 20px 32px;
+  background: rgba(0, 0, 0, 0.06);
+  color: rgba(255, 255, 255, 0.65);
+  padding: 12px 24px;
   text-align: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.2);
-  font-size: 13px;
-  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 12px;
 }
 
 .login-footer-content {
@@ -157,8 +157,8 @@
 }
 
 .login-footer-content p {
-  margin: 0 0 10px 0;
-  font-size: 13px;
+  margin: 0 0 6px 0;
+  font-size: 12px;
 }
 
 .login-footer-links {
