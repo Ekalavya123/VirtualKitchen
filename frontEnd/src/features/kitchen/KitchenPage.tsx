@@ -29,7 +29,9 @@ export default function KitchenLayout({
       />
 
       <div className="kitchen-body">
-        <Outlet />
+        <div className="kitchen-content">
+          <Outlet />
+        </div>
         <footer className="kitchen-footer">
           <div className="footer-content">
             <p>&copy; 2024 Virtual Kitchen. All rights reserved.</p>

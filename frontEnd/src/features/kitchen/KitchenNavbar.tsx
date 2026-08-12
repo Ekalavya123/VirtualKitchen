@@ -184,9 +184,13 @@ export default function KitchenNavbar({
         </div>
 
         <div className="kitchen-brand-text">
+          <NavLink 
+          to="/kitchen/inventory"
+          >
           <span className="kitchen-brand-name">
             Virtual Kitchen
           </span>
+          </NavLink> 
 
           <span className="kitchen-name">
             {kitchen.name}
@@ -206,7 +210,7 @@ export default function KitchenNavbar({
           }
         >
           <span>📦</span>
-          My Inventory
+          My Kitchen
         </NavLink>
 
         <NavLink
