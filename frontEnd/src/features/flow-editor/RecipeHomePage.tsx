@@ -10,7 +10,8 @@ type Recipe = {
 }
 
 type RecipeHomePageProps = {
-  onCreateRecipe: (recipeId: number, title: string) => void
+  onCreateRecipe?: (recipeId: number, title: string) => void
+  onOpenRecipies?: (recipeId: number, title: string) => void
 }
 
 type RecipeCardProps = {
@@ -322,7 +323,11 @@ function formatDate(value: string) {
 
 export default function RecipeHomePage({
   onCreateRecipe,
+  onOpenRecipies,
 }: RecipeHomePageProps) {
+  const handleOpenRecipe =
+    onCreateRecipe || onOpenRecipies
+
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
 
@@ -415,7 +420,7 @@ export default function RecipeHomePage({
       setTitle('')
       setDescription('')
 
-      onCreateRecipe(result.id, recipeTitle)
+      handleOpenRecipe?.(result.id, recipeTitle)
     } catch (err) {
       setError(
         err instanceof Error
@@ -517,7 +522,10 @@ export default function RecipeHomePage({
                 key={recipe.id}
                 recipe={recipe}
                 onOpen={() =>
-                  onCreateRecipe(recipe.id, recipe.name)
+                  handleOpenRecipe?.(
+                    recipe.id,
+                    recipe.name,
+                  )
                 }
                 onDelete={() =>
                   void handleDeleteRecipe(recipe.id)

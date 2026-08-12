@@ -1,17 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import { InventoryApi } from '../../api'
+import { InventoryApi, type InventoryItem } from '../../api'
 import './InventoryView.css'
-
-interface InventoryItem {
-  id: number
-  kitchenId: number
-  inventoryId: number
-  itemName?: string
-  itemType?: string
-  quantity?: number
-  unit?: string
-  lastUpdated?: string
-}
 
 interface InventoryViewProps {
   kitchenId: number

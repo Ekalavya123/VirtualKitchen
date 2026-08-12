@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
 import type { User } from '../../types/User'
 import './KitchenNavbar.css'
 
@@ -10,10 +11,6 @@ interface Kitchen {
 interface KitchenNavbarProps {
   user: User
   kitchen: Kitchen
-  activeView: 'inventory' | 'shop' | 'recipes' | 'orderHistory'
-  onViewChange: (
-    view: 'inventory' | 'shop' | 'recipes' | 'orderHistory',
-  ) => void
   onLogout: () => void
 }
 
@@ -133,12 +130,11 @@ function ProfileMenu({
 export default function KitchenNavbar({
   user,
   kitchen,
-  activeView,
-  onViewChange,
   onLogout,
 }: KitchenNavbarProps) {
   const [profileOpen, setProfileOpen] =
     useState(false)
+  const navigate = useNavigate()
 
   const profileRef = useRef<HTMLDivElement>(null)
 
@@ -171,7 +167,7 @@ export default function KitchenNavbar({
 
   const handleOrderHistory = () => {
     setProfileOpen(false)
-    onViewChange('orderHistory')
+    navigate('/kitchen/orders')
   }
 
   const handleLogout = () => {
@@ -200,48 +196,43 @@ export default function KitchenNavbar({
 
       {/* Main navigation */}
       <div className="navbar-navigation">
-        <button
-          className={`navbar-nav-item ${
-            activeView === 'inventory'
-              ? 'active'
-              : ''
-          }`}
-          onClick={() =>
-            onViewChange('inventory')
+        <NavLink
+          to="/kitchen/inventory"
+          end
+          className={({ isActive }) =>
+            `navbar-nav-item ${
+              isActive ? 'active' : ''
+            }`
           }
         >
           <span>📦</span>
           My Inventory
-        </button>
+        </NavLink>
 
-        <button
-          className={`navbar-nav-item ${
-            activeView === 'shop'
-              ? 'active'
-              : ''
-          }`}
-          onClick={() =>
-            onViewChange('shop')
+        <NavLink
+          to="/kitchen/shop"
+          end
+          className={({ isActive }) =>
+            `navbar-nav-item ${
+              isActive ? 'active' : ''
+            }`
           }
         >
           <span>🛒</span>
           Shop
-        </button>
+        </NavLink>
 
-        <button
-          className={`navbar-nav-item ${
-            activeView === 'recipes' ||
-            activeView === 'orderHistory'
-              ? ''
-              : ''
-          }`}
-          onClick={() =>
-            onViewChange('recipes')
+        <NavLink
+          to="/kitchen/recipes"
+          className={({ isActive }) =>
+            `navbar-nav-item ${
+              isActive ? 'active' : ''
+            }`
           }
         >
           <span>🍳</span>
           My Recipes
-        </button>
+        </NavLink>
       </div>
 
       {/* Profile */}
