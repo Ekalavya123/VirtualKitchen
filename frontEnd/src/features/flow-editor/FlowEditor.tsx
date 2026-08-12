@@ -1,18 +1,31 @@
-import { useState } from 'react'
 import FlowCanvas from './components/canvas/FlowCanvas'
-import RecipeHomePage from './RecipeHomePage'
 import './styles/flow-editor.css'
 
-export default function FlowEditor() {
-  const [activeRecipe, setActiveRecipe] = useState<{ id: number; title: string } | null>(null)
+interface FlowEditorProps {
+  recipeId: number
+  recipeTitle?: string
+  onBackToRecipes?: () => void
+}
 
-  if (!activeRecipe) {
-    return <RecipeHomePage onCreateRecipe={(id, title) => setActiveRecipe({ id, title })} />
+export default function FlowEditor({
+  recipeId,
+  recipeTitle,
+  onBackToRecipes,
+}: FlowEditorProps) {
+  const safeRecipeTitle =
+    recipeTitle?.trim() ||
+    `Recipe ${recipeId}`
+
+  const handleBack = () => {
+    onBackToRecipes?.()
   }
 
   return (
-    <div className="w-screen h-screen">
-      <FlowCanvas recipe={activeRecipe} onBack={() => setActiveRecipe(null)} />
+    <div className="h-full w-full">
+      <FlowCanvas
+        recipe={{ id: recipeId, title: safeRecipeTitle }}
+        onBack={handleBack}
+      />
     </div>
   )
 }

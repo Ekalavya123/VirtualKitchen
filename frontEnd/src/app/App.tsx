@@ -1,6 +1,19 @@
 import { useEffect, useState } from 'react'
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router-dom'
 import Auth from '../features/auth/Auth'
-import KitchenPage from '../features/kitchen/KitchenPage'
+import KitchenLayout from '../features/kitchen/KitchenPage'
+import InventoryView from '../features/kitchen/InventoryView'
+import InventoryShopView from '../features/kitchen/InventoryShopView'
+import OrderHistoryView from '../features/kitchen/OrderHistoryView'
+import RecipeHomePage from '../features/flow-editor/RecipeHomePage'
 import FlowEditor from '../features/flow-editor/FlowEditor'
 import type { User } from '../types/User'
 import { AuthApi, KitchenApi } from '../api'
@@ -12,14 +25,70 @@ interface Kitchen {
   ownerId: number
 }
 
-type AppView = 'login' | 'kitchen' | 'editor'
 const SESSION_EMAIL_KEY = 'virtual-kitchen.session.email'
 
+type RecipeRouteState = {
+  recipeTitle?: string
+}
+
+function ShopRoute({ userId }: { userId: number }) {
+  const navigate = useNavigate()
+
+  return (
+    <InventoryShopView
+      userId={userId}
+      onOrderPlaced={() => navigate('/kitchen/orders')}
+    />
+  )
+}
+
+function RecipesRoute() {
+  const navigate = useNavigate()
+
+  return (
+    <RecipeHomePage
+      onCreateRecipe={(recipeId, title) => {
+        navigate(`/kitchen/recipes/${recipeId}`, {
+          state: { recipeTitle: title } satisfies RecipeRouteState,
+        })
+      }}
+    />
+  )
+}
+
+function RecipeEditorRoute() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { recipeId: recipeIdParam } = useParams()
+  const recipeId = Number(recipeIdParam)
+
+  if (!Number.isFinite(recipeId)) {
+    return (
+      <Navigate
+        to="/kitchen/recipes"
+        replace
+      />
+    )
+  }
+
+  const state = location.state as RecipeRouteState | null
+
+  return (
+    <FlowEditor
+      recipeId={recipeId}
+      recipeTitle={state?.recipeTitle}
+      onBackToRecipes={() =>
+        navigate('/kitchen/recipes')
+      }
+    />
+  )
+}
+
 function App() {
-  const [appView, setAppView] = useState<AppView>('login')
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [currentKitchen, setCurrentKitchen] = useState<Kitchen | null>(null)
   const [isRestoringSession, setIsRestoringSession] = useState(true)
+  const [inventoryFilter, setInventoryFilter] = useState<'ingredients' | 'equipment'>('ingredients')
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -42,13 +111,11 @@ function App() {
 
         setCurrentUser(user)
         setCurrentKitchen(kitchen)
-        setAppView('kitchen')
       } catch (error) {
         console.error('Session restore failed:', error)
         localStorage.removeItem(SESSION_EMAIL_KEY)
         setCurrentUser(null)
         setCurrentKitchen(null)
-        setAppView('login')
       } finally {
         setIsRestoringSession(false)
       }
@@ -61,43 +128,125 @@ function App() {
     localStorage.setItem(SESSION_EMAIL_KEY, user.email)
     setCurrentUser(user)
     setCurrentKitchen(kitchen)
-    setAppView('kitchen')
   }
 
   const handleLogout = () => {
     localStorage.removeItem(SESSION_EMAIL_KEY)
     setCurrentUser(null)
     setCurrentKitchen(null)
-    setAppView('login')
-  }
-
-  const goToEditor = () => {
-    setAppView('editor')
-  }
-
-  const backToKitchen = () => {
-    setAppView('kitchen')
   }
 
   if (isRestoringSession) {
     return null
   }
 
+  const isAuthenticated = Boolean(
+    currentUser && currentKitchen,
+  )
+
   return (
-    <>
-      {appView === 'login' ? (
-        <Auth onLoginSuccess={handleLoginSuccess} />
-      ) : appView === 'kitchen' && currentUser && currentKitchen ? (
-        <KitchenPage user={currentUser} kitchen={currentKitchen} onLogout={handleLogout} onCreateRecipe={goToEditor} />
-      ) : appView === 'editor' ? (
-        <div>
-          <button onClick={backToKitchen} style={{ padding: '10px', margin: '10px' }}>
-            ← Back to Kitchen
-          </button>
-          <FlowEditor />
-        </div>
-      ) : null}
-    </>
+    <BrowserRouter>
+      <Routes>
+        <Route
+          path="/auth"
+          element={
+            isAuthenticated ? (
+              <Navigate
+                to="/kitchen/inventory"
+                replace
+              />
+            ) : (
+              <Auth onLoginSuccess={handleLoginSuccess} />
+            )
+          }
+        />
+
+        <Route
+          path="/kitchen"
+          element={
+            isAuthenticated && currentUser && currentKitchen ? (
+              <KitchenLayout
+                user={currentUser}
+                kitchen={currentKitchen}
+                onLogout={handleLogout}
+              />
+            ) : (
+              <Navigate
+                to="/auth"
+                replace
+              />
+            )
+          }
+        >
+          <Route
+            index
+            element={
+              <Navigate
+                to="inventory"
+                replace
+              />
+            }
+          />
+
+          <Route
+            path="inventory"
+            element={
+              currentKitchen ? (
+                <InventoryView
+                  kitchenId={currentKitchen.id}
+                  filter={inventoryFilter}
+                  onFilterChange={setInventoryFilter}
+                />
+              ) : null
+            }
+          />
+
+          <Route
+            path="shop"
+            element={
+              currentUser ? (
+                <ShopRoute userId={currentUser.id} />
+              ) : null
+            }
+          />
+
+          <Route
+            path="recipes"
+            element={<RecipesRoute />}
+          />
+
+          <Route
+            path="recipes/:recipeId"
+            element={<RecipeEditorRoute />}
+          />
+
+          <Route
+            path="orders"
+            element={
+              currentUser ? (
+                <OrderHistoryView
+                  userId={currentUser.id}
+                />
+              ) : null
+            }
+          />
+        </Route>
+
+        <Route
+          path="*"
+          element={
+            <Navigate
+              to={
+                isAuthenticated
+                  ? '/kitchen/inventory'
+                  : '/auth'
+              }
+              replace
+            />
+          }
+        />
+      </Routes>
+    </BrowserRouter>
   )
 }
 

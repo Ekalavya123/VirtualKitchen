@@ -373,47 +373,6 @@
   }
 }
 
-/* Footer */
-.flow-canvas-footer {
-  flex-shrink: 0;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 16px 24px;
-  text-align: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 13px;
-}
-
-.flow-canvas-footer-content {
-  max-width: 1200px;
-  margin: 0 auto;
-}
-
-.flow-canvas-footer p {
-  margin: 0 0 8px 0;
-}
-
-.flow-canvas-footer-links {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.flow-canvas-footer a {
-  color: rgba(255, 255, 255, 0.9);
-  text-decoration: none;
-  transition: color 0.3s ease;
-}
-
-.flow-canvas-footer a:hover {
-  color: white;
-}
-
-.flow-canvas-footer-separator {
-  color: rgba(255, 255, 255, 0.6);
-}
-
 /* Visualization result notification */
 .flow-canvas-visualization-result {
   position: absolute;

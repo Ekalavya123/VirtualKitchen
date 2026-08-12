@@ -1,9 +1,6 @@
-import { useState } from 'react'
+import { Outlet } from 'react-router-dom'
 import type { User } from '../../types/User'
 import KitchenNavbar from './KitchenNavbar'
-import InventoryView from './InventoryView'
-import InventoryShopView from './InventoryShopView'
-import OrderHistoryView from './OrderHistoryView'
 import './KitchenPage.css'
 
 interface Kitchen {
@@ -16,50 +13,36 @@ interface KitchenPageProps {
   user: User
   kitchen: Kitchen
   onLogout: () => void
-  onCreateRecipe: () => void
 }
 
-export default function KitchenPage({ user, kitchen, onLogout, onCreateRecipe }: KitchenPageProps) {
-  const [activeView, setActiveView] = useState<'inventory' | 'shop' | 'orderHistory'>('inventory')
-  const [inventoryFilter, setInventoryFilter] = useState<'ingredients' | 'equipment'>('ingredients')
-
+export default function KitchenLayout({
+  user,
+  kitchen,
+  onLogout,
+}: KitchenPageProps) {
   return (
     <div className="kitchen-page">
       <KitchenNavbar
         user={user}
         kitchen={kitchen}
-        activeView={activeView}
-        onViewChange={setActiveView}
         onLogout={onLogout}
-        onCreateRecipe={onCreateRecipe}
       />
 
       <div className="kitchen-body">
-        {activeView === 'inventory' ? (
-          <InventoryView
-            kitchenId={kitchen.id}
-            filter={inventoryFilter}
-            onFilterChange={setInventoryFilter}
-          />
-        ) : activeView === 'shop' ? (
-          <InventoryShopView userId={user.id} onOrderPlaced={() => setActiveView('orderHistory')} />
-        ) : (
-          <OrderHistoryView userId={user.id} />
-        )}
-      </div>
-
-      <footer className="kitchen-footer">
-        <div className="footer-content">
-          <p>&copy; 2024 Virtual Kitchen. All rights reserved.</p>
-          <div className="footer-links">
-            <a href="#privacy">Privacy Policy</a>
-            <span>•</span>
-            <a href="#terms">Terms of Service</a>
-            <span>•</span>
-            <a href="#contact">Contact Us</a>
+        <Outlet />
+        <footer className="kitchen-footer">
+          <div className="footer-content">
+            <p>&copy; 2024 Virtual Kitchen. All rights reserved.</p>
+            <div className="footer-links">
+              <a href="#privacy">Privacy Policy</a>
+              <span>•</span>
+              <a href="#terms">Terms of Service</a>
+              <span>•</span>
+              <a href="#contact">Contact Us</a>
+            </div>
           </div>
-        </div>
-      </footer>
+        </footer>
+      </div>
     </div>
   )
 }

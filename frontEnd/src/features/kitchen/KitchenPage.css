@@ -13,12 +13,13 @@
 }
 
 .kitchen-footer {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 24px 32px;
+  background: #e8e8ea;
+  color: #888;
+  padding: 14px 24px;
   text-align: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  font-size: 14px;
+  border-top: 1px solid #d8d8da;
+  font-size: 12px;
+  margin-top: 32px;
 }
 
 .footer-content {
@@ -27,7 +28,7 @@
 }
 
 .footer-content p {
-  margin: 0 0 12px 0;
+  margin: 0 0 6px 0;
 }
 
 .footer-links {
@@ -38,16 +39,16 @@
 }
 
 .footer-links a {
-  color: rgba(255, 255, 255, 0.9);
+  color: #aaa;
   text-decoration: none;
-  transition: color 0.3s ease;
+  transition: color 0.2s ease;
 }
 
 .footer-links a:hover {
-  color: white;
+  color: #555;
   text-decoration: underline;
 }
 
 .footer-links span {
-  color: rgba(255, 255, 255, 0.6);
+  color: #ccc;
 }
