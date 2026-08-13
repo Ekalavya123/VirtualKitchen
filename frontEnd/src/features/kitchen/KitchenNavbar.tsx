@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import type { User } from '../../types/User'
+import logoIcon from '../../assets/kitchen/blackShadowChef.png'
+import recipesIcon from '../../assets/kitchen/recipeIcon.png'
 import './KitchenNavbar.css'
 
 interface Kitchen {
@@ -173,14 +175,21 @@ export default function KitchenNavbar({
   const handleLogout = () => {
     setProfileOpen(false)
     onLogout()
+    navigate('/')
   }
 
   return (
     <nav className="kitchen-navbar">
       {/* Brand */}
       <div className="navbar-brand">
-        <div className="kitchen-logo">
+        {/* <div className="kitchen-logo">
           🍳
+        </div> */}
+        <div className="kitchen-logo" aria-hidden={false}>
+          <img
+            src={logoIcon}
+            alt="Virtual Kitchen chef logo"
+          />
         </div>
 
         <div className="kitchen-brand-text">
@@ -234,7 +243,7 @@ export default function KitchenNavbar({
             }`
           }
         >
-          <span>🍳</span>
+          <span><img src={recipesIcon} alt="Recipes" className="recipe-icon" /></span>
           My Recipes
         </NavLink>
       </div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { RecipeApi } from '../../api'
 import './styles/flow-editor.css'
+import recipeIcon from '../../assets/kitchen/recipeIcon.png'
 
 type Recipe = {
   id: number
@@ -30,7 +31,7 @@ function RecipeCard({ recipe, onOpen, onDelete }: RecipeCardProps) {
       >
         <div className="recipe-card-image">
           <div className="recipe-card-image-placeholder">
-            🍳
+            <img src={recipeIcon} alt="Recipe" className="recipe-card-logo" />
           </div>
         </div>
 

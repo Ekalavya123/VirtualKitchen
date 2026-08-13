@@ -153,6 +153,14 @@
   transition: transform 0.25s ease;
 }
 
+/* Chef logo inside recipe card */
+.recipe-card-logo {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  display: block;
+}
+
 .recipe-card:hover .recipe-card-image-placeholder {
   transform: scale(1.08);
 }

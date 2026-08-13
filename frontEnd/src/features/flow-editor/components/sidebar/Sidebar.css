@@ -10,6 +10,25 @@
   overflow-y: auto;
 }
 
+/* Collapse button in header */
+.flow-sidebar-collapse-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid #e6eefb;
+  background: white;
+  color: #4f46e5;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.flow-sidebar-collapse-btn:hover {
+  background: #f8fafc;
+}
+
 /* Sidebar header */
 .flow-sidebar-header {
   padding: 16px 14px 12px;

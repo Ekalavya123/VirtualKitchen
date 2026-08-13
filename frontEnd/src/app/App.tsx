@@ -15,6 +15,7 @@ import InventoryShopView from '../features/kitchen/InventoryShopView'
 import OrderHistoryView from '../features/kitchen/OrderHistoryView'
 import RecipeHomePage from '../features/flow-editor/RecipeHomePage'
 import FlowEditor from '../features/flow-editor/FlowEditor'
+import HomePage from '../features/HomePage'
 import type { User } from '../types/User'
 import { AuthApi, KitchenApi } from '../api'
 import '../App.css'
@@ -84,6 +85,19 @@ function RecipeEditorRoute() {
   )
 }
 
+function HomeRoute() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const hideLogin = Boolean(location.state && (location.state as any).hideLogin)
+
+  return (
+    <HomePage
+      onTryIt={() => navigate('/kitchen/recipes')}
+      onLogin={hideLogin ? undefined : () => navigate('/auth')}
+    />
+  )
+}
+
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [currentKitchen, setCurrentKitchen] = useState<Kitchen | null>(null)
@@ -147,6 +161,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<HomeRoute />} />
         <Route
           path="/auth"
           element={
