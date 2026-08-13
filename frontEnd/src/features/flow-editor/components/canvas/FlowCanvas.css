@@ -81,6 +81,56 @@
   box-sizing: border-box; /* ensure padding/border do not increase width unexpectedly */
 }
 
+/* Collapsed panels: show narrow tab */
+.flow-sidebar-wrapper.collapsed {
+  width: 48px;
+  min-width: 48px;
+}
+
+.flow-properties-wrapper.collapsed {
+  width: 48px;
+  min-width: 48px;
+}
+
+.sidebar-collapse-tab,
+.props-collapse-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  cursor: pointer;
+  background: linear-gradient(180deg,#ffffff,#f3f4f6);
+  border-radius: 8px;
+  margin: 8px;
+  box-shadow: 0 1px 4px rgba(15,23,42,0.06);
+  font-size: 18px;
+  color: var(--flow-accent-strong);
+}
+
+.sidebar-collapse-button,
+.props-collapse-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  margin: 8px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--flow-border);
+  color: var(--flow-text-muted);
+}
+
+.flow-sidebar-wrapper.collapsed .flow-sidebar {
+  display: none;
+}
+
+.flow-properties-wrapper.collapsed .flow-properties-panel {
+  display: none;
+}
+
 /* Resizer between main and properties panel is handled by the FlowCanvas drag divider. */
 
 /* Visual separators for clarity */

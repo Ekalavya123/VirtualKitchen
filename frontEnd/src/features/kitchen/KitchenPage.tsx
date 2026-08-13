@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import type { User } from '../../types/User'
 import KitchenNavbar from './KitchenNavbar'
 import './KitchenPage.css'
@@ -20,12 +20,18 @@ export default function KitchenLayout({
   kitchen,
   onLogout,
 }: KitchenPageProps) {
+  const navigate = useNavigate()
+
+  const handleLogoutAndGoHome = () => {
+    onLogout()
+    navigate('/', { state: { hideLogin: true } })
+  }
   return (
     <div className="kitchen-page">
       <KitchenNavbar
         user={user}
         kitchen={kitchen}
-        onLogout={onLogout}
+        onLogout={handleLogoutAndGoHome}
       />
 
       <div className="kitchen-body">

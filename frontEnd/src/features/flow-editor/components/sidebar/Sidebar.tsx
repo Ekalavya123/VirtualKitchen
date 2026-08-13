@@ -16,9 +16,10 @@ type SidebarProps = {
   selectedNodeId?: string | null
   onSelectNode?: (id: string | null) => void
   flowMeta?: { stepCount: number; conditionCount: number; parallelCount: number }
+  onCollapse?: () => void
 }
 
-export default function Sidebar({ onAddNode, nodes, edges, selectedNodeId, onSelectNode, flowMeta }: SidebarProps) {
+export default function Sidebar({ onAddNode, nodes, edges, selectedNodeId, onSelectNode, flowMeta, onCollapse }: SidebarProps) {
   const stepNodes = nodes.filter(isRecipeStepNode)
   const conditionNodes = nodes.filter(isConditionNode)
   const parallelNodes = nodes.filter(isParallelNode)
@@ -26,12 +27,25 @@ export default function Sidebar({ onAddNode, nodes, edges, selectedNodeId, onSel
   return (
     <div className="flow-sidebar flex min-w-[10rem] max-w-[26rem] flex-col overflow-y-auto border-r border-[var(--flow-border)] bg-white">
       <div className="flex-shrink-0 border-b border-[var(--flow-border)] px-3.5 py-4">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[linear-gradient(135deg,var(--flow-accent),#8b5cf6)] text-base text-white">👨‍🍳</div>
-          <div className="flex flex-col">
-            <div className="text-[0.75rem] font-semibold text-[var(--flow-text)]">Recipe Builder</div>
-            <div className="text-[0.65rem] text-[var(--flow-text-muted)]">Create delicious recipes</div>
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[linear-gradient(135deg,var(--flow-accent),#8b5cf6)] text-base text-white">👨‍🍳</div>
+            <div className="flex flex-col">
+              <div className="text-[0.75rem] font-semibold text-[var(--flow-text)]">Recipe Builder</div>
+              <div className="text-[0.65rem] text-[var(--flow-text-muted)]">Create delicious recipes</div>
+            </div>
           </div>
+
+          {onCollapse && (
+            <button
+              className="flow-sidebar-collapse-btn"
+              onClick={() => onCollapse()}
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+            >
+              ◀
+            </button>
+          )}
         </div>
       </div>
 
