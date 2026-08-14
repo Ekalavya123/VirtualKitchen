@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useNavigate } from 'react-router-dom'
 import type { User } from '../../types/User'
 import logoIcon from '../../assets/kitchen/blackShadowChef.png'
 import recipesIcon from '../../assets/kitchen/recipeIcon.png'
@@ -175,7 +175,6 @@ export default function KitchenNavbar({
   const handleLogout = () => {
     setProfileOpen(false)
     onLogout()
-    navigate('/')
   }
 
   return (
@@ -193,13 +192,14 @@ export default function KitchenNavbar({
         </div>
 
         <div className="kitchen-brand-text">
-          <NavLink 
-          to="/kitchen/inventory"
+          <Link
+            to="/"
+            state={{ hideLogin: true }}
           >
           <span className="kitchen-brand-name">
             Virtual Kitchen
           </span>
-          </NavLink> 
+          </Link>
 
           <span className="kitchen-name">
             {kitchen.name}

@@ -85,16 +85,36 @@ function RecipeEditorRoute() {
   )
 }
 
-function HomeRoute() {
+function HomeRoute({
+  onLoginSuccess,
+}: {
+  onLoginSuccess: (user: User, kitchen: Kitchen) => void
+}) {
   const navigate = useNavigate()
   const location = useLocation()
   const hideLogin = Boolean(location.state && (location.state as any).hideLogin)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+
+  const handleAuthSuccess = (user: User, kitchen: Kitchen) => {
+    onLoginSuccess(user, kitchen)
+    setShowAuthModal(false)
+    navigate('/kitchen/inventory')
+  }
 
   return (
-    <HomePage
-      onTryIt={() => navigate('/kitchen/recipes')}
-      onLogin={hideLogin ? undefined : () => navigate('/auth')}
-    />
+    <>
+      <HomePage
+        onTryIt={() => navigate('/kitchen/recipes')}
+        onLogin={hideLogin ? undefined : () => setShowAuthModal(true)}
+      />
+
+      {showAuthModal && (
+        <Auth
+          onLoginSuccess={handleAuthSuccess}
+          onClose={() => setShowAuthModal(false)}
+        />
+      )}
+    </>
   )
 }
 
@@ -161,7 +181,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<HomeRoute />} />
+        <Route path="/" element={<HomeRoute onLoginSuccess={handleLoginSuccess} />} />
         <Route
           path="/auth"
           element={

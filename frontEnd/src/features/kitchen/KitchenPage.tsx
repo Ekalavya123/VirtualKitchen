@@ -22,9 +22,11 @@ export default function KitchenLayout({
 }: KitchenPageProps) {
   const navigate = useNavigate()
 
+  // Navigate before clearing auth state so the /kitchen route guard
+  // doesn't win the race and redirect to /auth instead of home.
   const handleLogoutAndGoHome = () => {
+    navigate('/')
     onLogout()
-    navigate('/', { state: { hideLogin: true } })
   }
   return (
     <div className="kitchen-page">
