@@ -1,5 +1,8 @@
 import './HomePage.css'
 import chefLogo from '../assets/kitchen/blackShadowChef.png'
+import { useState } from 'react'
+
+const SESSION_EMAIL_KEY = 'virtual-kitchen.session.email'
 
 type Props = {
   onTryIt?: () => void
@@ -7,6 +10,7 @@ type Props = {
 }
 
 export default function HomePage({ onTryIt, onLogin }: Props) {
+  const [hideLogin, setHideLogin] = useState(localStorage.getItem(SESSION_EMAIL_KEY)!== null)
   return (
     <div className="home-page">
       <header className="home-nav">
@@ -22,7 +26,7 @@ export default function HomePage({ onTryIt, onLogin }: Props) {
           <a href="#vision">Our vision</a>
         </nav>
         <div className="nav-actions">
-          {onLogin && (
+          {!hideLogin && (
             <button className="login-btn" onClick={onLogin}>Log in</button>
           )}
           <button className="primary-btn" onClick={onTryIt}>Try it</button>
@@ -58,7 +62,7 @@ export default function HomePage({ onTryIt, onLogin }: Props) {
             <b className="arrow">↓</b>
             <FlowCard icon="🍚" title="Add rice" detail="250 g · cooked rice" />
             <b className="arrow">↓</b>
-            <div className="dish">🍳</div>
+            <div className="dish">🍽️</div>
             <p className="caption">Your recipe flow becomes a cooking experience.</p>
           </div>
         </section>
@@ -71,7 +75,7 @@ export default function HomePage({ onTryIt, onLogin }: Props) {
           <div className="three-grid">
             <Feature number="01" icon="✦" title="Create">Build your recipe as a flow. Choose ingredients, quantities and cooking operations.</Feature>
             <Feature number="02" icon="◎" title="Visualize">Turn the recipe flow into a visual representation of the cooking process.</Feature>
-            <Feature number="03" icon="♨" title="Cook">Follow the process you designed instead of relying only on instructions.</Feature>
+            <Feature number="03" icon="♨" title="Cook">Chef: Follow the process you designed instead of relying only on instructions.</Feature>
           </div>
         </section>
 

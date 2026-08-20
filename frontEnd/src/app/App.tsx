@@ -85,14 +85,8 @@ function RecipeEditorRoute() {
   )
 }
 
-function HomeRoute({
-  onLoginSuccess,
-}: {
-  onLoginSuccess: (user: User, kitchen: Kitchen) => void
-}) {
+function HomeRoute({onLoginSuccess,}: { onLoginSuccess: (user: User, kitchen: Kitchen) => void}) {
   const navigate = useNavigate()
-  const location = useLocation()
-  const hideLogin = Boolean(location.state && (location.state as any).hideLogin)
   const [showAuthModal, setShowAuthModal] = useState(false)
 
   const handleAuthSuccess = (user: User, kitchen: Kitchen) => {
@@ -101,11 +95,15 @@ function HomeRoute({
     navigate('/kitchen/inventory')
   }
 
+  const isAuthenticated = Boolean(localStorage.getItem(SESSION_EMAIL_KEY)!== null)
+
   return (
     <>
       <HomePage
-        onTryIt={() => navigate('/kitchen/recipes')}
-        onLogin={hideLogin ? undefined : () => setShowAuthModal(true)}
+        onTryIt={() => {
+          isAuthenticated ? navigate('/kitchen/recipes') : setShowAuthModal(true)
+        }}
+        onLogin={() => setShowAuthModal(true)}
       />
 
       {showAuthModal && (
@@ -207,7 +205,7 @@ function App() {
               />
             ) : (
               <Navigate
-                to="/auth"
+                to="/"
                 replace
               />
             )
