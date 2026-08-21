@@ -142,6 +142,8 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const [nodeZoomPercent, setNodeZoomPercent] = useState(100)
   const [builderWidth, setBuilderWidth] = useState(380)
   const [builderCollapsed, setBuilderCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [propsCollapsed, setPropsCollapsed] = useState(false)
   const nodeZoomPercentRef = useRef(100)
   const dragSnapshotRef = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null)
 
@@ -159,6 +161,15 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
 
   const selectedNode = nodes.find(n => n.selected)
   const selectedNodeId = selectedNode ? String(selectedNode.id) : null
+
+  // auto-collapse properties panel when no node is selected; expand when a node is selected
+  useEffect(() => {
+    if (selectedNodeId == null) {
+      setPropsCollapsed(true)
+    } else {
+      setPropsCollapsed(false)
+    }
+  }, [selectedNodeId])
 
   const selectNodeFromSidebar = useCallback((nodeId: string | null) => {
     setNodes((ns) => {
@@ -758,18 +769,37 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     return () => { ro.disconnect(); window.removeEventListener('resize', onWin) }
   }, [fitCanvasView])
 
+  // when sidebar or properties collapse state changes, refit canvas
+  useEffect(() => {
+    fitCanvasView()
+  }, [sidebarCollapsed, propsCollapsed, fitCanvasView])
+
   return (
     <div className="flow-canvas-container">
       {/* Sidebar */}
-      <div ref={sidebarRef} className="flow-sidebar-wrapper">
-        <Sidebar
-          onAddNode={addFreeNode}
-          nodes={nodes}
-          edges={edges}
-          selectedNodeId={selectedNodeId}
-          onSelectNode={selectNodeFromSidebar}
-          flowMeta={flowMeta}
-        />
+      <div
+        ref={sidebarRef}
+        className={`flow-sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
+        style={{ width: sidebarCollapsed ? 48 : undefined, minWidth: sidebarCollapsed ? 48 : undefined }}
+      >
+        {sidebarCollapsed ? (
+          <div className="sidebar-collapse-tab" role="button" aria-label="Open sidebar" onClick={() => setSidebarCollapsed(false)}>
+            ☰
+          </div>
+        ) : (
+          <>
+            <Sidebar
+              onAddNode={addFreeNode}
+              nodes={nodes}
+              edges={edges}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={selectNodeFromSidebar}
+              onCollapse={() => setSidebarCollapsed(true)}
+              flowMeta={flowMeta}
+            />
+            <div className="sidebar-collapse-button" role="button" title="Collapse sidebar" onClick={() => setSidebarCollapsed(true)}>◀</div>
+          </>
+        )}
       </div>
 
       {/* Main Content Area */}
@@ -941,17 +971,30 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
         />
 
       {/* Properties Panel - Right Sidebar (wrapped so resizer can resize it) */}
-      <div ref={propsRef} className="flow-properties-wrapper">
-        <PropertiesPanel
-          node={selectedNode ? {
-            id: String(selectedNode.id),
-            type: selectedNode.type,
-            data: selectedNode.data as SelectedPanelNode['data'],
-          } : undefined}
-          updateNodeField={updateNodeField}
-          onDeleteNode={deleteNode}
-          onDuplicateNode={duplicateNode}
-        />
+      <div
+        ref={propsRef}
+        className={`flow-properties-wrapper ${propsCollapsed ? 'collapsed' : ''}`}
+        style={{ width: propsCollapsed ? 48 : undefined, minWidth: propsCollapsed ? 48 : undefined }}
+      >
+        {propsCollapsed ? (
+          <div className="props-collapse-tab" role="button" aria-label="Open properties" onClick={() => setPropsCollapsed(false)}>
+            ▶
+          </div>
+        ) : (
+          <>
+            <div className="props-collapse-button" role="button" title="Collapse properties" onClick={() => setPropsCollapsed(true)}>▶</div>
+            <PropertiesPanel
+              node={selectedNode ? {
+                id: String(selectedNode.id),
+                type: selectedNode.type,
+                data: selectedNode.data as SelectedPanelNode['data'],
+              } : undefined}
+              updateNodeField={updateNodeField}
+              onDeleteNode={deleteNode}
+              onDuplicateNode={duplicateNode}
+            />
+          </>
+        )}
       </div>
 
       {/* Export Modal */}

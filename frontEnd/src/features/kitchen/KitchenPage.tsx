@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useNavigate } from 'react-router-dom'
 import type { User } from '../../types/User'
 import KitchenNavbar from './KitchenNavbar'
 import './KitchenPage.css'
@@ -20,16 +20,25 @@ export default function KitchenLayout({
   kitchen,
   onLogout,
 }: KitchenPageProps) {
+  const navigate = useNavigate()
+
+  // Navigate before clearing auth state so the /kitchen route guard
+  // doesn't win the race and redirect to /auth instead of home.
+  const handleLogoutAndGoHome = () => {
+    onLogout()
+  }
   return (
     <div className="kitchen-page">
       <KitchenNavbar
         user={user}
         kitchen={kitchen}
-        onLogout={onLogout}
+        onLogout={handleLogoutAndGoHome}
       />
 
       <div className="kitchen-body">
-        <Outlet />
+        <div className="kitchen-content">
+          <Outlet />
+        </div>
         <footer className="kitchen-footer">
           <div className="footer-content">
             <p>&copy; 2024 Virtual Kitchen. All rights reserved.</p>

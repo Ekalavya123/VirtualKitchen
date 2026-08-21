@@ -15,6 +15,7 @@ import InventoryShopView from '../features/kitchen/InventoryShopView'
 import OrderHistoryView from '../features/kitchen/OrderHistoryView'
 import RecipeHomePage from '../features/flow-editor/RecipeHomePage'
 import FlowEditor from '../features/flow-editor/FlowEditor'
+import HomePage from '../features/HomePage'
 import type { User } from '../types/User'
 import { AuthApi, KitchenApi } from '../api'
 import '../App.css'
@@ -84,6 +85,37 @@ function RecipeEditorRoute() {
   )
 }
 
+function HomeRoute({onLoginSuccess,}: { onLoginSuccess: (user: User, kitchen: Kitchen) => void}) {
+  const navigate = useNavigate()
+  const [showAuthModal, setShowAuthModal] = useState(false)
+
+  const handleAuthSuccess = (user: User, kitchen: Kitchen) => {
+    onLoginSuccess(user, kitchen)
+    setShowAuthModal(false)
+    navigate('/kitchen/inventory')
+  }
+
+  const isAuthenticated = Boolean(localStorage.getItem(SESSION_EMAIL_KEY)!== null)
+
+  return (
+    <>
+      <HomePage
+        onTryIt={() => {
+          isAuthenticated ? navigate('/kitchen/recipes') : setShowAuthModal(true)
+        }}
+        onLogin={() => setShowAuthModal(true)}
+      />
+
+      {showAuthModal && (
+        <Auth
+          onLoginSuccess={handleAuthSuccess}
+          onClose={() => setShowAuthModal(false)}
+        />
+      )}
+    </>
+  )
+}
+
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [currentKitchen, setCurrentKitchen] = useState<Kitchen | null>(null)
@@ -147,6 +179,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<HomeRoute onLoginSuccess={handleLoginSuccess} />} />
         <Route
           path="/auth"
           element={
@@ -172,7 +205,7 @@ function App() {
               />
             ) : (
               <Navigate
-                to="/auth"
+                to="/"
                 replace
               />
             )

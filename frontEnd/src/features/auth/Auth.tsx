@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import type { User } from '../../types/User'
 import { AuthApi, KitchenApi } from '../../api'
+import chefLogo from '../../assets/kitchen/blackShadowChef.png'
 import './Auth.css'
 
 interface LoginPageProps {
   onLoginSuccess: (user: User, kitchen: any) => void
+  onClose?: () => void
 }
 
-export default function Auth({ onLoginSuccess }: LoginPageProps) {
+export default function Auth({ onLoginSuccess, onClose }: LoginPageProps) {
   const [mode, setMode] = useState<'login' | 'signup'>('signup')
   const [userName, setUserName] = useState('')
   const [userEmail, setUserEmail] = useState('')
@@ -80,85 +82,92 @@ export default function Auth({ onLoginSuccess }: LoginPageProps) {
   }
 
   return (
-    <div className="login-page">
-      <div className="login-container">
-        <div className="login-card">
-          <h1 className="login-title">Virtual Kitchen</h1>
-          <p className="login-subtitle">Welcome to Your Digital Culinary Studio</p>
+    <div
+      className="auth-overlay"
+      onClick={onClose ? (event) => {
+        if (event.target === event.currentTarget) {
+          onClose()
+        }
+      } : undefined}
+    >
+      <div className="auth-card">
+        {onClose && (
+          <button
+            type="button"
+            className="auth-close-btn"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        )}
 
-          <div className="toggle-container">
-            <button
-              className={`toggle-btn ${mode === 'signup' ? 'active' : ''}`}
-              onClick={() => {
-                setMode('signup')
-                setError('')
-              }}
-            >
-              Sign Up
-            </button>
-            <button
-              className={`toggle-btn ${mode === 'login' ? 'active' : ''}`}
-              onClick={() => {
-                setMode('login')
-                setError('')
-              }}
-            >
-              Login
-            </button>
-          </div>
+        <div className="auth-icon">
+          <img src={chefLogo} alt="Virtual Kitchen chef logo" />
+        </div>
 
-          <div className="login-form">
-            {mode === 'signup' && (
-              <div className="form-group">
-                <label htmlFor="userName">Name</label>
-                <input
-                  id="userName"
-                  type="text"
-                  placeholder="Enter your name"
-                  value={userName}
-                  onChange={(e) => setUserName(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
-            )}
+        <h1 className="auth-title">Virtual Kitchen</h1>
+        <p className="auth-subtitle">Welcome to Your Digital Culinary Studio</p>
 
-            <div className="form-group">
-              <label htmlFor="userEmail">Email</label>
+        <div className="auth-toggle">
+          <button
+            className={`auth-toggle-btn ${mode === 'signup' ? 'active' : ''}`}
+            onClick={() => {
+              setMode('signup')
+              setError('')
+            }}
+          >
+            Sign Up
+          </button>
+          <button
+            className={`auth-toggle-btn ${mode === 'login' ? 'active' : ''}`}
+            onClick={() => {
+              setMode('login')
+              setError('')
+            }}
+          >
+            Login
+          </button>
+        </div>
+
+        <div className="auth-form">
+          {mode === 'signup' && (
+            <div className="auth-form-group">
+              <label htmlFor="userName">Name</label>
               <input
-                id="userEmail"
-                type="email"
-                placeholder="Enter your email"
-                value={userEmail}
-                onChange={(e) => setUserEmail(e.target.value)}
+                id="userName"
+                type="text"
+                placeholder="Enter your name"
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
                 disabled={loading}
               />
             </div>
+          )}
 
-            {error && <div className="error-message">{error}</div>}
-
-            <button
-              className="create-button"
-              onClick={mode === 'signup' ? handleCreateUser : handleLogin}
+          <div className="auth-form-group">
+            <label htmlFor="userEmail">Email</label>
+            <input
+              id="userEmail"
+              type="email"
+              placeholder="Enter your email"
+              value={userEmail}
+              onChange={(e) => setUserEmail(e.target.value)}
               disabled={loading}
-            >
-              {loading ? (mode === 'signup' ? 'Creating...' : 'Logging in...') : (mode === 'signup' ? 'Create Account & Kitchen' : 'Login')}
-            </button>
+            />
           </div>
+
+          {error && <div className="auth-error">{error}</div>}
+
+          <button
+            className="auth-submit-btn"
+            onClick={mode === 'signup' ? handleCreateUser : handleLogin}
+            disabled={loading}
+          >
+            {loading ? (mode === 'signup' ? 'Creating...' : 'Logging in...') : (mode === 'signup' ? 'Create Account & Kitchen' : 'Login')}
+          </button>
         </div>
       </div>
-
-      <footer className="login-footer">
-        <div className="login-footer-content">
-          <p>&copy; 2024 Virtual Kitchen. All rights reserved.</p>
-          <div className="login-footer-links">
-            <a href="#privacy">Privacy Policy</a>
-            <span>•</span>
-            <a href="#terms">Terms of Service</a>
-            <span>•</span>
-            <a href="#contact">Contact Us</a>
-          </div>
-        </div>
-      </footer>
     </div>
   )
 }
