@@ -77,7 +77,7 @@ public class RecipeGenerationService {
                 .systemPrompt(promptBuilder.buildSystemPrompt())
                 .userPrompt(refinedPrompt)
                 .temperature(0.1d)
-                .maxTokens(3000)
+                .maxTokens(5000)
                 .build();
 
         long startNs = System.nanoTime();
