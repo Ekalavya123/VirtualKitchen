@@ -54,4 +54,9 @@ export const API = {
   visualizations: {
     byId: (id: number | string) => `/api/v1/visualizations/${String(id)}`,
   },
+
+  // Recipe step visualization assets (image/video prompts per step)
+  recipeVisualization: {
+    generate: (recipeId: number | string) => `/api/recipes/${String(recipeId)}/visualization/generate`,
+  },
 }

@@ -36,6 +36,7 @@ import {
   normalizeStepNodeData,
   type ConditionNodeStructuredFields,
   type StepNodeStructuredFields,
+  type StepVisualizationData,
 } from '../../../../types/recipeFlow'
 import {
   type StepContextFieldConfig,
@@ -58,6 +59,7 @@ type NodeData = {
     step?: StepNodeStructuredFields
     condition?: ConditionNodeStructuredFields
     parallel?: ParallelNodeStructuredFields
+    visualization?: StepVisualizationData
   }
 }
 
@@ -66,9 +68,11 @@ type Props = {
   updateNodeField: (nodeId: string, field: string, value: string) => void
   onDeleteNode?: (nodeId: string) => void
   onDuplicateNode?: (nodeId: string) => void
+  onGenerateVisualization?: (nodeId: string) => void
+  onRegenerateVisualization?: (nodeId: string) => void
 }
 
-export default function PropertiesPanel({ node, updateNodeField, onDeleteNode, onDuplicateNode }: Props) {
+export default function PropertiesPanel({ node, updateNodeField, onDeleteNode, onDuplicateNode, onGenerateVisualization, onRegenerateVisualization }: Props) {
   if (!node) return (
     <div className="flow-properties-empty">
       <h2 className="flow-properties-title">Properties</h2>
@@ -83,6 +87,7 @@ export default function PropertiesPanel({ node, updateNodeField, onDeleteNode, o
   const isCondition = node.type === 'conditionNode'
   const isParallel = node.type === 'parallelStartNode' || node.type === 'parallelEndNode'
   const stepData = !isCondition && !isParallel ? normalizeStepNodeData(d).step : undefined
+  const visualization = !isCondition && !isParallel ? normalizeStepNodeData(d).visualization : undefined
   const conditionData = isCondition ? normalizeConditionNodeData(d).condition : undefined
   const parallelData = isParallel
     ? normalizeParallelNodeData(d, node.type === 'parallelEndNode' ? 'end' : 'start').parallel
@@ -492,6 +497,55 @@ export default function PropertiesPanel({ node, updateNodeField, onDeleteNode, o
             <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[0.7rem] text-slate-500">
               <strong className="text-amber-700">Tip:</strong> Drag from the 🟢 green handle for <em>Yes</em>,
               🔴 red handle for <em>No</em>. Connect to any step or section.
+            </div>
+          </>
+        )}
+
+        {/* Visualization status */}
+        {!isCondition && !isParallel && (
+          <>
+            <div className="flow-editor-section-heading">Visualization</div>
+            <div className="flow-properties-field">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span
+                  className="flow-properties-type-badge"
+                  style={
+                    visualization?.status === 'generated'
+                      ? { background: '#f0fdf4', border: '1px solid #86efac', color: '#16a34a' }
+                      : { background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b' }
+                  }
+                >
+                  {visualization?.status === 'generated' ? '🖼️ Generated' : '⚪ Not generated'}
+                </span>
+                {visualization?.status === 'generated' ? (
+                  <button
+                    type="button"
+                    className="flow-properties-action-btn"
+                    onClick={() => onRegenerateVisualization?.(node.id)}
+                  >
+                    🔄 Regenerate
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="flow-properties-action-btn"
+                    onClick={() => onGenerateVisualization?.(node.id)}
+                  >
+                    🎨 Generate Image
+                  </button>
+                )}
+              </div>
+              {visualization?.imageUrl ? (
+                <img
+                  src={visualization.imageUrl}
+                  alt="Step visualization"
+                  style={{ marginTop: 8, width: '100%', borderRadius: 8, border: '1px solid #e2e8f0' }}
+                />
+              ) : visualization?.status === 'generated' ? (
+                <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>
+                  Image not rendered yet — prompt is ready.
+                </div>
+              ) : null}
             </div>
           </>
         )}
