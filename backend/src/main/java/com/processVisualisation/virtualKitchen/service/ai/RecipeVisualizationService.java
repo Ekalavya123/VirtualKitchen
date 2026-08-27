@@ -3,6 +3,7 @@ package com.processVisualisation.virtualKitchen.service.ai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.processVisualisation.virtualKitchen.ai.client.AIClient;
+import com.processVisualisation.virtualKitchen.ai.client.ImageGenerationClient;
 import com.processVisualisation.virtualKitchen.ai.dto.AIRequest;
 import com.processVisualisation.virtualKitchen.ai.dto.AIResponse;
 import com.processVisualisation.virtualKitchen.dto.RecipeVisualizationResponseDTO;
@@ -12,6 +13,7 @@ import com.processVisualisation.virtualKitchen.model.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.model.VisualizationAssetType;
 import com.processVisualisation.virtualKitchen.repository.FlowRepository;
 import com.processVisualisation.virtualKitchen.repository.VisualizationAssetRepository;
+import com.processVisualisation.virtualKitchen.service.ImageStorageService;
 import com.processVisualisation.virtualKitchen.service.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.service.recipe.VisualizationPromptBuilder;
 import com.processVisualisation.virtualKitchen.utils.VisualizationKeyBuilder;
@@ -21,16 +23,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -42,7 +35,9 @@ public class RecipeVisualizationService {
     private final FlowRepository flowRepository;
     private final VisualizationAssetRepository visualizationAssetRepository;
     private final SequenceGeneratorService sequenceGeneratorService;
+    private final ImageStorageService imageStorageService;
     private final AIClient aiClient;
+    private final ImageGenerationClient imageGenerationClient;
     private final VisualizationPromptBuilder promptBuilder;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -51,12 +46,16 @@ public class RecipeVisualizationService {
             VisualizationAssetRepository visualizationAssetRepository,
             SequenceGeneratorService sequenceGeneratorService,
             AIClient aiClient,
+            ImageGenerationClient imageGenerationClient,
+            ImageStorageService imageStorageService,
             VisualizationPromptBuilder promptBuilder
     ) {
         this.flowRepository = flowRepository;
         this.visualizationAssetRepository = visualizationAssetRepository;
         this.sequenceGeneratorService = sequenceGeneratorService;
         this.aiClient = aiClient;
+        this.imageGenerationClient = imageGenerationClient;
+        this.imageStorageService = imageStorageService;
         this.promptBuilder = promptBuilder;
     }
 
@@ -112,7 +111,7 @@ public class RecipeVisualizationService {
                 .systemPrompt(promptBuilder.buildSystemPrompt())
                 .userPrompt(promptBuilder.buildUserPrompt(currentStep, previousStep))
                 .temperature(0.4d)
-                .maxTokens(500)
+                .maxTokens(5000)
                 .build();
 
         AIResponse response = aiClient.chat(request);
@@ -124,7 +123,30 @@ public class RecipeVisualizationService {
         asset.setType(VisualizationAssetType.ATOMIC);
         asset.setImagePrompt(prompts.imagePrompt());
         asset.setVideoPrompt(prompts.videoPrompt());
-        asset.setImageUrl(null);
+        try {
+            logger.info("Generating image for visualizationKey: {}, prompts: {}", visualizationKey, prompts);
+            ImageGenerationClient.GeneratedImage generatedImage =
+                    imageGenerationClient.generate(prompts.imagePrompt());
+
+            String imagePath = String.format(
+                    "visualizations/%s/%s/%s.png",
+                    visualizationKey,
+                    asset.getId(),
+                    UUID.randomUUID()
+            );
+
+            String imageUrl = imageStorageService.upload(
+                    generatedImage.data(),
+                    generatedImage.mimeType(),
+                    imagePath
+            );
+
+            asset.setImageUrl(imageUrl);
+            logger.info("Successfully generated and uploaded image for visualizationKey: {}, prompts: {}", visualizationKey, prompts);
+        } catch (Exception e) {
+            asset.setImageUrl(null);
+            logger.error("Failed to generate or upload image for visualizationKey: {}, prompts: {}", visualizationKey, prompts, e);
+        }
         asset.setVideoUrl(null);
         return visualizationAssetRepository.save(asset);
     }
