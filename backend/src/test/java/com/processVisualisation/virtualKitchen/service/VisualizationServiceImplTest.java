@@ -4,7 +4,7 @@ import com.processVisualisation.virtualKitchen.dto.VisualizationResponseDTO;
 import com.processVisualisation.virtualKitchen.model.FlowDocument;
 import com.processVisualisation.virtualKitchen.repository.FlowRepository;
 import com.processVisualisation.virtualKitchen.repository.VisualizationClipRepository;
-import com.processVisualisation.virtualKitchen.service.impl.VisualizationServiceImpl;
+import com.processVisualisation.virtualKitchen.service.ai.VisualizationServiceImpl;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;

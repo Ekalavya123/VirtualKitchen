@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.service;
+package com.processVisualisation.virtualKitchen.service.ai;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -11,6 +11,7 @@ import com.processVisualisation.virtualKitchen.dto.RecipeExecutionEdgeDTO;
 import com.processVisualisation.virtualKitchen.dto.RecipeExecutionStepDTO;
 import com.processVisualisation.virtualKitchen.dto.RecipeFlowGenerationResponseDTO;
 import com.processVisualisation.virtualKitchen.exception.RecipeFlowGenerationException;
+import com.processVisualisation.virtualKitchen.service.IAIResponseService;
 import com.processVisualisation.virtualKitchen.service.recipe.RecipeFlowPromptBuilder;
 import com.processVisualisation.virtualKitchen.service.recipe.RecipeFlowValidationResult;
 import com.processVisualisation.virtualKitchen.service.recipe.RecipeValidator;

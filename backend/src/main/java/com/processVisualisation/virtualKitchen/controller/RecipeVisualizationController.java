@@ -1,7 +1,7 @@
 package com.processVisualisation.virtualKitchen.controller;
 
 import com.processVisualisation.virtualKitchen.dto.RecipeVisualizationResponseDTO;
-import com.processVisualisation.virtualKitchen.service.RecipeVisualizationService;
+import com.processVisualisation.virtualKitchen.service.ai.RecipeVisualizationService;
 import com.processVisualisation.virtualKitchen.utils.ApiResponse;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;

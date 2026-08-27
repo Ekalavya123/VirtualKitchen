@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.service.impl;
+package com.processVisualisation.virtualKitchen.service.store;
 
 import com.processVisualisation.virtualKitchen.dto.*;
 import com.processVisualisation.virtualKitchen.mapper.EquipmentMapper;

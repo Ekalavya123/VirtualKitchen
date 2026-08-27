@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.service;
+package com.processVisualisation.virtualKitchen.service.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,6 +12,7 @@ import com.processVisualisation.virtualKitchen.model.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.model.VisualizationAssetType;
 import com.processVisualisation.virtualKitchen.repository.FlowRepository;
 import com.processVisualisation.virtualKitchen.repository.VisualizationAssetRepository;
+import com.processVisualisation.virtualKitchen.service.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.service.recipe.VisualizationPromptBuilder;
 import com.processVisualisation.virtualKitchen.utils.VisualizationKeyBuilder;
 

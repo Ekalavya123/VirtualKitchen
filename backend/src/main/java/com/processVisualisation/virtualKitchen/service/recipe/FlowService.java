@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.service;
+package com.processVisualisation.virtualKitchen.service.recipe;
 
 import com.processVisualisation.virtualKitchen.dto.FlowSaveRequestDTO;
 import com.processVisualisation.virtualKitchen.dto.FlowSaveResponseDTO;

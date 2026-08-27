@@ -2,7 +2,7 @@ package com.processVisualisation.virtualKitchen.controller;
 
 import com.processVisualisation.virtualKitchen.dto.RecipeFlowGenerationRequestDTO;
 import com.processVisualisation.virtualKitchen.dto.RecipeFlowGenerationResponseDTO;
-import com.processVisualisation.virtualKitchen.service.RecipeGenerationService;
+import com.processVisualisation.virtualKitchen.service.ai.RecipeGenerationService;
 
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;

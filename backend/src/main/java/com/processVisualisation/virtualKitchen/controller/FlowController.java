@@ -3,7 +3,7 @@ package com.processVisualisation.virtualKitchen.controller;
 import com.processVisualisation.virtualKitchen.dto.FlowSaveRequestDTO;
 import com.processVisualisation.virtualKitchen.dto.FlowSaveResponseDTO;
 import com.processVisualisation.virtualKitchen.model.FlowDocument;
-import com.processVisualisation.virtualKitchen.service.FlowService;
+import com.processVisualisation.virtualKitchen.service.recipe.FlowService;
 import com.processVisualisation.virtualKitchen.utils.ApiResponse;
 import org.springframework.web.bind.annotation.*;
 
