@@ -14,5 +14,6 @@ public class GeminiProperties {
     private String baseUrl;
     private String chatEndpoint;
     private String defaultModel;
+    private String imageModel;
     private Long timeoutMs;
 }
