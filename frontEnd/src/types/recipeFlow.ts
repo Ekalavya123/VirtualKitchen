@@ -66,6 +66,15 @@ export type StepNodeStructuredFields = {
   notes: string
 }
 
+export type StepVisualizationStatus = 'not_generated' | 'generated'
+
+export type StepVisualizationData = {
+  assetId?: number
+  imagePrompt?: string
+  imageUrl?: string
+  status: StepVisualizationStatus
+}
+
 export type RecipeStepNodeData = {
   title: string
   icon?: string
@@ -74,6 +83,7 @@ export type RecipeStepNodeData = {
   sectionId?: string | null
   description?: string
   duration?: string
+  visualization?: StepVisualizationData
 }
 
 export type ConditionExpectedResult = 'success' | 'failure'
@@ -362,6 +372,16 @@ export const normalizeStepNodeData = (value: unknown): RecipeStepNodeData => {
   }
 
   const step = pruneStepFieldsByActionSchema(mergedStep)
+  const rawVisualization = asRecord(raw.visualization)
+  const visualizationAssetId = toStringValue(rawVisualization.assetId)
+  const visualization: StepVisualizationData | undefined = raw.visualization
+    ? {
+        assetId: visualizationAssetId ? Number(visualizationAssetId) : undefined,
+        imagePrompt: toStringValue(rawVisualization.imagePrompt) || undefined,
+        imageUrl: toStringValue(rawVisualization.imageUrl) || undefined,
+        status: visualizationAssetId ? 'generated' : 'not_generated',
+      }
+    : undefined
 
   return {
     title: getStepNodeTitle(step.action),
@@ -371,6 +391,7 @@ export const normalizeStepNodeData = (value: unknown): RecipeStepNodeData => {
     sectionId: typeof raw.sectionId === 'string' || raw.sectionId === null ? raw.sectionId : null,
     description: step.notes,
     duration: step.duration,
+    visualization,
   }
 }
 

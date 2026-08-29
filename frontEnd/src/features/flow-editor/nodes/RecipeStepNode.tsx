@@ -242,9 +242,25 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
                 color: '#64748b',
                 fontWeight: 600,
                 marginTop: 2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
               }}
             >
-              {data.stepNumber !== undefined ? `Step ${data.stepNumber}` : 'Recipe Step'}
+              <span>{data.stepNumber !== undefined ? `Step ${data.stepNumber}` : 'Recipe Step'}</span>
+              <span
+                style={{
+                  fontSize: Math.max(8, stepLabelFontSize - 1),
+                  fontWeight: 700,
+                  padding: '1px 6px',
+                  borderRadius: 999,
+                  background: normalized.visualization?.status === 'generated' ? '#f0fdf4' : '#f8fafc',
+                  color: normalized.visualization?.status === 'generated' ? '#16a34a' : '#94a3b8',
+                  border: `1px solid ${normalized.visualization?.status === 'generated' ? '#86efac' : '#e2e8f0'}`,
+                }}
+              >
+                {normalized.visualization?.status === 'generated' ? '🖼️ Generated' : 'Not generated'}
+              </span>
             </div>
           </div>
         </div>

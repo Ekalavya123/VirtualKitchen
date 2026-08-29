@@ -5,7 +5,7 @@ import com.processVisualisation.virtualKitchen.dto.UserResponseDTO;
 import com.processVisualisation.virtualKitchen.mapper.UserMapper;
 import com.processVisualisation.virtualKitchen.model.User;
 import com.processVisualisation.virtualKitchen.repository.UserRepository;
-import com.processVisualisation.virtualKitchen.service.impl.UserServiceImpl;
+import com.processVisualisation.virtualKitchen.service.auth.UserServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
 

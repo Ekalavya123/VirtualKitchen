@@ -7,13 +7,11 @@ import lombok.Data;
 
 @Data
 @Component
-@ConfigurationProperties(prefix = "ai.gemini")
-public class GeminiProperties {
+@ConfigurationProperties(prefix = "ai.ollama")
+public class OllamaProperties {
 
-    private String apiKey;
     private String baseUrl;
     private String chatEndpoint;
     private String defaultModel;
-    private String imageModel;
     private Long timeoutMs;
 }

@@ -1,8 +1,9 @@
-package com.processVisualisation.virtualKitchen.service;
+package com.processVisualisation.virtualKitchen.service.ai;
 
 import com.processVisualisation.virtualKitchen.dto.AIResponseRecordDTO;
 import com.processVisualisation.virtualKitchen.model.AIResponseDocument;
 import com.processVisualisation.virtualKitchen.repository.AIResponseRepository;
+import com.processVisualisation.virtualKitchen.service.IAIResponseService;
 import org.springframework.stereotype.Service;
 
 import java.util.List;

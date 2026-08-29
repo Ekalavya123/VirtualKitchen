@@ -3,7 +3,7 @@ import Sidebar from '../sidebar/Sidebar'
 import PropertiesPanel from '../toolbar/PropertiesPanel'
 import FlowEditorTopBar from '../toolbar/FlowEditorTopBar'
 import RecipeBuilderPanel from './RecipeBuilderPanel'
-import { FlowApi, VisualizationApi } from '../../../../api'
+import { FlowApi, RecipeVisualizationApi } from '../../../../api'
 import './FlowCanvas.css'
 import '../sidebar/Sidebar.css'
 import '../toolbar/PropertiesPanel.css'
@@ -39,7 +39,7 @@ import {
   serializeFlowData,
   NODE_BASE_SIZE,
 } from './FlowCanvas.helpers.ts'
-import type { VisualizationResponse } from '../../../../api'
+import RecipeVisualizationSlideshow, { type SlideshowStep } from './RecipeVisualizationSlideshow'
 import {
   type FlowNodeType,
   getFlowMetaCounts,
@@ -64,6 +64,7 @@ import {
   type ConditionNodeStructuredFields,
   type ParallelNodeStructuredFields,
   type StepNodeStructuredFields,
+  type StepVisualizationData,
 } from '../../../../types/recipeFlow'
 import {
   getIngredientDefaultUnit,
@@ -107,6 +108,7 @@ type SelectedPanelNode = {
     step?: StepNodeStructuredFields
     condition?: ConditionNodeStructuredFields
     parallel?: ParallelNodeStructuredFields
+    visualization?: StepVisualizationData
   }
 }
 
@@ -136,14 +138,16 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const [future,  setFuture]  = useState<{ nodes: Node[]; edges: Edge[] }[]>([])
   const [exportJson, setExportJson] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [visualizationResult, setVisualizationResult] = useState<VisualizationResponse | null>(null)
-  const [visualizing, setVisualizing] = useState(false)
+  const [generatingVisuals, setGeneratingVisuals] = useState(false)
+  const [generateVisualsStatus, setGenerateVisualsStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [showSlideshow, setShowSlideshow] = useState(false)
   const [generatingFlow, setGeneratingFlow] = useState(false)
   const [nodeZoomPercent, setNodeZoomPercent] = useState(100)
   const [builderWidth, setBuilderWidth] = useState(380)
   const [builderCollapsed, setBuilderCollapsed] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [propsCollapsed, setPropsCollapsed] = useState(false)
+  const [propsWidth, setPropsWidth] = useState(260)
   const nodeZoomPercentRef = useRef(100)
   const dragSnapshotRef = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null)
 
@@ -623,22 +627,98 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     localStorage.setItem(getDraftKey(recipe.id), JSON.stringify(draftRecord))
   }, [nodes, edges, recipe.id])
 
-  const visualizeFlow = useCallback(async () => {
-    setVisualizing(true)
-    setVisualizationResult(null)
+  const generateVisuals = useCallback(async () => {
+    setGeneratingVisuals(true)
+    setGenerateVisualsStatus(null)
 
     try {
-      const visualizationData = createFlowDataPayload(nodes, edges)
+      const result = await RecipeVisualizationApi.generate(recipe.id)
+      const stepById = new Map(result.steps.map((step) => [step.stepId, step]))
 
-      const result = await VisualizationApi.generateVisualization(recipe.id, visualizationData)
-      setVisualizationResult(result ?? null)
+      setNodes((nds) => nds.map((node) => {
+        const stepResult = stepById.get(String(node.id))
+        if (!isRecipeStepNode(node) || !stepResult) return node
+
+        const normalized = normalizeStepNodeData(node.data)
+        return {
+          ...node,
+          data: {
+            ...normalized,
+            visualization: {
+              assetId: stepResult.visualizationAssetId,
+              imagePrompt: stepResult.imagePrompt,
+              imageUrl: stepResult.imageUrl ?? undefined,
+              status: 'generated',
+            },
+          },
+        }
+      }))
+
+      setGenerateVisualsStatus({ type: 'success', text: result.message || 'Visualization assets generated' })
     } catch (error) {
       console.error(error)
-      alert('Unable to visualize flow right now')
+      setGenerateVisualsStatus({ type: 'error', text: 'Unable to generate visuals right now' })
     } finally {
-      setVisualizing(false)
+      setGeneratingVisuals(false)
     }
-  }, [nodes, edges, recipe.id])
+  }, [recipe.id, setNodes])
+
+  const generateVisualizationForNode = useCallback(() => {
+    void generateVisuals()
+  }, [generateVisuals])
+
+  // Orders recipeStep nodes by following edges instead of array position, matching backend ordering.
+  const getOrderedStepSlides = useCallback((): SlideshowStep[] => {
+    const stepNodes = nodes.filter(isRecipeStepNode)
+    const stepIds = new Set(stepNodes.map((node) => String(node.id)))
+    const adjacency = new Map<string, string[]>()
+    const indegree = new Map<string, number>()
+    stepIds.forEach((id) => indegree.set(id, 0))
+
+    edges.forEach((edge) => {
+      const source = String(edge.source)
+      const target = String(edge.target)
+      if (!stepIds.has(source) || !stepIds.has(target)) return
+      adjacency.set(source, [...(adjacency.get(source) ?? []), target])
+      indegree.set(target, (indegree.get(target) ?? 0) + 1)
+    })
+
+    const queue: string[] = []
+    indegree.forEach((value, id) => {
+      if (value === 0) queue.push(id)
+    })
+
+    const orderedIds: string[] = []
+    while (queue.length > 0) {
+      const id = queue.shift() as string
+      orderedIds.push(id)
+      for (const next of adjacency.get(id) ?? []) {
+        const nextIndegree = (indegree.get(next) ?? 0) - 1
+        indegree.set(next, nextIndegree)
+        if (nextIndegree === 0) queue.push(next)
+      }
+    }
+
+    stepIds.forEach((id) => {
+      if (!orderedIds.includes(id)) orderedIds.push(id)
+    })
+
+    const nodeById = new Map(stepNodes.map((node) => [String(node.id), node]))
+
+    return orderedIds
+      .map((id) => nodeById.get(id))
+      .filter((node): node is Node => !!node)
+      .map((node, index) => {
+        const normalized = normalizeStepNodeData(node.data)
+        return {
+          id: String(node.id),
+          title: normalized.title,
+          description: normalized.description,
+          imageUrl: normalized.visualization?.imageUrl,
+          stepNumber: normalized.stepNumber ?? index + 1,
+        }
+      })
+  }, [nodes, edges])
 
   // ── onConnect ─────────────────────────────────────────────────────────────
   const onConnect = useCallback((connection: Connection) => {
@@ -725,7 +805,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     setNodes(nextNodes)
     setEdges(nextEdges)
     setFuture([])
-    setVisualizationResult(null)
+    setGenerateVisualsStatus(null)
     selectNodeFromSidebar(null)
 
     window.requestAnimationFrame(() => {
@@ -755,81 +835,70 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     }
   }, [replaceCanvasFlow])
 
-  // observe size changes of the sidebar and call fitView
-  useEffect(() => {
-    if (!reactFlowInstance.current) return
-    const ro = new ResizeObserver(() => {
-      fitCanvasView()
-    })
-    if (sidebarRef.current) ro.observe(sidebarRef.current)
-    if (recipeBuilderRef.current) ro.observe(recipeBuilderRef.current)
-    if (propsRef.current) ro.observe(propsRef.current)
-    const onWin = () => { fitCanvasView() }
-    window.addEventListener('resize', onWin)
-    return () => { ro.disconnect(); window.removeEventListener('resize', onWin) }
-  }, [fitCanvasView])
-
-  // when sidebar or properties collapse state changes, refit canvas
-  useEffect(() => {
-    fitCanvasView()
-  }, [sidebarCollapsed, propsCollapsed, fitCanvasView])
+  // React Flow observes its own wrapper's size internally, so container/panel
+  // resizes (sidebar, properties, builder) recalculate dimensions on their own —
+  // we intentionally do NOT call fitCanvasView() here, since that would reset
+  // the user's pan/zoom every time a panel is collapsed, expanded, or dragged.
 
   return (
     <div className="flow-canvas-container">
-      {/* Sidebar */}
-      <div
-        ref={sidebarRef}
-        className={`flow-sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
-        style={{ width: sidebarCollapsed ? 48 : undefined, minWidth: sidebarCollapsed ? 48 : undefined }}
-      >
-        {sidebarCollapsed ? (
-          <div className="sidebar-collapse-tab" role="button" aria-label="Open sidebar" onClick={() => setSidebarCollapsed(false)}>
-            ☰
-          </div>
-        ) : (
-          <>
-            <Sidebar
-              onAddNode={addFreeNode}
-              nodes={nodes}
-              edges={edges}
-              selectedNodeId={selectedNodeId}
-              onSelectNode={selectNodeFromSidebar}
-              onCollapse={() => setSidebarCollapsed(true)}
-              flowMeta={flowMeta}
-            />
-            <div className="sidebar-collapse-button" role="button" title="Collapse sidebar" onClick={() => setSidebarCollapsed(true)}>◀</div>
-          </>
-        )}
+      {/* Full-width editor toolbar */}
+      <div className="flow-canvas-topbar">
+        <FlowEditorTopBar
+          title={recipe.title}
+          onUndo={undo}
+          onRedo={redo}
+          canUndo={history.length > 0}
+          canRedo={future.length > 0}
+          onExport={exportFlow}
+          onSave={saveFlow}
+          onGenerateVisuals={generateVisuals}
+          isGeneratingVisuals={generatingVisuals}
+          generateVisualsStatus={generateVisualsStatus}
+          onVisualize={() => setShowSlideshow(true)}
+          onBack={onBack}
+          nodeZoomPercent={nodeZoomPercent}
+          onNodeZoomChange={handleNodeZoomChange}
+        />
       </div>
 
-      {/* Main Content Area */}
-      <div className="flow-canvas-main">
-        {/* Topbar */}
-        <div className="flow-canvas-topbar">
-          <FlowEditorTopBar
-            title={recipe.title}
-            onUndo={undo}
-            onRedo={redo}
-            canUndo={history.length > 0}
-            canRedo={future.length > 0}
-            onExport={exportFlow}
-            onSave={saveFlow}
-            onVisualize={visualizeFlow}
-            isVisualizing={visualizing}
-            onBack={onBack}
-            nodeZoomPercent={nodeZoomPercent}
-            onNodeZoomChange={handleNodeZoomChange}
-          />
+      {/* Everything below the toolbar is the editor workspace */}
+      <div className="flow-canvas-body">
+        {/* Sidebar */}
+        <div
+          ref={sidebarRef}
+          className={`flow-sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
+          style={{ width: sidebarCollapsed ? 48 : 210, minWidth: sidebarCollapsed ? 48 : 160 }}
+        >
+          {sidebarCollapsed ? (
+            <div className="sidebar-collapse-tab" role="button" aria-label="Open sidebar" onClick={() => setSidebarCollapsed(false)}>
+              ☰
+            </div>
+          ) : (
+            <>
+              <Sidebar
+                onAddNode={addFreeNode}
+                nodes={nodes}
+                edges={edges}
+                selectedNodeId={selectedNodeId}
+                onSelectNode={selectNodeFromSidebar}
+                onCollapse={() => setSidebarCollapsed(true)}
+                flowMeta={flowMeta}
+              />
+              <div className="sidebar-collapse-button" role="button" title="Collapse sidebar" onClick={() => setSidebarCollapsed(true)}>◀</div>
+            </>
+          )}
         </div>
 
-        {/* Canvas Area */}
-        <div className="flow-canvas-area">
-          <div className="flow-canvas-workspace">
-            <div
+        {/* Main canvas area */}
+        <div className="flow-canvas-main">
+          <div className="flow-canvas-area">
+            <div className="flow-canvas-workspace">
+              <div
               ref={recipeBuilderRef}
               style={{ width: builderCollapsed ? 48 : builderWidth, minWidth: builderCollapsed ? 48 : builderWidth }}
-            >
-              <RecipeBuilderPanel
+              >
+                <RecipeBuilderPanel
                 collapsed={builderCollapsed}
                 isGenerating={generatingFlow}
                 onToggleCollapsed={() => setBuilderCollapsed((currentValue) => !currentValue)}
@@ -845,7 +914,6 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
                   const startWidth = builderWidth
                   const minWidth = 320
                   const maxWidth = 560
-                  let frameId: number | null = null
 
                   const onMove = (moveEvent: MouseEvent) => {
                     const delta = moveEvent.clientX - startX
@@ -855,22 +923,11 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
                     if (nextWidth > maxWidth) nextWidth = maxWidth
 
                     setBuilderWidth(nextWidth)
-
-                    if (frameId == null) {
-                      frameId = window.requestAnimationFrame(() => {
-                        fitCanvasView()
-                        frameId = null
-                      })
-                    }
                   }
 
                   const onUp = () => {
                     document.removeEventListener('mousemove', onMove)
                     document.removeEventListener('mouseup', onUp)
-                    if (frameId != null) {
-                      window.cancelAnimationFrame(frameId)
-                      frameId = null
-                    }
                   }
 
                   document.addEventListener('mousemove', onMove)
@@ -884,17 +941,6 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
             )}
 
             <div ref={reactFlowWrapperRef} className="flow-canvas-viewport">
-              {visualizationResult && (
-                <div className="flow-canvas-visualization-result">
-                  <div className="flow-canvas-visualization-box">
-                    <div className="flow-canvas-visualization-title">📝 Visualization plan prepared</div>
-                    <div className="flow-canvas-visualization-info">
-                      {visualizationResult.clips?.length ?? 0} clips planned · final clip: {visualizationResult.finalClip?.clipId ?? 'n/a'}
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <ReactFlow
                 onInit={inst => { reactFlowInstance.current = inst; fitCanvasView() }}
                 nodes={nodes}
@@ -929,11 +975,11 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
                 />
               </ReactFlow>
             </div>
+            </div>
           </div>
         </div>
-      </div>
 
-        {/* Resizer between main and properties */}
+        {/* Resizer between main canvas and properties */}
         <div
           className="flow-resizer"
           onMouseDown={(e) => {
@@ -941,27 +987,18 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
             const startWidth = propsRef.current?.offsetWidth ?? 260
             const minW = 160
             const maxW = 520
-            let rafId: number | null = null
 
             const onMove = (ev: MouseEvent) => {
               const delta = startX - ev.clientX
               let next = startWidth - delta
               if (next < minW) next = minW
               if (next > maxW) next = maxW
-              if (propsRef.current) propsRef.current.style.width = `${next}px`
-              // throttle fitView with rAF
-              if (rafId == null) {
-                rafId = window.requestAnimationFrame(() => {
-                  fitCanvasView()
-                  rafId = null
-                })
-              }
+              setPropsWidth(next)
             }
 
             const onUp = () => {
               document.removeEventListener('mousemove', onMove)
               document.removeEventListener('mouseup', onUp)
-              if (rafId != null) { window.cancelAnimationFrame(rafId); rafId = null }
             }
 
             document.addEventListener('mousemove', onMove)
@@ -974,7 +1011,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
       <div
         ref={propsRef}
         className={`flow-properties-wrapper ${propsCollapsed ? 'collapsed' : ''}`}
-        style={{ width: propsCollapsed ? 48 : undefined, minWidth: propsCollapsed ? 48 : undefined }}
+        style={{ width: propsCollapsed ? 48 : propsWidth, minWidth: propsCollapsed ? 48 : 160 }}
       >
         {propsCollapsed ? (
           <div className="props-collapse-tab" role="button" aria-label="Open properties" onClick={() => setPropsCollapsed(false)}>
@@ -992,10 +1029,21 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
               updateNodeField={updateNodeField}
               onDeleteNode={deleteNode}
               onDuplicateNode={duplicateNode}
+              onGenerateVisualization={generateVisualizationForNode}
+              onRegenerateVisualization={generateVisualizationForNode}
             />
           </>
         )}
       </div>
+      </div>
+
+      {/* Recipe Visualization Slideshow */}
+      {showSlideshow && (
+        <RecipeVisualizationSlideshow
+          steps={getOrderedStepSlides()}
+          onClose={() => setShowSlideshow(false)}
+        />
+      )}
 
       {/* Export Modal */}
       {exportJson && (

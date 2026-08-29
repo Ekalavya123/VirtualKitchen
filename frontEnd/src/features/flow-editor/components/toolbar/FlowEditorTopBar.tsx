@@ -9,8 +9,10 @@ type FlowEditorTopBarProps = {
   canRedo: boolean
   onExport: () => void
   onSave: () => void
+  onGenerateVisuals: () => void
+  isGeneratingVisuals?: boolean
+  generateVisualsStatus?: { type: 'success' | 'error'; text: string } | null
   onVisualize: () => void
-  isVisualizing?: boolean
   onBack?: () => void
   nodeZoomPercent: number
   onNodeZoomChange: (percent: number) => void
@@ -24,8 +26,10 @@ export default function FlowEditorTopBar({
   canRedo,
   onExport,
   onSave,
+  onGenerateVisuals,
+  isGeneratingVisuals = false,
+  generateVisualsStatus = null,
   onVisualize,
-  isVisualizing = false,
   onBack,
   nodeZoomPercent,
   onNodeZoomChange,
@@ -89,7 +93,21 @@ export default function FlowEditorTopBar({
         </div>
         <button onClick={onUndo} disabled={!canUndo} style={btnStyle({ background: canUndo ? 'white' : '#f8fafc', color: canUndo ? '#475569' : '#cbd5e1', cursor: canUndo ? 'pointer' : 'default' })} title="Undo">↩</button>
         <button onClick={onRedo} disabled={!canRedo} style={btnStyle({ background: canRedo ? 'white' : '#f8fafc', color: canRedo ? '#475569' : '#cbd5e1', cursor: canRedo ? 'pointer' : 'default' })} title="Redo">↪</button>
-        <button onClick={onVisualize} disabled={isVisualizing} style={btnStyle({ background: '#eff6ff', borderColor: '#93c5fd', color: '#2563eb', opacity: isVisualizing ? 0.7 : 1 })}>{isVisualizing ? '⏳ Visualizing…' : '🎬 Visualize'}</button>
+        {generateVisualsStatus && (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: generateVisualsStatus.type === 'success' ? '#16a34a' : '#dc2626',
+              maxWidth: 220,
+            }}
+            title={generateVisualsStatus.text}
+          >
+            {generateVisualsStatus.type === 'success' ? '✅' : '⚠️'} {generateVisualsStatus.text}
+          </span>
+        )}
+        <button onClick={onGenerateVisuals} disabled={isGeneratingVisuals} style={btnStyle({ background: '#fdf4ff', borderColor: '#e9d5ff', color: '#a21caf', opacity: isGeneratingVisuals ? 0.7 : 1 })}>{isGeneratingVisuals ? '⏳ Generating…' : '🎨 Generate Visuals'}</button>
+        <button onClick={onVisualize} style={btnStyle({ background: '#eff6ff', borderColor: '#93c5fd', color: '#2563eb' })}>🎬 Visualize</button>
         <button onClick={onExport} style={btnStyle({ background: '#f0fdf4', borderColor: '#86efac', color: '#16a34a' })}>📤 Export</button>
         <button onClick={onSave} style={btnStyle({ background: '#fef3c7', borderColor: '#fde68a', color: '#92400e' })}>💾 Save</button>
       </div>

@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.service.impl;
+package com.processVisualisation.virtualKitchen.service.auth;
 
 import com.processVisualisation.virtualKitchen.dto.UserRequestDTO;
 import com.processVisualisation.virtualKitchen.dto.UserResponseDTO;

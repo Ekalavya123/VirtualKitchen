@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.service.impl;
+package com.processVisualisation.virtualKitchen.service.ai;
 
 import com.processVisualisation.virtualKitchen.dto.VisualizationClipResponseDTO;
 import com.processVisualisation.virtualKitchen.dto.VisualizationResponseDTO;

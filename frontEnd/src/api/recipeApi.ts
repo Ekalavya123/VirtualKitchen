@@ -114,3 +114,28 @@ export const VisualizationApi = {
     )
   },
 }
+
+export interface RecipeVisualizationStep {
+  stepId: string
+  visualizationAssetId: number
+  imagePrompt?: string
+  imageUrl?: string | null
+}
+
+export interface RecipeVisualizationGenerateResponse {
+  recipeId: string
+  message?: string
+  steps: RecipeVisualizationStep[]
+}
+
+export const RecipeVisualizationApi = {
+  /**
+   * Generate (or reuse) visualization assets for every step of a recipe
+   */
+  async generate(recipeId: number | string): Promise<RecipeVisualizationGenerateResponse> {
+    return apiPost<RecipeVisualizationGenerateResponse>(
+      API.recipeVisualization.generate(recipeId),
+      {}
+    )
+  },
+}

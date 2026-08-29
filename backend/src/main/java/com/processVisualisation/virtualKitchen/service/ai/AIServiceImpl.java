@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.service.impl;
+package com.processVisualisation.virtualKitchen.service.ai;
 
 import com.processVisualisation.virtualKitchen.ai.client.AIClient;
 import com.processVisualisation.virtualKitchen.ai.config.GeminiProperties;
