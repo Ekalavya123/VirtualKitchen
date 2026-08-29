@@ -855,157 +855,161 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
 
   return (
     <div className="flow-canvas-container">
-      {/* Sidebar */}
-      <div
-        ref={sidebarRef}
-        className={`flow-sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
-        style={{ width: sidebarCollapsed ? 48 : undefined, minWidth: sidebarCollapsed ? 48 : undefined }}
-      >
-        {sidebarCollapsed ? (
-          <div className="sidebar-collapse-tab" role="button" aria-label="Open sidebar" onClick={() => setSidebarCollapsed(false)}>
-            ☰
-          </div>
-        ) : (
-          <>
-            <Sidebar
-              onAddNode={addFreeNode}
-              nodes={nodes}
-              edges={edges}
-              selectedNodeId={selectedNodeId}
-              onSelectNode={selectNodeFromSidebar}
-              onCollapse={() => setSidebarCollapsed(true)}
-              flowMeta={flowMeta}
-            />
-            <div className="sidebar-collapse-button" role="button" title="Collapse sidebar" onClick={() => setSidebarCollapsed(true)}>◀</div>
-          </>
-        )}
+      {/* Topbar: full-width, stays above the scrolling body, not nested under either side panel */}
+      <div className="flow-canvas-topbar">
+        <FlowEditorTopBar
+          title={recipe.title}
+          onUndo={undo}
+          onRedo={redo}
+          canUndo={history.length > 0}
+          canRedo={future.length > 0}
+          onExport={exportFlow}
+          onSave={saveFlow}
+          onGenerateVisuals={generateVisuals}
+          isGeneratingVisuals={generatingVisuals}
+          generateVisualsStatus={generateVisualsStatus}
+          onVisualize={() => setShowSlideshow(true)}
+          onBack={onBack}
+          nodeZoomPercent={nodeZoomPercent}
+          onNodeZoomChange={handleNodeZoomChange}
+        />
       </div>
 
-      {/* Main Content Area */}
-      <div className="flow-canvas-main">
-        {/* Topbar */}
-        <div className="flow-canvas-topbar">
-          <FlowEditorTopBar
-            title={recipe.title}
-            onUndo={undo}
-            onRedo={redo}
-            canUndo={history.length > 0}
-            canRedo={future.length > 0}
-            onExport={exportFlow}
-            onSave={saveFlow}
-            onGenerateVisuals={generateVisuals}
-            isGeneratingVisuals={generatingVisuals}
-            generateVisualsStatus={generateVisualsStatus}
-            onVisualize={() => setShowSlideshow(true)}
-            onBack={onBack}
-            nodeZoomPercent={nodeZoomPercent}
-            onNodeZoomChange={handleNodeZoomChange}
-          />
-        </div>
-
-        {/* Canvas Area */}
-        <div className="flow-canvas-area">
-          <div className="flow-canvas-workspace">
-            <div
-              ref={recipeBuilderRef}
-              style={{ width: builderCollapsed ? 48 : builderWidth, minWidth: builderCollapsed ? 48 : builderWidth }}
-            >
-              <RecipeBuilderPanel
-                collapsed={builderCollapsed}
-                isGenerating={generatingFlow}
-                onToggleCollapsed={() => setBuilderCollapsed((currentValue) => !currentValue)}
-                onGenerate={generateFlowFromRecipe}
-              />
+      {/* Body: sidebar, canvas, and properties panel share the remaining viewport height */}
+      <div className="flow-canvas-body">
+        {/* Sidebar */}
+        <div
+          ref={sidebarRef}
+          className={`flow-sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
+          style={{ width: sidebarCollapsed ? 48 : undefined, minWidth: sidebarCollapsed ? 48 : undefined }}
+        >
+          {sidebarCollapsed ? (
+            <div className="sidebar-collapse-tab" role="button" aria-label="Open sidebar" onClick={() => setSidebarCollapsed(false)}>
+              ☰
             </div>
-
-            {!builderCollapsed && (
-              <div
-                className="flow-inline-resizer"
-                onMouseDown={(event) => {
-                  const startX = event.clientX
-                  const startWidth = builderWidth
-                  const minWidth = 320
-                  const maxWidth = 560
-                  let frameId: number | null = null
-
-                  const onMove = (moveEvent: MouseEvent) => {
-                    const delta = moveEvent.clientX - startX
-                    let nextWidth = startWidth + delta
-
-                    if (nextWidth < minWidth) nextWidth = minWidth
-                    if (nextWidth > maxWidth) nextWidth = maxWidth
-
-                    setBuilderWidth(nextWidth)
-
-                    if (frameId == null) {
-                      frameId = window.requestAnimationFrame(() => {
-                        fitCanvasView()
-                        frameId = null
-                      })
-                    }
-                  }
-
-                  const onUp = () => {
-                    document.removeEventListener('mousemove', onMove)
-                    document.removeEventListener('mouseup', onUp)
-                    if (frameId != null) {
-                      window.cancelAnimationFrame(frameId)
-                      frameId = null
-                    }
-                  }
-
-                  document.addEventListener('mousemove', onMove)
-                  document.addEventListener('mouseup', onUp)
-                  event.preventDefault()
-                }}
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize AI recipe builder"
-              />
-            )}
-
-            <div ref={reactFlowWrapperRef} className="flow-canvas-viewport">
-              <ReactFlow
-                onInit={inst => { reactFlowInstance.current = inst; fitCanvasView() }}
+          ) : (
+            <>
+              <Sidebar
+                onAddNode={addFreeNode}
                 nodes={nodes}
                 edges={edges}
-                onNodesChange={handleNodesChange}
-                onEdgesChange={onEdgesChange}
-                nodeTypes={nodeTypes}
-                onConnect={onConnect}
-                isValidConnection={isValidConnection}
-                nodesDraggable
-                nodesConnectable
-                elementsSelectable
-                fitView
-                fitViewOptions={{ padding: 0.12 }}
-                style={{ width: '100%', height: '100%', background: 'var(--flow-canvas-bg)' }}
-                connectionRadius={28}
-                defaultEdgeOptions={{
-                  type: 'smoothstep',
-                  style: { stroke: '#94a3b8', strokeWidth: 1.5 },
-                  markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8', width: 16, height: 16 },
-                }}
+                selectedNodeId={selectedNodeId}
+                onSelectNode={selectNodeFromSidebar}
+                onCollapse={() => setSidebarCollapsed(true)}
+                flowMeta={flowMeta}
+              />
+              <div className="sidebar-collapse-button" role="button" title="Collapse sidebar" onClick={() => setSidebarCollapsed(true)}>◀</div>
+            </>
+          )}
+        </div>
+
+        {/* Main canvas area */}
+        <div className="flow-canvas-main">
+          <div className="flow-canvas-area">
+            <div className="flow-canvas-workspace">
+              <div
+                ref={recipeBuilderRef}
+                style={{ width: builderCollapsed ? 48 : builderWidth, minWidth: builderCollapsed ? 48 : builderWidth }}
               >
-                <Background variant={BackgroundVariant.Dots} color="var(--flow-canvas-dots)" gap={20} size={1} />
-                <Controls style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
-                <MiniMap
-                  style={{ borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
-                  nodeColor={n => {
-                    if (isConditionNode(n)) return '#fde68a'
-                    if (isParallelNode(n)) return '#ddd6fe'
-                    return '#e2e8f0'
-                  }}
+                <RecipeBuilderPanel
+                  collapsed={builderCollapsed}
+                  isGenerating={generatingFlow}
+                  onToggleCollapsed={() => setBuilderCollapsed((currentValue) => !currentValue)}
+                  onGenerate={generateFlowFromRecipe}
                 />
-              </ReactFlow>
+              </div>
+
+              {!builderCollapsed && (
+                <div
+                  className="flow-inline-resizer"
+                  onMouseDown={(event) => {
+                    const startX = event.clientX
+                    const startWidth = builderWidth
+                    const minWidth = 320
+                    const maxWidth = 560
+                    let frameId: number | null = null
+
+                    const onMove = (moveEvent: MouseEvent) => {
+                      const delta = moveEvent.clientX - startX
+                      let nextWidth = startWidth + delta
+
+                      if (nextWidth < minWidth) nextWidth = minWidth
+                      if (nextWidth > maxWidth) nextWidth = maxWidth
+
+                      setBuilderWidth(nextWidth)
+
+                      if (frameId == null) {
+                        frameId = window.requestAnimationFrame(() => {
+                          fitCanvasView()
+                          frameId = null
+                        })
+                      }
+                    }
+
+                    const onUp = () => {
+                      document.removeEventListener('mousemove', onMove)
+                      document.removeEventListener('mouseup', onUp)
+                      if (frameId != null) {
+                        window.cancelAnimationFrame(frameId)
+                        frameId = null
+                      }
+                    }
+
+                    document.addEventListener('mousemove', onMove)
+                    document.addEventListener('mouseup', onUp)
+                    event.preventDefault()
+                  }}
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize AI recipe builder"
+                />
+              )}
+
+              <div ref={reactFlowWrapperRef} className="flow-canvas-viewport">
+                <ReactFlow
+                  onInit={inst => { reactFlowInstance.current = inst; fitCanvasView() }}
+                  nodes={nodes}
+                  edges={edges}
+                  onNodesChange={handleNodesChange}
+                  onEdgesChange={onEdgesChange}
+                  nodeTypes={nodeTypes}
+                  onConnect={onConnect}
+                  isValidConnection={isValidConnection}
+                  nodesDraggable
+                  nodesConnectable
+                  elementsSelectable
+                  fitView
+                  fitViewOptions={{ padding: 0.12 }}
+                  style={{ width: '100%', height: '100%', background: 'var(--flow-canvas-bg)' }}
+                  connectionRadius={28}
+                  defaultEdgeOptions={{
+                    type: 'smoothstep',
+                    style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+                    markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8', width: 16, height: 16 },
+                  }}
+                >
+                  <Background variant={BackgroundVariant.Dots} color="var(--flow-canvas-dots)" gap={20} size={1} />
+                  <Controls style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
+                  <MiniMap
+                    style={{ borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+                    nodeColor={n => {
+                      if (isConditionNode(n)) return '#fde68a'
+                      if (isParallelNode(n)) return '#ddd6fe'
+                      return '#e2e8f0'
+                    }}
+                  />
+                </ReactFlow>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
         {/* Resizer between main and properties */}
         <div
-          className="flow-resizer"
+          className="flow-inline-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize properties panel"
           onMouseDown={(e) => {
             const startX = e.clientX
             const startWidth = propsRef.current?.offsetWidth ?? 260
@@ -1040,33 +1044,34 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
           }}
         />
 
-      {/* Properties Panel - Right Sidebar (wrapped so resizer can resize it) */}
-      <div
-        ref={propsRef}
-        className={`flow-properties-wrapper ${propsCollapsed ? 'collapsed' : ''}`}
-        style={{ width: propsCollapsed ? 48 : undefined, minWidth: propsCollapsed ? 48 : undefined }}
-      >
-        {propsCollapsed ? (
-          <div className="props-collapse-tab" role="button" aria-label="Open properties" onClick={() => setPropsCollapsed(false)}>
-            ▶
-          </div>
-        ) : (
-          <>
-            <div className="props-collapse-button" role="button" title="Collapse properties" onClick={() => setPropsCollapsed(true)}>▶</div>
-            <PropertiesPanel
-              node={selectedNode ? {
-                id: String(selectedNode.id),
-                type: selectedNode.type,
-                data: selectedNode.data as SelectedPanelNode['data'],
-              } : undefined}
-              updateNodeField={updateNodeField}
-              onDeleteNode={deleteNode}
-              onDuplicateNode={duplicateNode}
-              onGenerateVisualization={generateVisualizationForNode}
-              onRegenerateVisualization={generateVisualizationForNode}
-            />
-          </>
-        )}
+        {/* Properties Panel - Right Sidebar (wrapped so resizer can resize it) */}
+        <div
+          ref={propsRef}
+          className={`flow-properties-wrapper ${propsCollapsed ? 'collapsed' : ''}`}
+          style={{ width: propsCollapsed ? 48 : undefined, minWidth: propsCollapsed ? 48 : undefined }}
+        >
+          {propsCollapsed ? (
+            <div className="props-collapse-tab" role="button" aria-label="Open properties" onClick={() => setPropsCollapsed(false)}>
+              ▶
+            </div>
+          ) : (
+            <>
+              <div className="props-collapse-button" role="button" title="Collapse properties" onClick={() => setPropsCollapsed(true)}>▶</div>
+              <PropertiesPanel
+                node={selectedNode ? {
+                  id: String(selectedNode.id),
+                  type: selectedNode.type,
+                  data: selectedNode.data as SelectedPanelNode['data'],
+                } : undefined}
+                updateNodeField={updateNodeField}
+                onDeleteNode={deleteNode}
+                onDuplicateNode={duplicateNode}
+                onGenerateVisualization={generateVisualizationForNode}
+                onRegenerateVisualization={generateVisualizationForNode}
+              />
+            </>
+          )}
+        </div>
       </div>
 
       {/* Recipe Visualization Slideshow */}

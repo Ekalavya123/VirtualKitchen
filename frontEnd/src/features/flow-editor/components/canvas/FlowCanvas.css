@@ -1,37 +1,41 @@
-/* FlowCanvas main container */
+/* FlowCanvas main container: a 100vh flex-column app shell.
+   Topbar is a direct child (full width, fixed height); everything else
+   lives in flow-canvas-body so panels always start below the topbar. */
 .flow-canvas-container {
   display: flex;
+  flex-direction: column;
   height: 100vh;
+  overflow: hidden; /* prevent page-level horizontal/vertical scroll */
   background: #f8fafc;
   font-family: 'DM Sans', system-ui, sans-serif;
 }
-.flow-canvas-container {
-  overflow: hidden; /* prevent page-level horizontal scroll */
+
+/* Topbar area: full-width, fixed height, sits above the body so it stays
+   stationary while the canvas/panels scroll. Its border lives on
+   FlowEditorTopBar's own root element (single edge, no doubled border). */
+.flow-canvas-topbar {
+  flex-shrink: 0;
+  width: 100%;
 }
 
-/* Layout wrapper for sidebar + main content */
-.flow-canvas-layout {
+/* Body row: sidebar + canvas + properties share the remaining viewport height */
+.flow-canvas-body {
   display: flex;
   flex: 1;
   overflow: hidden;
-  min-height: 0; /* allow inner flex children to shrink and scroll */
-  min-width: 0; /* allow main area to shrink to prevent horizontal overflow */
+  min-height: 0; /* allow inner flex children to shrink and scroll instead of pushing the body taller */
+  min-width: 0; /* allow the row to shrink to prevent horizontal overflow */
 }
 
-/* Main content area: topbar + canvas + footer */
+/* Main content area: canvas (no longer wraps the topbar) */
 .flow-canvas-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   min-width: 0; /* important for flex children to not force horizontal scroll */
+  min-height: 0;
   box-sizing: border-box;
-}
-
-/* Topbar area */
-.flow-canvas-topbar {
-  flex-shrink: 0;
-  border-bottom: 1px solid #e2e8f0;
 }
 
 /* Canvas area */
@@ -72,12 +76,17 @@
   height: 100%;
 }
 
-/* Wrapper classes used in FlowCanvas for observing size changes */
+/* Wrapper classes used in FlowCanvas for observing size changes.
+   These wrappers are the single source of truth for panel width (default size
+   below, or an inline style while dragging/collapsed) — Sidebar.css and
+   PropertiesPanel.css no longer set their own width, so there's nothing left
+   for these to conflict with, and no gap/overflow can appear between them. */
 .flow-sidebar-wrapper,
 .flow-properties-wrapper {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  overflow: hidden;
   box-sizing: border-box; /* ensure padding/border do not increase width unexpectedly */
 }
 
@@ -133,26 +142,32 @@
 
 /* Resizer between main and properties panel is handled by the FlowCanvas drag divider. */
 
-/* Visual separators for clarity */
+/* Default panel sizing + the single visual separator for each panel.
+   (Sidebar.css/PropertiesPanel.css previously also drew their own border and
+   fixed width — that produced a doubled edge and made resizing/collapsing
+   inconsistent. This wrapper is now the only place either is set.) */
 .flow-sidebar-wrapper {
-  border-right: 1px solid rgba(15,23,42,0.06);
+  width: 210px;
+  border-right: 1px solid var(--flow-border);
   box-shadow: inset -8px 0 12px -12px rgba(15,23,42,0.04);
 }
 
 .flow-properties-wrapper {
-  border-left: 1px solid rgba(15,23,42,0.06);
+  width: 260px;
+  border-left: 1px solid var(--flow-border);
   box-shadow: inset 8px 0 12px -12px rgba(15,23,42,0.04);
 }
 
+/* Shared resizer style for the sidebar/properties/recipe-builder dividers.
+   (Previously the main<->properties divider used a separate "flow-resizer"
+   class with no matching CSS at all, rendering as an invisible, near-zero-width,
+   non-discoverable drag target — it now reuses this one, always-styled class.) */
 .flow-inline-resizer {
   position: relative;
   width: 10px;
+  height: 100%;
   flex-shrink: 0;
   cursor: col-resize;
-}
-
-.flow-inline-resizer {
-  height: 100%;
 }
 
 .flow-inline-resizer::before {

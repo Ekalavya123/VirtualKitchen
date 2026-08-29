@@ -25,7 +25,7 @@ export default function Sidebar({ onAddNode, nodes, edges, selectedNodeId, onSel
   const parallelNodes = nodes.filter(isParallelNode)
 
   return (
-    <div className="flow-sidebar flex min-w-[10rem] max-w-[26rem] flex-col overflow-y-auto border-r border-[var(--flow-border)] bg-white">
+    <div className="flow-sidebar">
       <div className="flex-shrink-0 border-b border-[var(--flow-border)] px-3.5 py-4">
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2.5">
