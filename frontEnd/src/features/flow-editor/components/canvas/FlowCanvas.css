@@ -1,7 +1,13 @@
-/* FlowCanvas main container: a 100vh flex-column app shell.
-   Topbar is a direct child (full width, fixed height); everything else
-   lives in flow-canvas-body so panels always start below the topbar. */
+/* FlowCanvas main container: breaks out of #root's centered/max-width shell
+   (see index.css) so the editor spans the true browser viewport edge-to-edge,
+   with no left/right gutters or top/bottom slack. Uses the "full-bleed"
+   left:50%/margin-left:-50vw technique instead of position: fixed, since fixed
+   previously caused the topbar to disappear behind other page chrome. */
 .flow-canvas-container {
+  position: relative;
+  left: 50%;
+  width: 100vw;
+  margin-left: -50vw;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -10,12 +16,15 @@
   font-family: 'DM Sans', system-ui, sans-serif;
 }
 
-/* Topbar area: full-width, fixed height, sits above the body so it stays
-   stationary while the canvas/panels scroll. Its border lives on
+/* Topbar area: full-width, sticky to the top of the editor shell so panning
+   or scrolling inside the canvas/panels never moves it. Its border lives on
    FlowEditorTopBar's own root element (single edge, no doubled border). */
 .flow-canvas-topbar {
   flex-shrink: 0;
   width: 100%;
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 /* Body row: sidebar + canvas + properties share the remaining viewport height */

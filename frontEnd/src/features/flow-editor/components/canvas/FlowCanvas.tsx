@@ -147,6 +147,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const [builderCollapsed, setBuilderCollapsed] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [propsCollapsed, setPropsCollapsed] = useState(false)
+  const [propsWidth, setPropsWidth] = useState(260)
   const nodeZoomPercentRef = useRef(100)
   const dragSnapshotRef = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null)
 
@@ -834,28 +835,14 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     }
   }, [replaceCanvasFlow])
 
-  // observe size changes of the sidebar and call fitView
-  useEffect(() => {
-    if (!reactFlowInstance.current) return
-    const ro = new ResizeObserver(() => {
-      fitCanvasView()
-    })
-    if (sidebarRef.current) ro.observe(sidebarRef.current)
-    if (recipeBuilderRef.current) ro.observe(recipeBuilderRef.current)
-    if (propsRef.current) ro.observe(propsRef.current)
-    const onWin = () => { fitCanvasView() }
-    window.addEventListener('resize', onWin)
-    return () => { ro.disconnect(); window.removeEventListener('resize', onWin) }
-  }, [fitCanvasView])
-
-  // when sidebar or properties collapse state changes, refit canvas
-  useEffect(() => {
-    fitCanvasView()
-  }, [sidebarCollapsed, propsCollapsed, fitCanvasView])
+  // React Flow observes its own wrapper's size internally, so container/panel
+  // resizes (sidebar, properties, builder) recalculate dimensions on their own —
+  // we intentionally do NOT call fitCanvasView() here, since that would reset
+  // the user's pan/zoom every time a panel is collapsed, expanded, or dragged.
 
   return (
     <div className="flow-canvas-container">
-      {/* Topbar: full-width, stays above the scrolling body, not nested under either side panel */}
+      {/* Full-width editor toolbar */}
       <div className="flow-canvas-topbar">
         <FlowEditorTopBar
           title={recipe.title}
@@ -875,13 +862,13 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
         />
       </div>
 
-      {/* Body: sidebar, canvas, and properties panel share the remaining viewport height */}
+      {/* Everything below the toolbar is the editor workspace */}
       <div className="flow-canvas-body">
         {/* Sidebar */}
         <div
           ref={sidebarRef}
           className={`flow-sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
-          style={{ width: sidebarCollapsed ? 48 : undefined, minWidth: sidebarCollapsed ? 48 : undefined }}
+          style={{ width: sidebarCollapsed ? 48 : 210, minWidth: sidebarCollapsed ? 48 : 160 }}
         >
           {sidebarCollapsed ? (
             <div className="sidebar-collapse-tab" role="button" aria-label="Open sidebar" onClick={() => setSidebarCollapsed(false)}>
@@ -908,134 +895,110 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
           <div className="flow-canvas-area">
             <div className="flow-canvas-workspace">
               <div
-                ref={recipeBuilderRef}
-                style={{ width: builderCollapsed ? 48 : builderWidth, minWidth: builderCollapsed ? 48 : builderWidth }}
+              ref={recipeBuilderRef}
+              style={{ width: builderCollapsed ? 48 : builderWidth, minWidth: builderCollapsed ? 48 : builderWidth }}
               >
                 <RecipeBuilderPanel
-                  collapsed={builderCollapsed}
-                  isGenerating={generatingFlow}
-                  onToggleCollapsed={() => setBuilderCollapsed((currentValue) => !currentValue)}
-                  onGenerate={generateFlowFromRecipe}
-                />
-              </div>
+                collapsed={builderCollapsed}
+                isGenerating={generatingFlow}
+                onToggleCollapsed={() => setBuilderCollapsed((currentValue) => !currentValue)}
+                onGenerate={generateFlowFromRecipe}
+              />
+            </div>
 
-              {!builderCollapsed && (
-                <div
-                  className="flow-inline-resizer"
-                  onMouseDown={(event) => {
-                    const startX = event.clientX
-                    const startWidth = builderWidth
-                    const minWidth = 320
-                    const maxWidth = 560
-                    let frameId: number | null = null
+            {!builderCollapsed && (
+              <div
+                className="flow-inline-resizer"
+                onMouseDown={(event) => {
+                  const startX = event.clientX
+                  const startWidth = builderWidth
+                  const minWidth = 320
+                  const maxWidth = 560
 
-                    const onMove = (moveEvent: MouseEvent) => {
-                      const delta = moveEvent.clientX - startX
-                      let nextWidth = startWidth + delta
+                  const onMove = (moveEvent: MouseEvent) => {
+                    const delta = moveEvent.clientX - startX
+                    let nextWidth = startWidth + delta
 
-                      if (nextWidth < minWidth) nextWidth = minWidth
-                      if (nextWidth > maxWidth) nextWidth = maxWidth
+                    if (nextWidth < minWidth) nextWidth = minWidth
+                    if (nextWidth > maxWidth) nextWidth = maxWidth
 
-                      setBuilderWidth(nextWidth)
+                    setBuilderWidth(nextWidth)
+                  }
 
-                      if (frameId == null) {
-                        frameId = window.requestAnimationFrame(() => {
-                          fitCanvasView()
-                          frameId = null
-                        })
-                      }
-                    }
+                  const onUp = () => {
+                    document.removeEventListener('mousemove', onMove)
+                    document.removeEventListener('mouseup', onUp)
+                  }
 
-                    const onUp = () => {
-                      document.removeEventListener('mousemove', onMove)
-                      document.removeEventListener('mouseup', onUp)
-                      if (frameId != null) {
-                        window.cancelAnimationFrame(frameId)
-                        frameId = null
-                      }
-                    }
+                  document.addEventListener('mousemove', onMove)
+                  document.addEventListener('mouseup', onUp)
+                  event.preventDefault()
+                }}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize AI recipe builder"
+              />
+            )}
 
-                    document.addEventListener('mousemove', onMove)
-                    document.addEventListener('mouseup', onUp)
-                    event.preventDefault()
+            <div ref={reactFlowWrapperRef} className="flow-canvas-viewport">
+              <ReactFlow
+                onInit={inst => { reactFlowInstance.current = inst; fitCanvasView() }}
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={handleNodesChange}
+                onEdgesChange={onEdgesChange}
+                nodeTypes={nodeTypes}
+                onConnect={onConnect}
+                isValidConnection={isValidConnection}
+                nodesDraggable
+                nodesConnectable
+                elementsSelectable
+                fitView
+                fitViewOptions={{ padding: 0.12 }}
+                style={{ width: '100%', height: '100%', background: 'var(--flow-canvas-bg)' }}
+                connectionRadius={28}
+                defaultEdgeOptions={{
+                  type: 'smoothstep',
+                  style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+                  markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8', width: 16, height: 16 },
+                }}
+              >
+                <Background variant={BackgroundVariant.Dots} color="var(--flow-canvas-dots)" gap={20} size={1} />
+                <Controls style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
+                <MiniMap
+                  style={{ borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+                  nodeColor={n => {
+                    if (isConditionNode(n)) return '#fde68a'
+                    if (isParallelNode(n)) return '#ddd6fe'
+                    return '#e2e8f0'
                   }}
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="Resize AI recipe builder"
                 />
-              )}
-
-              <div ref={reactFlowWrapperRef} className="flow-canvas-viewport">
-                <ReactFlow
-                  onInit={inst => { reactFlowInstance.current = inst; fitCanvasView() }}
-                  nodes={nodes}
-                  edges={edges}
-                  onNodesChange={handleNodesChange}
-                  onEdgesChange={onEdgesChange}
-                  nodeTypes={nodeTypes}
-                  onConnect={onConnect}
-                  isValidConnection={isValidConnection}
-                  nodesDraggable
-                  nodesConnectable
-                  elementsSelectable
-                  fitView
-                  fitViewOptions={{ padding: 0.12 }}
-                  style={{ width: '100%', height: '100%', background: 'var(--flow-canvas-bg)' }}
-                  connectionRadius={28}
-                  defaultEdgeOptions={{
-                    type: 'smoothstep',
-                    style: { stroke: '#94a3b8', strokeWidth: 1.5 },
-                    markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8', width: 16, height: 16 },
-                  }}
-                >
-                  <Background variant={BackgroundVariant.Dots} color="var(--flow-canvas-dots)" gap={20} size={1} />
-                  <Controls style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
-                  <MiniMap
-                    style={{ borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
-                    nodeColor={n => {
-                      if (isConditionNode(n)) return '#fde68a'
-                      if (isParallelNode(n)) return '#ddd6fe'
-                      return '#e2e8f0'
-                    }}
-                  />
-                </ReactFlow>
-              </div>
+              </ReactFlow>
+            </div>
             </div>
           </div>
         </div>
 
-        {/* Resizer between main and properties */}
+        {/* Resizer between main canvas and properties */}
         <div
-          className="flow-inline-resizer"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize properties panel"
+          className="flow-resizer"
           onMouseDown={(e) => {
             const startX = e.clientX
             const startWidth = propsRef.current?.offsetWidth ?? 260
             const minW = 160
             const maxW = 520
-            let rafId: number | null = null
 
             const onMove = (ev: MouseEvent) => {
               const delta = startX - ev.clientX
               let next = startWidth - delta
               if (next < minW) next = minW
               if (next > maxW) next = maxW
-              if (propsRef.current) propsRef.current.style.width = `${next}px`
-              // throttle fitView with rAF
-              if (rafId == null) {
-                rafId = window.requestAnimationFrame(() => {
-                  fitCanvasView()
-                  rafId = null
-                })
-              }
+              setPropsWidth(next)
             }
 
             const onUp = () => {
               document.removeEventListener('mousemove', onMove)
               document.removeEventListener('mouseup', onUp)
-              if (rafId != null) { window.cancelAnimationFrame(rafId); rafId = null }
             }
 
             document.addEventListener('mousemove', onMove)
@@ -1044,34 +1007,34 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
           }}
         />
 
-        {/* Properties Panel - Right Sidebar (wrapped so resizer can resize it) */}
-        <div
-          ref={propsRef}
-          className={`flow-properties-wrapper ${propsCollapsed ? 'collapsed' : ''}`}
-          style={{ width: propsCollapsed ? 48 : undefined, minWidth: propsCollapsed ? 48 : undefined }}
-        >
-          {propsCollapsed ? (
-            <div className="props-collapse-tab" role="button" aria-label="Open properties" onClick={() => setPropsCollapsed(false)}>
-              ▶
-            </div>
-          ) : (
-            <>
-              <div className="props-collapse-button" role="button" title="Collapse properties" onClick={() => setPropsCollapsed(true)}>▶</div>
-              <PropertiesPanel
-                node={selectedNode ? {
-                  id: String(selectedNode.id),
-                  type: selectedNode.type,
-                  data: selectedNode.data as SelectedPanelNode['data'],
-                } : undefined}
-                updateNodeField={updateNodeField}
-                onDeleteNode={deleteNode}
-                onDuplicateNode={duplicateNode}
-                onGenerateVisualization={generateVisualizationForNode}
-                onRegenerateVisualization={generateVisualizationForNode}
-              />
-            </>
-          )}
-        </div>
+      {/* Properties Panel - Right Sidebar (wrapped so resizer can resize it) */}
+      <div
+        ref={propsRef}
+        className={`flow-properties-wrapper ${propsCollapsed ? 'collapsed' : ''}`}
+        style={{ width: propsCollapsed ? 48 : propsWidth, minWidth: propsCollapsed ? 48 : 160 }}
+      >
+        {propsCollapsed ? (
+          <div className="props-collapse-tab" role="button" aria-label="Open properties" onClick={() => setPropsCollapsed(false)}>
+            ▶
+          </div>
+        ) : (
+          <>
+            <div className="props-collapse-button" role="button" title="Collapse properties" onClick={() => setPropsCollapsed(true)}>▶</div>
+            <PropertiesPanel
+              node={selectedNode ? {
+                id: String(selectedNode.id),
+                type: selectedNode.type,
+                data: selectedNode.data as SelectedPanelNode['data'],
+              } : undefined}
+              updateNodeField={updateNodeField}
+              onDeleteNode={deleteNode}
+              onDuplicateNode={duplicateNode}
+              onGenerateVisualization={generateVisualizationForNode}
+              onRegenerateVisualization={generateVisualizationForNode}
+            />
+          </>
+        )}
+      </div>
       </div>
 
       {/* Recipe Visualization Slideshow */}
