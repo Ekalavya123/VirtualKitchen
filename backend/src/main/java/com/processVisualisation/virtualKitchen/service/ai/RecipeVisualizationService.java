@@ -82,8 +82,18 @@ public class RecipeVisualizationService {
             String visualizationKey = VisualizationKeyBuilder.buildFromNodeData(data);
             Map<String, Object> previousStepFieldsForLambda = previousStepFields;
             Optional<VisualizationAsset> existingAsset = visualizationAssetRepository.findByVisualizationKey(visualizationKey);
-            VisualizationAsset asset = existingAsset.orElseGet(
-                    () -> createAsset(visualizationKey, stepFields, previousStepFieldsForLambda));
+            VisualizationAsset asset;
+            if (existingAsset.isPresent()) {
+                asset = existingAsset.get();
+                if (asset.getImagePrompt() == null || asset.getImagePrompt().isEmpty()) {
+                    asset = generatePrompt(visualizationKey, stepFields, previousStepFieldsForLambda);
+                }
+                if (asset.getImageUrl() == null || asset.getImageUrl().isEmpty()) {
+                    asset = generateImage(asset);
+                }
+            } else {
+                asset = createAsset(visualizationKey, stepFields, previousStepFieldsForLambda);
+            }
 
             attachAssetToNode(node, data, asset);
 
@@ -106,7 +116,7 @@ public class RecipeVisualizationService {
                 .build();
     }
 
-    private VisualizationAsset createAsset(String visualizationKey, Map<String, Object> currentStep, Map<String, Object> previousStep) {
+    private VisualizationAsset generatePrompt(String visualizationKey, Map<String, Object> currentStep, Map<String, Object> previousStep) {
         AIRequest request = AIRequest.builder()
                 .systemPrompt(promptBuilder.buildSystemPrompt())
                 .userPrompt(promptBuilder.buildUserPrompt(currentStep, previousStep))
@@ -114,19 +124,31 @@ public class RecipeVisualizationService {
                 .maxTokens(5000)
                 .build();
 
-        AIResponse response = aiClient.chat(request);
-        PromptPair prompts = parsePrompts(response == null ? null : response.getContent());
-
-        VisualizationAsset asset = new VisualizationAsset();
-        asset.setId(sequenceGeneratorService.generateSequence(VisualizationAsset.SEQUENCE_NAME));
-        asset.setVisualizationKey(visualizationKey);
-        asset.setType(VisualizationAssetType.ATOMIC);
-        asset.setImagePrompt(prompts.imagePrompt());
-        asset.setVideoPrompt(prompts.videoPrompt());
+        logger.info("generating prompt");
         try {
-            logger.info("Generating image for visualizationKey: {}, prompts: {}", visualizationKey, prompts);
+            logger.info("AI Request: {}", objectMapper.writeValueAsString(request));
+            AIResponse response = aiClient.chat(request);
+            PromptPair prompts = parsePrompts(response == null ? null : response.getContent());
+            VisualizationAsset asset = new VisualizationAsset();
+            asset.setId(sequenceGeneratorService.generateSequence(VisualizationAsset.SEQUENCE_NAME));
+            asset.setVisualizationKey(visualizationKey);
+            asset.setType(VisualizationAssetType.ATOMIC);
+            asset.setImagePrompt(prompts.imagePrompt());
+            asset.setVideoPrompt(prompts.videoPrompt());
+            asset.setVideoUrl(null);
+            return visualizationAssetRepository.save(asset);
+        } catch (Exception e) {
+            logger.error("Failed to serialize AIRequest", e);
+        }
+        return null;
+    }
+
+    private VisualizationAsset generateImage(VisualizationAsset asset) {
+        String visualizationKey = asset.getVisualizationKey();
+        try {
+            logger.info("Generating image for visualizationKey: {}, prompt: {}", visualizationKey, asset.getImagePrompt());
             ImageGenerationClient.GeneratedImage generatedImage =
-                    imageGenerationClient.generate(prompts.imagePrompt());
+                    imageGenerationClient.generate(asset.getImagePrompt());
 
             String imagePath = String.format(
                     "visualizations/%s/%s/%s.png",
@@ -142,12 +164,18 @@ public class RecipeVisualizationService {
             );
 
             asset.setImageUrl(imageUrl);
-            logger.info("Successfully generated and uploaded image for visualizationKey: {}, prompts: {}", visualizationKey, prompts);
+            logger.info("Successfully generated and uploaded image for visualizationKey: {}, prompt: {}", visualizationKey, asset.getImagePrompt());
         } catch (Exception e) {
             asset.setImageUrl(null);
-            logger.error("Failed to generate or upload image for visualizationKey: {}, prompts: {}", visualizationKey, prompts, e);
+            logger.error("Failed to generate or upload image for visualizationKey: {}, prompt: {}", visualizationKey, asset.getImagePrompt(), e);
         }
         asset.setVideoUrl(null);
+        return visualizationAssetRepository.save(asset);
+    }
+
+    private VisualizationAsset createAsset(String visualizationKey, Map<String, Object> currentStep, Map<String, Object> previousStep) {
+        VisualizationAsset asset = generatePrompt(visualizationKey, currentStep, previousStep);
+        asset = generateImage(asset);
         return visualizationAssetRepository.save(asset);
     }
 

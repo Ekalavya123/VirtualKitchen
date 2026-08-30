@@ -7,6 +7,7 @@ import com.processVisualisation.virtualKitchen.ai.client.ImageGenerationClient;
 import com.processVisualisation.virtualKitchen.ai.config.GeminiProperties;
 import com.processVisualisation.virtualKitchen.ai.exception.AIInvalidResponseException;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -15,6 +16,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
+@ConditionalOnProperty(prefix = "ai.image", name = "provider", havingValue = "gemini", matchIfMissing = false)
 @Component
 public class GeminiImageClient implements ImageGenerationClient {
 
