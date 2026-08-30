@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.controller;
+package com.processVisualisation.virtualKitchen.controller.kitchen;
 
 import com.processVisualisation.virtualKitchen.dto.OrderCreateRequestDTO;
 import com.processVisualisation.virtualKitchen.dto.OrderResponseDTO;

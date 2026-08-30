@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.controller;
+package com.processVisualisation.virtualKitchen.controller.kitchen;
 
 import com.processVisualisation.virtualKitchen.dto.*;
 import com.processVisualisation.virtualKitchen.service.IKitchenInventoryService;

@@ -1,7 +1,7 @@
-package com.processVisualisation.virtualKitchen.controller;
+package com.processVisualisation.virtualKitchen.controller.recipe;
 
 import com.processVisualisation.virtualKitchen.dto.*;
-import com.processVisualisation.virtualKitchen.service.IProcessTemplateStepService;
+import com.processVisualisation.virtualKitchen.service.IStepDefinitionService;
 import com.processVisualisation.virtualKitchen.utils.ApiResponse;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,20 +11,20 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/process-template-steps")
-public class ProcessTemplateStepController {
+@RequestMapping("/api/v1/step-definitions")
+public class StepDefinitionController {
 
     @Autowired
-    private IProcessTemplateStepService service;
+    private IStepDefinitionService service;
 
     @PostMapping
-    public ApiResponse<ProcessTemplateStepResponseDTO> create(@RequestBody ProcessTemplateStepRequestDTO dto){
+    public ApiResponse<StepDefinitionResponseDTO> create(@RequestBody StepDefinitionRequestDTO dto){
         return build(service.create(dto), "created");
     }
 
-    @GetMapping("/{templateId}")
-    public ApiResponse<List<ProcessTemplateStepResponseDTO>> get(@PathVariable Long templateId){
-        return build(service.getSteps(templateId), "fetched");
+    @GetMapping
+    public ApiResponse<List<StepDefinitionResponseDTO>> getAll(){
+        return build(service.getAll(), "fetched");
     }
 
     private <T> ApiResponse<T> build(T data, String msg){

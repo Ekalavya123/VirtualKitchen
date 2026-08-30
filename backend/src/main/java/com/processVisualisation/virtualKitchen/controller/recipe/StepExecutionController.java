@@ -1,7 +1,7 @@
-package com.processVisualisation.virtualKitchen.controller;
+package com.processVisualisation.virtualKitchen.controller.recipe;
 
 import com.processVisualisation.virtualKitchen.dto.*;
-import com.processVisualisation.virtualKitchen.service.IProcessEquipmentUsageService;
+import com.processVisualisation.virtualKitchen.service.IStepExecutionService;
 import com.processVisualisation.virtualKitchen.utils.ApiResponse;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,19 +11,25 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/process-equipment-usage")
-public class ProcessEquipmentUsageController {
+@RequestMapping("/api/v1/step-executions")
+public class StepExecutionController {
 
     @Autowired
-    private IProcessEquipmentUsageService service;
+    private IStepExecutionService service;
 
     @PostMapping
-    public ApiResponse<ProcessEquipmentUsageResponseDTO> create(@RequestBody ProcessEquipmentUsageRequestDTO dto){
+    public ApiResponse<StepExecutionResponseDTO> create(@RequestBody StepExecutionRequestDTO dto){
         return build(service.create(dto), "created");
     }
 
+    @PutMapping("/{id}")
+    public ApiResponse<StepExecutionResponseDTO> update(@PathVariable Long id,
+                                                        @RequestBody StepExecutionUpdateDTO dto){
+        return build(service.update(id, dto), "updated");
+    }
+
     @GetMapping("/{processId}")
-    public ApiResponse<List<ProcessEquipmentUsageResponseDTO>> get(@PathVariable Long processId){
+    public ApiResponse<List<StepExecutionResponseDTO>> get(@PathVariable Long processId){
         return build(service.getByProcess(processId), "fetched");
     }
 

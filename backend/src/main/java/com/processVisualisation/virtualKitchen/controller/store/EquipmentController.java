@@ -1,7 +1,7 @@
-package com.processVisualisation.virtualKitchen.controller;
+package com.processVisualisation.virtualKitchen.controller.store;
 
 import com.processVisualisation.virtualKitchen.dto.*;
-import com.processVisualisation.virtualKitchen.service.IProcessIngredientUsageService;
+import com.processVisualisation.virtualKitchen.service.IEquipmentService;
 import com.processVisualisation.virtualKitchen.utils.ApiResponse;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,20 +11,20 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/process-ingredient-usage")
-public class ProcessIngredientUsageController {
+@RequestMapping("/api/v1/equipments")
+public class EquipmentController {
 
     @Autowired
-    private IProcessIngredientUsageService service;
+    private IEquipmentService service;
 
     @PostMapping
-    public ApiResponse<ProcessIngredientUsageResponseDTO> create(@RequestBody ProcessIngredientUsageRequestDTO dto){
+    public ApiResponse<EquipmentResponseDTO> create(@RequestBody EquipmentRequestDTO dto){
         return build(service.create(dto), "created");
     }
 
-    @GetMapping("/{processId}")
-    public ApiResponse<List<ProcessIngredientUsageResponseDTO>> get(@PathVariable Long processId){
-        return build(service.getByProcess(processId), "fetched");
+    @GetMapping
+    public ApiResponse<List<EquipmentResponseDTO>> getAll(){
+        return build(service.getAll(), "fetched");
     }
 
     private <T> ApiResponse<T> build(T data, String msg){

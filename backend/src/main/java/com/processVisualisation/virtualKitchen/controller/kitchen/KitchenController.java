@@ -1,7 +1,7 @@
-package com.processVisualisation.virtualKitchen.controller;
+package com.processVisualisation.virtualKitchen.controller.kitchen;
 
 import com.processVisualisation.virtualKitchen.dto.*;
-import com.processVisualisation.virtualKitchen.service.IProcessTemplateService;
+import com.processVisualisation.virtualKitchen.service.IKitchenService;
 import com.processVisualisation.virtualKitchen.utils.ApiResponse;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,30 +11,30 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/process-templates")
-public class ProcessTemplateController {
+@RequestMapping("/api/v1/kitchens")
+public class KitchenController {
 
     @Autowired
-    private IProcessTemplateService service;
+    private IKitchenService service;
 
     @PostMapping
-    public ApiResponse<ProcessTemplateResponseDTO> create(@RequestBody ProcessTemplateRequestDTO dto){
+    public ApiResponse<KitchenResponseDTO> create(@RequestBody KitchenRequestDTO dto){
         return build(service.create(dto), "created");
     }
 
     @GetMapping("/{id}")
-    public ApiResponse<ProcessTemplateResponseDTO> get(@PathVariable Long id){
+    public ApiResponse<KitchenResponseDTO> get(@PathVariable Long id){
         return build(service.get(id), "fetched");
     }
 
-    @GetMapping("/user/{userId}")
-    public ApiResponse<List<ProcessTemplateResponseDTO>> getByUser(@PathVariable Long userId){
-        return build(service.getByUser(userId), "fetched");
+    @GetMapping("/owner/{ownerId}")
+    public ApiResponse<List<KitchenResponseDTO>> getByOwner(@PathVariable Long ownerId){
+        return build(service.getByOwner(ownerId), "fetched");
     }
 
     @PutMapping("/{id}")
-    public ApiResponse<ProcessTemplateResponseDTO> update(@PathVariable Long id,
-                                                         @RequestBody ProcessTemplateUpdateDTO dto){
+    public ApiResponse<KitchenResponseDTO> update(@PathVariable Long id,
+                                                  @RequestBody KitchenUpdateDTO dto){
         return build(service.update(id, dto), "updated");
     }
 

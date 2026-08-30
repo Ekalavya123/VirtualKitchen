@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.controller;
+package com.processVisualisation.virtualKitchen.controller.recipe;
 
 import com.processVisualisation.virtualKitchen.dto.RecipeVisualizationResponseDTO;
 import com.processVisualisation.virtualKitchen.service.ai.RecipeVisualizationService;
