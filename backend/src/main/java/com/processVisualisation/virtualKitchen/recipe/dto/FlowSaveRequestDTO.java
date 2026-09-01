@@ -12,4 +12,5 @@ public class FlowSaveRequestDTO {
     private Long templateId;
     private List<Map<String, Object>> nodes;
     private List<Map<String, Object>> edges;
+    private Map<String, Object> viewport;
 }

@@ -33,6 +33,8 @@ public class FlowDocument {
 
     private List<EdgeDocument> edges = new ArrayList<>();
 
+    private ViewportDocument viewport;
+
     @CreatedDate
     private LocalDateTime createdAt;
 
@@ -46,6 +48,8 @@ public class FlowDocument {
         private Map<String, Object> data = new LinkedHashMap<>();
         private PositionDocument position;
         private MeasuredDocument measured;
+        private Double width;
+        private Double height;
         private String parentId;
         private String extent;
         private Boolean draggable;
@@ -77,5 +81,12 @@ public class FlowDocument {
     public static class MeasuredDocument {
         private Double width;
         private Double height;
+    }
+
+    @Data
+    public static class ViewportDocument {
+        private Double x;
+        private Double y;
+        private Double zoom;
     }
 }

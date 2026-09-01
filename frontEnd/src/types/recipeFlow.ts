@@ -128,6 +128,8 @@ export type FlowNodePayload = {
   position?: { x: number; y: number }
   data?: FlowNodeData
   measured?: unknown
+  width?: number
+  height?: number
   parentId?: string
   extent?: unknown
   draggable?: boolean
@@ -150,9 +152,16 @@ export type FlowEdgePayload = {
   label?: string | null
 }
 
+export type FlowViewport = {
+  x: number
+  y: number
+  zoom: number
+}
+
 export interface FlowData {
   nodes: FlowNodePayload[]
   edges: FlowEdgePayload[]
+  viewport?: FlowViewport
 }
 
 export interface FlowDraftStorage {

@@ -31,6 +31,7 @@ public class FlowService {
         document.setTemplateId(request.getTemplateId());
         document.setNodes(mapNodes(request.getNodes()));
         document.setEdges(mapEdges(request.getEdges()));
+        document.setViewport(mapViewport(request.getViewport()));
 
         flowRepository.save(document);
 
@@ -72,6 +73,9 @@ public class FlowService {
                 measuredDocument.setHeight(toDouble(measured.get("height")));
                 document.setMeasured(measuredDocument);
             }
+
+            document.setWidth(toDouble(node.get("width")));
+            document.setHeight(toDouble(node.get("height")));
 
             document.setParentId((String) node.get("parentId"));
             document.setExtent((String) node.get("extent"));
@@ -116,6 +120,18 @@ public class FlowService {
             return result;
         }
         return null;
+    }
+
+    private FlowDocument.ViewportDocument mapViewport(Map<String, Object> viewport) {
+        if (viewport == null) {
+            return null;
+        }
+
+        FlowDocument.ViewportDocument document = new FlowDocument.ViewportDocument();
+        document.setX(toDouble(viewport.get("x")));
+        document.setY(toDouble(viewport.get("y")));
+        document.setZoom(toDouble(viewport.get("zoom")));
+        return document;
     }
 
     private Double toDouble(Object value) {
