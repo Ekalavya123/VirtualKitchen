@@ -1,11 +1,12 @@
 package com.processVisualisation.virtualKitchen.service;
 
-import com.processVisualisation.virtualKitchen.dto.UserRequestDTO;
-import com.processVisualisation.virtualKitchen.dto.UserResponseDTO;
-import com.processVisualisation.virtualKitchen.mapper.UserMapper;
-import com.processVisualisation.virtualKitchen.model.User;
-import com.processVisualisation.virtualKitchen.repository.UserRepository;
-import com.processVisualisation.virtualKitchen.service.auth.UserServiceImpl;
+import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
+import com.processVisualisation.virtualKitchen.auth.dto.UserRequestDTO;
+import com.processVisualisation.virtualKitchen.auth.dto.UserResponseDTO;
+import com.processVisualisation.virtualKitchen.common.mapper.UserMapper;
+import com.processVisualisation.virtualKitchen.auth.model.User;
+import com.processVisualisation.virtualKitchen.auth.repository.UserRepository;
+import com.processVisualisation.virtualKitchen.auth.service.UserServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
 

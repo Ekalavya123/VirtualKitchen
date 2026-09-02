@@ -9,6 +9,7 @@ import java.util.UUID;
 
 import javax.imageio.ImageIO;
 
+import com.processVisualisation.virtualKitchen.restclient.client.ImageStorageClient;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -17,7 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 class SupabaseStorageServiceTest {
 
     @Autowired
-    private ImageStorageService imageStorageService;
+    private ImageStorageClient imageStorageClient;
 
     @Test
     void shouldUploadTestImage() throws Exception {
@@ -46,7 +47,7 @@ class SupabaseStorageServiceTest {
                 "test/step-" + UUID.randomUUID() + ".png";
 
         // Upload
-        String imageUrl = imageStorageService.upload(
+        String imageUrl = imageStorageClient.upload(
                 imageBytes,
                 "image/png",
                 path

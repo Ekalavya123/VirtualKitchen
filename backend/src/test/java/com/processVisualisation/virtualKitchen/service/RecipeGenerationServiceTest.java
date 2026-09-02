@@ -3,7 +3,7 @@
 //import com.processVisualisation.virtualKitchen.ai.client.AIClient;
 //import com.processVisualisation.virtualKitchen.ai.dto.AIRequest;
 //import com.processVisualisation.virtualKitchen.ai.dto.AIResponse;
-//import com.processVisualisation.virtualKitchen.dto.RecipeFlowGenerationResponseDTO;
+//import com.processVisualisation.virtualKitchen.recipe.dto.RecipeFlowGenerationResponseDTO;
 //import com.processVisualisation.virtualKitchen.exception.RecipeFlowGenerationException;
 //import com.processVisualisation.virtualKitchen.service.recipe.RecipeFlowPromptBuilder;
 //import com.processVisualisation.virtualKitchen.service.recipe.RecipeValidator;

@@ -205,6 +205,8 @@ export const serializeFlowData = (nodes: Node[], edges: Edge[]) => {
       type: n.type,
       position: n.position,
       data: normalizeNodeDataForSerialize(n),
+      width: n.width ?? n.measured?.width,
+      height: n.height ?? n.measured?.height,
       draggable: n.draggable !== false,
       selectable: n.selectable !== false,
       deletable: n.deletable !== false,
@@ -243,12 +245,20 @@ export const normalizeFlowNode = (node: FlowNodePayload): Node => {
           ? normalizeParallelNodeData(baseData, 'end')
       : baseData
 
+  // Explicit width/height (not just `measured`) are required so custom node components render at the
+  // previously resized size immediately, instead of falling back to their default dimensions.
+  const measured = node.measured as Node['measured']
+  const width = node.width ?? measured?.width
+  const height = node.height ?? measured?.height
+
   return {
     id: node.id,
     type: nodeType,
     position: node.position ?? { x: 0, y: 0 },
     data: normalizedData,
-    measured: node.measured as Node['measured'],
+    measured,
+    width,
+    height,
     parentId: node.parentId,
     extent: node.extent as Node['extent'],
     draggable: shouldForceInteractive ? node.draggable !== false : node.draggable,
@@ -335,12 +345,14 @@ export const normalizeGeneratedFlowData = (value: unknown): FlowData => {
   return buildFlowDataUsingNodesAndEdges(value.nodes, value.edges)
 }
 
-export const createFlowDataPayload = (nodes: Node[], edges: Edge[]): FlowData => {
+export const createFlowDataPayload = (nodes: Node[], edges: Edge[], viewport?: FlowData['viewport']): FlowData => {
   const normalizedNodes: FlowNodePayload[] = nodes.map((node) => ({
     id: node.id,
     type: node.type,
     position: node.position,
     measured: node.measured,
+    width: node.width ?? node.measured?.width,
+    height: node.height ?? node.measured?.height,
     parentId: node.parentId,
     extent: node.extent,
     draggable: node.draggable,
@@ -374,6 +386,7 @@ export const createFlowDataPayload = (nodes: Node[], edges: Edge[]): FlowData =>
   return {
     nodes: normalizedNodes,
     edges: normalizedEdges,
+    viewport,
   }
 }
 

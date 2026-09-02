@@ -1,0 +1,39 @@
+package com.processVisualisation.virtualKitchen.recipe.controller;
+
+import com.processVisualisation.virtualKitchen.recipe.dto.StepDefinitionRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.StepDefinitionResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.service.IStepDefinitionService;
+import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/v1/step-definitions")
+public class StepDefinitionController {
+
+    @Autowired
+    private IStepDefinitionService service;
+
+    @PostMapping
+    public ApiResponse<StepDefinitionResponseDTO> create(@RequestBody StepDefinitionRequestDTO dto){
+        return build(service.create(dto), "created");
+    }
+
+    @GetMapping
+    public ApiResponse<List<StepDefinitionResponseDTO>> getAll(){
+        return build(service.getAll(), "fetched");
+    }
+
+    private <T> ApiResponse<T> build(T data, String msg){
+        return ApiResponse.<T>builder()
+                .success(true)
+                .message(msg)
+                .data(data)
+                .timestamp(LocalDateTime.now())
+                .build();
+    }
+}

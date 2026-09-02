@@ -123,6 +123,7 @@ export default function ConditionNode({ selected, style: nodeStyle, data, width:
       )}
       {/* Diamond shape via rotated square */}
       <div
+        className="condition-node-diamond"
         style={{
           position: 'absolute',
           width: diamondSize,

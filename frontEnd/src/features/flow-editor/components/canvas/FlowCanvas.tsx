@@ -61,6 +61,7 @@ import {
   type FlowData,
   type FlowDraftStorage,
   type FlowNodePayload,
+  type FlowViewport,
   type ConditionNodeStructuredFields,
   type ParallelNodeStructuredFields,
   type StepNodeStructuredFields,
@@ -150,6 +151,12 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const [propsWidth, setPropsWidth] = useState(260)
   const nodeZoomPercentRef = useRef(100)
   const dragSnapshotRef = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null)
+  const reactFlowInstance = useRef<ReactFlowInstance<Node, Edge> | null>(null)
+  // Latest known viewport (from a restored save or live user pan/zoom), used to persist and to re-apply on re-init.
+  const currentViewportRef = useRef<FlowViewport | null>(null)
+  const fitCanvasView = useCallback(() => {
+    reactFlowInstance.current?.fitView({ padding: 0.12 })
+  }, [])
 
   const hasDraggedNodesChanged = useCallback((before: Node[], after: Node[]) => {
     if (before.length !== after.length) return true
@@ -563,6 +570,17 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     const loadExistingFlow = async () => {
       const draftData = readDraftFlowData(recipe.id)
 
+      // Restores the exact previous editor view (zoom + pan) instead of auto-fitting, when we have one.
+      const applyViewport = (viewport?: FlowViewport) => {
+        if (viewport) {
+          currentViewportRef.current = viewport
+          reactFlowInstance.current?.setViewport(viewport)
+        } else {
+          currentViewportRef.current = null
+          fitCanvasView()
+        }
+      }
+
       try {
         const flowData = await FlowApi.getFlowByRecipeId(recipe.id)
         const hasRemoteData = (flowData?.nodes?.length ?? 0) > 0 || (flowData?.edges?.length ?? 0) > 0
@@ -577,6 +595,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
         setEdges(loadedEdges)
         setHistory([])
         setFuture([])
+        applyViewport(sourceData.viewport ?? draftData?.viewport)
       } catch (error) {
         if (draftData) {
           const loadedNodes = toFlowNodes((draftData.nodes ?? []) as FlowNodePayload[])
@@ -586,6 +605,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
           setEdges(loadedEdges)
           setHistory([])
           setFuture([])
+          applyViewport(draftData.viewport)
           return
         }
 
@@ -594,11 +614,12 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     }
 
     void loadExistingFlow()
-  }, [recipe.id, setNodes, setEdges])
+  }, [recipe.id, setNodes, setEdges, fitCanvasView])
 
   const saveFlow = useCallback(async () => {
     try {
-      const flowData = createFlowDataPayload(nodes, edges)
+      const viewport = currentViewportRef.current ?? reactFlowInstance.current?.getViewport()
+      const flowData = createFlowDataPayload(nodes, edges, viewport ?? undefined)
 
       await FlowApi.saveFlow(recipe.id, flowData)
       const draftRecord: FlowDraftStorage = {
@@ -616,16 +637,25 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     }
   }, [nodes, edges, recipe.id])
 
-  useEffect(() => {
+  const persistDraft = useCallback(() => {
     const draftRecord: FlowDraftStorage = {
       version: '2.0',
       recipeId: recipe.id,
       updatedAt: new Date().toISOString(),
-      data: createFlowDataPayload(nodes, edges),
+      data: createFlowDataPayload(nodes, edges, currentViewportRef.current ?? undefined),
     }
 
     localStorage.setItem(getDraftKey(recipe.id), JSON.stringify(draftRecord))
   }, [nodes, edges, recipe.id])
+
+  useEffect(() => {
+    persistDraft()
+  }, [persistDraft])
+
+  const handleViewportChange = useCallback((viewport: FlowViewport) => {
+    currentViewportRef.current = viewport
+    persistDraft()
+  }, [persistDraft])
 
   const generateVisuals = useCallback(async () => {
     setGeneratingVisuals(true)
@@ -762,11 +792,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const sidebarRef = useRef<HTMLDivElement | null>(null)
   const propsRef = useRef<HTMLDivElement | null>(null)
   const recipeBuilderRef = useRef<HTMLDivElement | null>(null)
-  const reactFlowInstance = useRef<ReactFlowInstance<Node, Edge> | null>(null)
   const reactFlowWrapperRef = useRef<HTMLDivElement | null>(null)
-  const fitCanvasView = useCallback(() => {
-    reactFlowInstance.current?.fitView({ padding: 0.12 })
-  }, [])
 
   const applyCurrentNodeZoom = useCallback((nextNodes: Node[]) => {
     const zoomFactor = nodeZoomPercentRef.current / 100
@@ -942,7 +968,12 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
 
             <div ref={reactFlowWrapperRef} className="flow-canvas-viewport">
               <ReactFlow
-                onInit={inst => { reactFlowInstance.current = inst; fitCanvasView() }}
+                onInit={inst => {
+                  reactFlowInstance.current = inst
+                  if (currentViewportRef.current) {
+                    inst.setViewport(currentViewportRef.current)
+                  }
+                }}
                 nodes={nodes}
                 edges={edges}
                 onNodesChange={handleNodesChange}
@@ -950,11 +981,10 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
                 nodeTypes={nodeTypes}
                 onConnect={onConnect}
                 isValidConnection={isValidConnection}
+                onMoveEnd={(_, viewport) => handleViewportChange(viewport)}
                 nodesDraggable
                 nodesConnectable
                 elementsSelectable
-                fitView
-                fitViewOptions={{ padding: 0.12 }}
                 style={{ width: '100%', height: '100%', background: 'var(--flow-canvas-bg)' }}
                 connectionRadius={28}
                 defaultEdgeOptions={{
