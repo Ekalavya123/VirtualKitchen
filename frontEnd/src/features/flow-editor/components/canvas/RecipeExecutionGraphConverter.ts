@@ -59,7 +59,7 @@ const buildLegacyStepData = (entry: Record<string, unknown>): Record<string, str
   duration: toStringValue(entry.duration),
   flame: toStringValue(entry.flame),
   temperature: toStringValue(entry.temperature),
-  notes: toStringValue(entry.notes),
+  notes: toStringValue(entry.description),
 })
 
 const toExecutionStep = (entry: unknown, index: number): RecipeExecutionStep | null => {

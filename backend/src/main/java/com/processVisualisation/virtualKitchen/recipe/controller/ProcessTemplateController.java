@@ -3,6 +3,7 @@ package com.processVisualisation.virtualKitchen.recipe.controller;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessTemplateRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessTemplateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessTemplateUpdateDTO;
+import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
 import com.processVisualisation.virtualKitchen.recipe.service.IProcessTemplateService;
 import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
 
@@ -34,15 +35,34 @@ public class ProcessTemplateController {
         return build(service.getByUser(userId), "fetched");
     }
 
+    @GetMapping("/global/{userId}")
+    public ApiResponse<List<ProcessTemplateResponseDTO>> getGlobalRecipes(@PathVariable Long userId){
+        return build(service.getGlobalRecipes(userId), "fetched");
+    }
+
     @PutMapping("/{id}")
     public ApiResponse<ProcessTemplateResponseDTO> update(@PathVariable Long id,
+                                                         @RequestParam Long userId,
                                                          @RequestBody ProcessTemplateUpdateDTO dto){
-        return build(service.update(id, dto), "updated");
+        return build(service.update(id, userId, dto), "updated");
+    }
+
+    @PutMapping("/{id}/visibility")
+    public ApiResponse<ProcessTemplateResponseDTO> updateVisibility(@PathVariable Long id,
+                                                                    @RequestParam Long userId,
+                                                                    @RequestParam Visibility visibility){
+        return build(service.updateVisibility(id, userId, visibility), "updated");
+    }
+
+    @PostMapping("/{id}/copy")
+    public ApiResponse<ProcessTemplateResponseDTO> copy(@PathVariable Long id,
+                                                        @RequestParam Long userId){
+        return build(service.copyToUser(id, userId), "created");
     }
 
     @DeleteMapping("/{id}")
-    public ApiResponse<Void> delete(@PathVariable Long id){
-        service.delete(id);
+    public ApiResponse<Void> delete(@PathVariable Long id, @RequestParam Long userId){
+        service.delete(id, userId);
         return build(null, "deleted");
     }
 

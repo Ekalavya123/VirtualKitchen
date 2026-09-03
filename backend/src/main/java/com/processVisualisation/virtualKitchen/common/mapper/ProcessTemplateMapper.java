@@ -1,6 +1,7 @@
 package com.processVisualisation.virtualKitchen.common.mapper;
 
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessTemplate;
+import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessTemplateRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessTemplateResponseDTO;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,7 @@ public class ProcessTemplateMapper {
         pt.setName(dto.getName());
         pt.setDescription(dto.getDescription());
         pt.setCreatedBy(dto.getCreatedBy());
+        pt.setVisibility(Visibility.PRIVATE);
         return pt;
     }
 
@@ -22,6 +24,7 @@ public class ProcessTemplateMapper {
                 .name(pt.getName())
                 .description(pt.getDescription())
                 .createdBy(pt.getCreatedBy())
+                .visibility(pt.getVisibility())
                 .createdAt(pt.getCreatedAt())
                 .updatedAt(pt.getUpdatedAt())
                 .build();

@@ -7,17 +7,26 @@ import { apiGet, apiPost, apiDelete, apiPut } from './client'
 import { API } from './endpoints'
 import type { FlowData, RecipeExecutionModel } from '../types/recipeFlow'
 
+export type RecipeVisibility = 'PUBLIC' | 'PRIVATE'
+
 export interface Recipe {
   id: number
   name: string
   description?: string
   createdAt?: string
+  createdBy?: number
+  visibility?: RecipeVisibility
 }
 
 export interface RecipeCreateRequest {
   name: string
   description?: string
   createdBy: number
+}
+
+export interface RecipeUpdateRequest {
+  name: string
+  description?: string
 }
 
 export interface VisualizationRequest {
@@ -53,10 +62,17 @@ export interface VisualizationResponse {
 
 export const RecipeApi = {
   /**
-   * Get all recipes for a user
+   * Get all recipes owned by a user (My Recipes)
    */
   async getRecipesByUserId(userId: number): Promise<Recipe[]> {
     return apiGet<Recipe[]>(API.recipes.byUserId(userId))
+  },
+
+  /**
+   * Get public recipes owned by other users (Global Recipes)
+   */
+  async getGlobalRecipes(userId: number): Promise<Recipe[]> {
+    return apiGet<Recipe[]>(API.recipes.global(userId))
   },
 
   /**
@@ -67,10 +83,31 @@ export const RecipeApi = {
   },
 
   /**
-   * Delete a recipe
+   * Update a recipe's name/description. Only the owner may update.
    */
-  async deleteRecipe(recipeId: number): Promise<void> {
-    return apiDelete<void>(API.recipes.byId(recipeId))
+  async updateRecipe(recipeId: number, userId: number, data: RecipeUpdateRequest): Promise<Recipe> {
+    return apiPut<Recipe>(API.recipes.byId(recipeId), data, { params: { userId } })
+  },
+
+  /**
+   * Publish/unpublish a recipe. Only the owner may change visibility.
+   */
+  async updateVisibility(recipeId: number, userId: number, visibility: RecipeVisibility): Promise<Recipe> {
+    return apiPut<Recipe>(API.recipes.visibility(recipeId), undefined, { params: { userId, visibility } })
+  },
+
+  /**
+   * Copy a public recipe into the current user's My Recipes as an independent recipe.
+   */
+  async copyRecipe(recipeId: number, userId: number): Promise<Recipe> {
+    return apiPost<Recipe>(API.recipes.copy(recipeId), undefined, { params: { userId } })
+  },
+
+  /**
+   * Delete a recipe. Only the owner may delete.
+   */
+  async deleteRecipe(recipeId: number, userId: number): Promise<void> {
+    return apiDelete<void>(API.recipes.byId(recipeId), { params: { userId } })
   },
 }
 
