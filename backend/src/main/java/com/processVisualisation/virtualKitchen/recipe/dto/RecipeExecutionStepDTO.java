@@ -1,17 +1,14 @@
 package com.processVisualisation.virtualKitchen.recipe.dto;
 
-import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
 public class RecipeExecutionStepDTO {
-
     private String id;
     private String nodeType;
-    private Map<String, Object> data;
+    private Map<String, Object> data = new LinkedHashMap<>();
 }
+

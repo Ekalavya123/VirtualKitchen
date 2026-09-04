@@ -10,7 +10,7 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RecipeFlowGenerationResponseDTO {
-
     private List<RecipeExecutionStepDTO> steps;
     private List<RecipeExecutionEdgeDTO> edges;
 }
+

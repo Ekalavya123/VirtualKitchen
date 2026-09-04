@@ -7,6 +7,6 @@ import java.util.List;
 import java.util.Optional;
 
 public interface AIVisualizationClipRepository extends MongoRepository<VisualizationClip, Long> {
-    List<VisualizationClip> findByProcessTemplateIdOrderByStepOrderAsc(Long processTemplateId);
-    Optional<VisualizationClip> findByProcessTemplateIdAndStepOrder(Long processTemplateId, int stepOrder);
+    List<VisualizationClip> findByRecipeProcessIngredientUsageServiceImplIdOrderByStepOrderAsc(Long RecipeProcessIngredientUsageServiceImplId);
+    Optional<VisualizationClip> findByRecipeProcessIngredientUsageServiceImplIdAndStepOrder(Long RecipeProcessIngredientUsageServiceImplId, int stepOrder);
 }

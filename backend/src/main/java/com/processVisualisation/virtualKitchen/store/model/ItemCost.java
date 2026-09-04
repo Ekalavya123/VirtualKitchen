@@ -1,6 +1,6 @@
 package com.processVisualisation.virtualKitchen.store.model;
 
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeUnitType;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.CreatedDate;
@@ -20,7 +20,7 @@ public class ItemCost {
     private ItemType itemType;
     private Long itemId;
 
-    private UnitType unit;
+    private RecipeUnitType unit;
 
     private double costPerUnit;
     private String currency;
@@ -30,3 +30,4 @@ public class ItemCost {
     @CreatedDate
     private LocalDateTime createdAt;
 }
+

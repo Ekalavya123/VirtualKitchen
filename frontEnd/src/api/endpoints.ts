@@ -39,6 +39,9 @@ export const API = {
     list: '/api/v1/process-templates',
     byId: (id: number) => `/api/v1/process-templates/${id}`,
     byUserId: (userId: number) => `/api/v1/process-templates/user/${userId}`,
+    global: (userId: number) => `/api/v1/process-templates/global/${userId}`,
+    visibility: (id: number) => `/api/v1/process-templates/${id}/visibility`,
+    copy: (id: number) => `/api/v1/process-templates/${id}/copy`,
   },
 
   recipeGeneration: {

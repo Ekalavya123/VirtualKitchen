@@ -20,7 +20,7 @@ public class VisualizationClip {
     private Long id;
 
     @Indexed
-    private Long processTemplateId;
+    private Long RecipeProcessIngredientUsageServiceImplId;
 
     private String parentClipId;
 

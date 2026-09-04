@@ -6,7 +6,7 @@ import com.processVisualisation.virtualKitchen.store.model.Inventory;
 import com.processVisualisation.virtualKitchen.store.model.ItemType;
 import com.processVisualisation.virtualKitchen.kitchen.model.Kitchen;
 import com.processVisualisation.virtualKitchen.kitchen.model.KitchenInventory;
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeUnitType;
 import com.processVisualisation.virtualKitchen.auth.model.User;
 import com.processVisualisation.virtualKitchen.store.repository.EquipmentRepository;
 import com.processVisualisation.virtualKitchen.store.repository.IngredientRepository;
@@ -76,14 +76,14 @@ public class DummyDataLoader implements CommandLineRunner {
         Equipment kettle = resolveOrCreateEquipment("Electric Kettle", "1.7 liter kettle for boiling water");
         Equipment fryingPan = resolveOrCreateEquipment("Nonstick Frying Pan", "12-inch pan for cooking and searing");
 
-        Ingredient flour = resolveOrCreateIngredient("All-purpose Flour", "Standard cooking flour", UnitType.KG);
-        Ingredient salt = resolveOrCreateIngredient("Sea Salt", "Fine sea salt", UnitType.GRAM);
-        Ingredient oliveOil = resolveOrCreateIngredient("Olive Oil", "Extra virgin olive oil", UnitType.LITER);
+        Ingredient flour = resolveOrCreateIngredient("All-purpose Flour", "Standard cooking flour", RecipeUnitType.KG);
+        Ingredient salt = resolveOrCreateIngredient("Sea Salt", "Fine sea salt", RecipeUnitType.GRAM);
+        Ingredient oliveOil = resolveOrCreateIngredient("Olive Oil", "Extra virgin olive oil", RecipeUnitType.LITER);
 
-        Inventory flourInventory = resolveOrCreateInventory(user.getId(), ItemType.INGREDIENT, flour.getId(), 2.0, UnitType.KG);
-        Inventory saltInventory = resolveOrCreateInventory(user.getId(), ItemType.INGREDIENT, salt.getId(), 500.0, UnitType.GRAM);
-        Inventory kettleInventory = resolveOrCreateInventory(user.getId(), ItemType.EQUIPMENT, kettle.getId(), 1.0, UnitType.COUNT);
-        Inventory panInventory = resolveOrCreateInventory(user.getId(), ItemType.EQUIPMENT, fryingPan.getId(), 1.0, UnitType.COUNT);
+        Inventory flourInventory = resolveOrCreateInventory(user.getId(), ItemType.INGREDIENT, flour.getId(), 2.0, RecipeUnitType.KG);
+        Inventory saltInventory = resolveOrCreateInventory(user.getId(), ItemType.INGREDIENT, salt.getId(), 500.0, RecipeUnitType.GRAM);
+        Inventory kettleInventory = resolveOrCreateInventory(user.getId(), ItemType.EQUIPMENT, kettle.getId(), 1.0, RecipeUnitType.COUNT);
+        Inventory panInventory = resolveOrCreateInventory(user.getId(), ItemType.EQUIPMENT, fryingPan.getId(), 1.0, RecipeUnitType.COUNT);
 
         resolveOrCreateKitchenInventory(kitchen.getId(), flourInventory.getId());
         resolveOrCreateKitchenInventory(kitchen.getId(), saltInventory.getId());
@@ -148,7 +148,7 @@ public class DummyDataLoader implements CommandLineRunner {
         return equipmentRepository.save(equipment);
     }
 
-    private Ingredient resolveOrCreateIngredient(String name, String description, UnitType defaultUnit) {
+    private Ingredient resolveOrCreateIngredient(String name, String description, RecipeUnitType defaultUnit) {
         Optional<Ingredient> existing = ingredientRepository.findByName(name);
         if (existing.isPresent()) {
             return existing.get();
@@ -164,7 +164,7 @@ public class DummyDataLoader implements CommandLineRunner {
         return ingredientRepository.save(ingredient);
     }
 
-    private Inventory resolveOrCreateInventory(Long userId, ItemType itemType, Long itemId, double quantity, UnitType unit) {
+    private Inventory resolveOrCreateInventory(Long userId, ItemType itemType, Long itemId, double quantity, RecipeUnitType unit) {
         Optional<Inventory> existing = inventoryRepository.findByUserIdAndItemTypeAndItemId(userId, itemType, itemId);
         if (existing.isPresent()) {
             Inventory inventory = existing.get();
@@ -203,3 +203,4 @@ public class DummyDataLoader implements CommandLineRunner {
         runLoader(null,null,null,null);
     }
 }
+

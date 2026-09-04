@@ -1,6 +1,6 @@
 package com.processVisualisation.virtualKitchen.store.model;
 
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeUnitType;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -27,7 +27,8 @@ public class Inventory {
     private Long itemId;
 
     private double quantity;
-    private UnitType unit;
+    private RecipeUnitType unit;
 
     private LocalDateTime lastUpdated;
 }
+

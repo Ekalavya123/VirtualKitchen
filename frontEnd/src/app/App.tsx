@@ -43,11 +43,12 @@ function ShopRoute({ userId }: { userId: number }) {
   )
 }
 
-function RecipesRoute() {
+function RecipesRoute({ userId }: { userId: number }) {
   const navigate = useNavigate()
 
   return (
     <RecipeHomePage
+      userId={userId}
       onCreateRecipe={(recipeId, title) => {
         navigate(`/kitchen/recipes/${recipeId}`, {
           state: { recipeTitle: title } satisfies RecipeRouteState,
@@ -245,7 +246,11 @@ function App() {
 
           <Route
             path="recipes"
-            element={<RecipesRoute />}
+            element={
+              currentUser ? (
+                <RecipesRoute userId={currentUser.id} />
+              ) : null
+            }
           />
 
           <Route

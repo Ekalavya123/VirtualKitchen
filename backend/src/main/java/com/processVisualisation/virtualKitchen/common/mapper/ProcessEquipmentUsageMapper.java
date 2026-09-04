@@ -1,15 +1,15 @@
 package com.processVisualisation.virtualKitchen.common.mapper;
 
-import com.processVisualisation.virtualKitchen.recipe.model.ProcessEquipmentUsage;
-import com.processVisualisation.virtualKitchen.recipe.dto.ProcessEquipmentUsageRequestDTO;
-import com.processVisualisation.virtualKitchen.recipe.dto.ProcessEquipmentUsageResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeProcessEquipmentUsage;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessEquipmentUsageRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessEquipmentUsageResponseDTO;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ProcessEquipmentUsageMapper {
 
-    public ProcessEquipmentUsage toEntity(ProcessEquipmentUsageRequestDTO dto){
-        ProcessEquipmentUsage p = new ProcessEquipmentUsage();
+    public RecipeProcessEquipmentUsage toEntity(RecipeProcessEquipmentUsageRequestDTO dto){
+        RecipeProcessEquipmentUsage p = new RecipeProcessEquipmentUsage();
         p.setProcessExecutionId(dto.getProcessExecutionId());
         p.setEquipmentId(dto.getEquipmentId());
         p.setUsageDurationSec(dto.getUsageDurationSec());
@@ -17,8 +17,8 @@ public class ProcessEquipmentUsageMapper {
         return p;
     }
 
-    public ProcessEquipmentUsageResponseDTO toDTO(ProcessEquipmentUsage p){
-        return ProcessEquipmentUsageResponseDTO.builder()
+    public RecipeProcessEquipmentUsageResponseDTO toDTO(RecipeProcessEquipmentUsage p){
+        return RecipeProcessEquipmentUsageResponseDTO.builder()
                 .id(p.getId())
                 .processExecutionId(p.getProcessExecutionId())
                 .equipmentId(p.getEquipmentId())
@@ -27,3 +27,4 @@ public class ProcessEquipmentUsageMapper {
                 .build();
     }
 }
+

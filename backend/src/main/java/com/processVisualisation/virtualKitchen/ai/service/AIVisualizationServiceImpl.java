@@ -2,9 +2,9 @@ package com.processVisualisation.virtualKitchen.ai.service;
 
 import com.processVisualisation.virtualKitchen.ai.dto.VisualizationClipResponseDTO;
 import com.processVisualisation.virtualKitchen.ai.dto.VisualizationResponseDTO;
-import com.processVisualisation.virtualKitchen.recipe.model.FlowDocument;
+import com.processVisualisation.virtualKitchen.recipe.model.Recipe;
 import com.processVisualisation.virtualKitchen.ai.model.VisualizationClip;
-import com.processVisualisation.virtualKitchen.recipe.repository.FlowRepository;
+import com.processVisualisation.virtualKitchen.recipe.repository.RecipeRepository;
 import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationClipRepository;
 import org.springframework.stereotype.Service;
 
@@ -18,17 +18,17 @@ import java.util.Optional;
 public class AIVisualizationServiceImpl implements AIVisualizationService {
 
     private final AIVisualizationClipRepository clipRepository;
-    private final FlowRepository flowRepository;
+    private final RecipeRepository recipeRepository;
 
-    public AIVisualizationServiceImpl(AIVisualizationClipRepository clipRepository, FlowRepository flowRepository) {
+    public AIVisualizationServiceImpl(AIVisualizationClipRepository clipRepository, RecipeRepository recipeRepository) {
         this.clipRepository = clipRepository;
-        this.flowRepository = flowRepository;
+        this.recipeRepository = recipeRepository;
     }
 
     @Override
     public VisualizationResponseDTO generateVisualization(String flowId) {
         // Fetch flow document from database using flowId
-        Optional<FlowDocument> flowOpt = flowRepository.findByFlowId(flowId);
+        Optional<Recipe> flowOpt = recipeRepository.findByFlowId(flowId);
         if (flowOpt.isEmpty()) {
             return VisualizationResponseDTO.builder()
                     .message("Flow not found for flowId: " + flowId)
@@ -36,22 +36,22 @@ public class AIVisualizationServiceImpl implements AIVisualizationService {
                     .build();
         }
 
-        FlowDocument flow = flowOpt.get();
-        Long processTemplateId = flow.getTemplateId();
+        Recipe flow = flowOpt.get();
+        Long RecipeProcessIngredientUsageServiceImplId = flow.getTemplateId();
         
-        if (processTemplateId == null) {
+        if (RecipeProcessIngredientUsageServiceImplId == null) {
             return VisualizationResponseDTO.builder()
                     .message("Template ID not found in flow for flowId: " + flowId)
                     .clips(new ArrayList<>())
                     .build();
         }
 
-        List<VisualizationClip> existingClips = clipRepository.findByProcessTemplateIdOrderByStepOrderAsc(processTemplateId);
+        List<VisualizationClip> existingClips = clipRepository.findByRecipeProcessIngredientUsageServiceImplIdOrderByStepOrderAsc(RecipeProcessIngredientUsageServiceImplId);
         List<VisualizationClipResponseDTO> clips = new ArrayList<>();
         VisualizationClip previousClip = null;
 
         int stepOrder = 0;
-        for (FlowDocument.NodeDocument node : flow.getNodes()) {
+        for (Recipe.NodeDocument node : flow.getNodes()) {
             String type = node.getType();
             if (!"recipeStepNode".equals(type)) {
                 continue;
@@ -69,9 +69,9 @@ public class AIVisualizationServiceImpl implements AIVisualizationService {
                     .findFirst()
                     .orElseGet(VisualizationClip::new);
 
-            clip.setProcessTemplateId(processTemplateId);
+            clip.setRecipeProcessIngredientUsageServiceImplId(RecipeProcessIngredientUsageServiceImplId);
             clip.setParentClipId(previousClip == null ? null : previousClip.getClipId());
-            clip.setClipId("clip-" + processTemplateId + "-" + stepOrder);
+            clip.setClipId("clip-" + RecipeProcessIngredientUsageServiceImplId + "-" + stepOrder);
             clip.setTitle(title);
             clip.setDescription(description);
             clip.setStepOrder(stepOrder);
@@ -88,7 +88,7 @@ public class AIVisualizationServiceImpl implements AIVisualizationService {
 
         VisualizationClipResponseDTO finalClip = clips.isEmpty() ? null : clips.get(clips.size() - 1);
         return VisualizationResponseDTO.builder()
-                .processTemplateId(processTemplateId)
+                .RecipeProcessIngredientUsageServiceImplId(RecipeProcessIngredientUsageServiceImplId)
                 .message("Visualization generated")
                 .clips(clips)
                 .finalClip(finalClip)

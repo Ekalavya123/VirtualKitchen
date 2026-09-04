@@ -1,27 +1,33 @@
 import { useEffect, useMemo, useState } from 'react'
-import { RecipeApi } from '../../api'
+import { RecipeApi, type Recipe } from '../../api'
 import './styles/flow-editor.css'
 import recipeIcon from '../../assets/kitchen/recipeIcon.png'
 
-type Recipe = {
-  id: number
-  name: string
-  description?: string
-  createdAt?: string
-}
+type RecipeTab = 'mine' | 'global'
 
 type RecipeHomePageProps = {
+  userId: number
   onCreateRecipe?: (recipeId: number, title: string) => void
   onOpenRecipies?: (recipeId: number, title: string) => void
 }
 
 type RecipeCardProps = {
   recipe: Recipe
+  variant: RecipeTab
   onOpen: () => void
-  onDelete: () => void
+  onDelete?: () => void
+  onToggleVisibility?: () => void
+  onAddToMyRecipes?: () => void
 }
 
-function RecipeCard({ recipe, onOpen, onDelete }: RecipeCardProps) {
+function RecipeCard({
+  recipe,
+  variant,
+  onOpen,
+  onDelete,
+  onToggleVisibility,
+  onAddToMyRecipes,
+}: RecipeCardProps) {
   return (
     <article className="recipe-card group">
       <button
@@ -65,18 +71,37 @@ function RecipeCard({ recipe, onOpen, onDelete }: RecipeCardProps) {
           onClick={onOpen}
           className="recipe-card-open-button"
         >
-          Open recipe
+          {variant === 'mine' ? 'Open recipe' : 'View recipe'}
           <span aria-hidden="true">→</span>
         </button>
 
-        <button
-          onClick={onDelete}
-          title="Delete recipe"
-          aria-label={`Delete ${recipe.name}`}
-          className="recipe-card-delete-button"
-        >
-          🗑️
-        </button>
+        {variant === 'mine' ? (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onToggleVisibility}
+              title={recipe.visibility === 'PUBLIC' ? 'Make private' : 'Make public'}
+              className="recipe-card-visibility-button"
+            >
+              {recipe.visibility === 'PUBLIC' ? '🌐 Public' : '🔒 Private'}
+            </button>
+
+            <button
+              onClick={onDelete}
+              title="Delete recipe"
+              aria-label={`Delete ${recipe.name}`}
+              className="recipe-card-delete-button"
+            >
+              🗑️
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={onAddToMyRecipes}
+            className="recipe-card-open-button"
+          >
+            + Add to My Recipes
+          </button>
+        )}
       </div>
     </article>
   )
@@ -268,9 +293,11 @@ function CreateRecipeModal({
 
 function EmptyState({
   searching,
+  tab,
   onCreate,
 }: {
   searching: boolean
+  tab: RecipeTab
   onCreate: () => void
 }) {
   if (searching) {
@@ -282,6 +309,20 @@ function EmptyState({
 
         <p>
           Try searching with a different recipe name or description.
+        </p>
+      </div>
+    )
+  }
+
+  if (tab === 'global') {
+    return (
+      <div className="recipe-empty-state">
+        <div className="recipe-empty-icon">🌐</div>
+
+        <h3>No public recipes yet</h3>
+
+        <p>
+          When other users publish recipes, they will show up here.
         </p>
       </div>
     )
@@ -308,6 +349,74 @@ function EmptyState({
   )
 }
 
+function ViewRecipeModal({
+  recipe,
+  onClose,
+}: {
+  recipe: Recipe | null
+  onClose: () => void
+}) {
+  if (!recipe) {
+    return null
+  }
+
+  return (
+    <div
+      className="recipe-modal-backdrop"
+      onMouseDown={e => {
+        if (e.target === e.currentTarget) {
+          onClose()
+        }
+      }}
+    >
+      <div
+        className="recipe-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="view-recipe-title"
+      >
+        <div className="recipe-modal-header">
+          <div>
+            <div className="mb-1 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-[var(--flow-accent)]">
+              Global Recipe
+            </div>
+
+            <h2
+              id="view-recipe-title"
+              className="text-xl font-bold text-[var(--flow-text)]"
+            >
+              {recipe.name}
+            </h2>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="recipe-modal-close"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="recipe-modal-body">
+          <p className="text-sm text-[var(--flow-text-muted)]">
+            {recipe.description || 'No description provided for this recipe.'}
+          </p>
+        </div>
+
+        <div className="recipe-modal-footer">
+          <button
+            onClick={onClose}
+            className="recipe-secondary-button"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function formatDate(value: string) {
   const date = new Date(value)
 
@@ -323,11 +432,14 @@ function formatDate(value: string) {
 }
 
 export default function RecipeHomePage({
+  userId,
   onCreateRecipe,
   onOpenRecipies,
 }: RecipeHomePageProps) {
   const handleOpenRecipe =
     onCreateRecipe || onOpenRecipies
+
+  const [activeTab, setActiveTab] = useState<RecipeTab>('mine')
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -338,14 +450,18 @@ export default function RecipeHomePage({
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [recipesLoading, setRecipesLoading] = useState(false)
 
+  const [globalRecipes, setGlobalRecipes] = useState<Recipe[]>([])
+  const [globalRecipesLoading, setGlobalRecipesLoading] = useState(false)
+
   const [search, setSearch] = useState('')
   const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [viewRecipe, setViewRecipe] = useState<Recipe | null>(null)
 
   const loadRecipes = async () => {
     try {
       setRecipesLoading(true)
 
-      const items = await RecipeApi.getRecipesByUserId(1)
+      const items = await RecipeApi.getRecipesByUserId(userId)
 
       setRecipes(items || [])
     } catch (err) {
@@ -360,24 +476,50 @@ export default function RecipeHomePage({
     }
   }
 
+  const loadGlobalRecipes = async () => {
+    try {
+      setGlobalRecipesLoading(true)
+
+      const items = await RecipeApi.getGlobalRecipes(userId)
+
+      setGlobalRecipes(items || [])
+    } catch (err) {
+      console.error(err)
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to load global recipes',
+      )
+    } finally {
+      setGlobalRecipesLoading(false)
+    }
+  }
+
   useEffect(() => {
     void loadRecipes()
-  }, [])
+  }, [userId])
+
+  useEffect(() => {
+    if (activeTab === 'global') {
+      void loadGlobalRecipes()
+    }
+  }, [activeTab, userId])
 
   const filteredRecipes = useMemo(() => {
+    const source = activeTab === 'mine' ? recipes : globalRecipes
     const query = search.trim().toLowerCase()
 
     if (!query) {
-      return recipes
+      return source
     }
 
-    return recipes.filter(recipe => {
+    return source.filter(recipe => {
       return (
         recipe.name.toLowerCase().includes(query) ||
         recipe.description?.toLowerCase().includes(query)
       )
     })
-  }, [recipes, search])
+  }, [recipes, globalRecipes, activeTab, search])
 
   const openCreateModal = () => {
     setTitle('')
@@ -410,7 +552,7 @@ export default function RecipeHomePage({
       const result = await RecipeApi.createRecipe({
         name: recipeTitle,
         description: description.trim(),
-        createdBy: 1,
+        createdBy: userId,
       })
 
       if (!result.id) {
@@ -435,7 +577,7 @@ export default function RecipeHomePage({
 
   const handleDeleteRecipe = async (recipeId: number) => {
     try {
-      await RecipeApi.deleteRecipe(recipeId)
+      await RecipeApi.deleteRecipe(recipeId, userId)
 
       setRecipes(current =>
         current.filter(recipe => recipe.id !== recipeId),
@@ -447,6 +589,42 @@ export default function RecipeHomePage({
         err instanceof Error
           ? err.message
           : 'Unable to delete recipe',
+      )
+    }
+  }
+
+  const handleToggleVisibility = async (recipe: Recipe) => {
+    const nextVisibility = recipe.visibility === 'PUBLIC' ? 'PRIVATE' : 'PUBLIC'
+
+    try {
+      const updated = await RecipeApi.updateVisibility(recipe.id, userId, nextVisibility)
+
+      setRecipes(current =>
+        current.map(item => (item.id === recipe.id ? updated : item)),
+      )
+    } catch (err) {
+      console.error(err)
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to update recipe visibility',
+      )
+    }
+  }
+
+  const handleAddToMyRecipes = async (recipe: Recipe) => {
+    try {
+      await RecipeApi.copyRecipe(recipe.id, userId)
+      await loadRecipes()
+      setActiveTab('mine')
+    } catch (err) {
+      console.error(err)
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to add recipe to My Recipes',
       )
     }
   }
@@ -470,14 +648,33 @@ export default function RecipeHomePage({
             </p>
           </div>
 
-          <button
-            onClick={openCreateModal}
-            className="recipe-primary-button self-start sm:self-auto"
-          >
-            <span className="text-base leading-none">+</span>
-            Create recipe
-          </button>
+          {activeTab === 'mine' && (
+            <button
+              onClick={openCreateModal}
+              className="recipe-primary-button self-start sm:self-auto"
+            >
+              <span className="text-base leading-none">+</span>
+              Create recipe
+            </button>
+          )}
         </header>
+
+        {/* Tabs */}
+        <div className="recipe-tabs mb-6">
+          <button
+            onClick={() => setActiveTab('mine')}
+            className={`recipe-tab-button ${activeTab === 'mine' ? 'active' : ''}`}
+          >
+            My Recipes
+          </button>
+
+          <button
+            onClick={() => setActiveTab('global')}
+            className={`recipe-tab-button ${activeTab === 'global' ? 'active' : ''}`}
+          >
+            Global Recipes
+          </button>
+        </div>
 
         {/* Search */}
         <RecipeToolbar
@@ -494,7 +691,7 @@ export default function RecipeHomePage({
         )}
 
         {/* Loading */}
-        {recipesLoading ? (
+        {(activeTab === 'mine' ? recipesLoading : globalRecipesLoading) ? (
           <div className="recipe-grid">
             {Array.from({ length: 6 }).map((_, index) => (
               <div
@@ -514,6 +711,7 @@ export default function RecipeHomePage({
         ) : filteredRecipes.length === 0 ? (
           <EmptyState
             searching={Boolean(search.trim())}
+            tab={activeTab}
             onCreate={openCreateModal}
           />
         ) : (
@@ -522,14 +720,20 @@ export default function RecipeHomePage({
               <RecipeCard
                 key={recipe.id}
                 recipe={recipe}
+                variant={activeTab}
                 onOpen={() =>
-                  handleOpenRecipe?.(
-                    recipe.id,
-                    recipe.name,
-                  )
+                  activeTab === 'mine'
+                    ? handleOpenRecipe?.(recipe.id, recipe.name)
+                    : setViewRecipe(recipe)
                 }
                 onDelete={() =>
                   void handleDeleteRecipe(recipe.id)
+                }
+                onToggleVisibility={() =>
+                  void handleToggleVisibility(recipe)
+                }
+                onAddToMyRecipes={() =>
+                  void handleAddToMyRecipes(recipe)
                 }
               />
             ))}
@@ -548,6 +752,12 @@ export default function RecipeHomePage({
         onDescriptionChange={setDescription}
         onCreate={() => void handleCreate()}
         onClose={closeCreateModal}
+      />
+
+      {/* View Recipe Modal (Global Recipes) */}
+      <ViewRecipeModal
+        recipe={viewRecipe}
+        onClose={() => setViewRecipe(null)}
       />
     </div>
   )

@@ -1,23 +1,23 @@
 package com.processVisualisation.virtualKitchen.common.mapper;
 
-import com.processVisualisation.virtualKitchen.recipe.model.ProcessTemplate;
-import com.processVisualisation.virtualKitchen.recipe.dto.ProcessTemplateRequestDTO;
-import com.processVisualisation.virtualKitchen.recipe.dto.ProcessTemplateResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeProcessTemplate;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessTemplateRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessTemplateResponseDTO;
 import org.springframework.stereotype.Component;
 
 @Component
 public class ProcessTemplateMapper {
 
-    public ProcessTemplate toEntity(ProcessTemplateRequestDTO dto){
-        ProcessTemplate pt = new ProcessTemplate();
+    public RecipeProcessTemplate toEntity(RecipeProcessTemplateRequestDTO dto){
+        RecipeProcessTemplate pt = new RecipeProcessTemplate();
         pt.setName(dto.getName());
         pt.setDescription(dto.getDescription());
         pt.setCreatedBy(dto.getCreatedBy());
         return pt;
     }
 
-    public ProcessTemplateResponseDTO toDTO(ProcessTemplate pt){
-        return ProcessTemplateResponseDTO.builder()
+    public RecipeProcessTemplateResponseDTO toDTO(RecipeProcessTemplate pt){
+        return RecipeProcessTemplateResponseDTO.builder()
                 .id(pt.getId())
                 .name(pt.getName())
                 .description(pt.getDescription())
@@ -27,3 +27,4 @@ public class ProcessTemplateMapper {
                 .build();
     }
 }
+

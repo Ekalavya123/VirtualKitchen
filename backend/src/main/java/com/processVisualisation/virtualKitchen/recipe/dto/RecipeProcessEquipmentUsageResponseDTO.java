@@ -1,0 +1,15 @@
+package com.processVisualisation.virtualKitchen.recipe.dto;
+
+import lombok.Builder;
+import lombok.Data;
+
+@Data
+@Builder
+public class RecipeProcessEquipmentUsageResponseDTO {
+
+    private Long id;
+    private Long processExecutionId;
+    private Long equipmentId;
+    private long usageDurationSec;
+    private double costAtTime;
+}

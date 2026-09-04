@@ -1,6 +1,6 @@
 package com.processVisualisation.virtualKitchen.store.model;
 
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeUnitType;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.CreatedDate;
@@ -24,7 +24,7 @@ public class Ingredient {
 
     private String description;
 
-    private UnitType defaultUnit;
+    private RecipeUnitType defaultUnit;
 
     @CreatedDate
     private LocalDateTime createdAt;

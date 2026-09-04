@@ -8,7 +8,7 @@ import java.util.List;
 @Data
 @Builder
 public class VisualizationResponseDTO {
-    private Long processTemplateId;
+    private Long RecipeProcessIngredientUsageServiceImplId;
     private String message;
     private List<VisualizationClipResponseDTO> clips;
     private VisualizationClipResponseDTO finalClip;
