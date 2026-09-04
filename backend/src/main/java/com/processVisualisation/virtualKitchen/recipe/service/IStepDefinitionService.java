@@ -1,13 +1,13 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
-import com.processVisualisation.virtualKitchen.recipe.dto.StepDefinitionRequestDTO;
-import com.processVisualisation.virtualKitchen.recipe.dto.StepDefinitionResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeStepDefinitionRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeStepDefinitionResponseDTO;
 
 import java.util.List;
 
 public interface IStepDefinitionService {
 
-    StepDefinitionResponseDTO create(StepDefinitionRequestDTO dto);
+    RecipeStepDefinitionResponseDTO create(RecipeStepDefinitionRequestDTO dto);
 
-    List<StepDefinitionResponseDTO> getAll();
+    List<RecipeStepDefinitionResponseDTO> getAll();
 }

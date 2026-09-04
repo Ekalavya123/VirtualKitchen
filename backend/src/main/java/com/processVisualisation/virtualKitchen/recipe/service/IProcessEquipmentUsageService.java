@@ -1,13 +1,13 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
-import com.processVisualisation.virtualKitchen.recipe.dto.ProcessEquipmentUsageRequestDTO;
-import com.processVisualisation.virtualKitchen.recipe.dto.ProcessEquipmentUsageResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeEquipmentUsageRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeEquipmentUsageResponseDTO;
 
 import java.util.List;
 
 public interface IProcessEquipmentUsageService {
 
-    ProcessEquipmentUsageResponseDTO create(ProcessEquipmentUsageRequestDTO dto);
+    RecipeEquipmentUsageResponseDTO create(RecipeEquipmentUsageRequestDTO dto);
 
-    List<ProcessEquipmentUsageResponseDTO> getByProcess(Long processExecutionId);
+    List<RecipeEquipmentUsageResponseDTO> getByProcess(Long processExecutionId);
 }

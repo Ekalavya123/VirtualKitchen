@@ -1,15 +1,15 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
-import com.processVisualisation.virtualKitchen.recipe.dto.ProcessExecutionRequestDTO;
-import com.processVisualisation.virtualKitchen.recipe.dto.ProcessExecutionResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeExecutionRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeExecutionResponseDTO;
 
 import java.util.List;
 
 public interface IProcessExecutionService {
 
-    ProcessExecutionResponseDTO start(ProcessExecutionRequestDTO dto);
+    RecipeExecutionResponseDTO start(RecipeExecutionRequestDTO dto);
 
-    ProcessExecutionResponseDTO updateStatus(Long id, String status);
+    RecipeExecutionResponseDTO updateStatus(Long id, String status);
 
-    List<ProcessExecutionResponseDTO> getByUser(Long userId);
+    List<RecipeExecutionResponseDTO> getByUser(Long userId);
 }
