@@ -119,4 +119,15 @@ public class GlobalExceptionHandler {
         );
         return new ResponseEntity<>(error, HttpStatus.UNPROCESSABLE_ENTITY);
     }
+
+    @ExceptionHandler(RecipeAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleRecipeAccessDenied(RecipeAccessDeniedException ex) {
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.FORBIDDEN.value(),
+                "Forbidden",
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, HttpStatus.FORBIDDEN);
+    }
 }

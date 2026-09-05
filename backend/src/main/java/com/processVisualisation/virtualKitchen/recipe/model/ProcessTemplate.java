@@ -24,6 +24,9 @@ public class ProcessTemplate {
     @Indexed
     private Long createdBy;
 
+    @Indexed
+    private Visibility visibility = Visibility.PRIVATE;
+
     @CreatedDate
     private LocalDateTime createdAt;
 
