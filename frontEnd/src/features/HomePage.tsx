@@ -1,8 +1,6 @@
 import './HomePage.css'
 import chefLogo from '../assets/kitchen/blackShadowChef.png'
-import { useState } from 'react'
-
-const SESSION_EMAIL_KEY = 'virtual-kitchen.session.email'
+import { isAuthenticated } from '../shared/auth/session'
 
 type Props = {
   onTryIt?: () => void
@@ -10,7 +8,7 @@ type Props = {
 }
 
 export default function HomePage({ onTryIt, onLogin }: Props) {
-  const [hideLogin, setHideLogin] = useState(localStorage.getItem(SESSION_EMAIL_KEY)!== null)
+  const hideLogin = isAuthenticated()
   return (
     <div className="home-page">
       <header className="home-nav">

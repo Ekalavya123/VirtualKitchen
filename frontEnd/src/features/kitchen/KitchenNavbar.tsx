@@ -201,9 +201,9 @@ export default function KitchenNavbar({
           </span>
           </Link>
 
-          <span className="kitchen-name">
+          {/* <span className="kitchen-name">
             {kitchen.name}
-          </span>
+          </span> */}
         </div>
       </div>
 
@@ -272,9 +272,9 @@ export default function KitchenNavbar({
               {user.name}
             </span>
 
-            <span className="profile-trigger-kitchen">
+            {/* <span className="profile-trigger-kitchen">
               {kitchen.name}
-            </span>
+            </span> */}
           </div>
 
           <span

@@ -74,7 +74,7 @@ public class AIRecipeGenerationService {
                 .systemPrompt(promptBuilder.buildSystemPrompt())
                 .userPrompt(refinedPrompt)
                 .temperature(0.1d)
-                .maxTokens(5000)
+                .maxTokens(10000)
                 .build();
 
         long startNs = System.nanoTime();

@@ -12,7 +12,7 @@ function InventoryHeader() {
   return (
     <div className="inventory-title">
       <div className="inventory-eyebrow">
-        Virtual Kitchen
+        My Kitchen
       </div>
 
       <h1>Kitchen Inventory</h1>

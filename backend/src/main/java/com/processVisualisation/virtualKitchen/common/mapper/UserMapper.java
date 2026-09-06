@@ -22,6 +22,9 @@ public class UserMapper {
                 .name(user.getName())
                 .email(user.getEmail())
                 .status(user.getStatus())
+                .emailVerified(user.isEmailVerified())
+                .authProvider(user.getAuthProvider())
+                .userType(user.getUserType())
                 .createdAt(user.getCreatedAt())
                 .updatedAt(user.getUpdatedAt())
                 .build();

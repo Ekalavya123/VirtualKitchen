@@ -4,6 +4,7 @@
  */
 
 import { API_CONFIG } from './config'
+import { getStoredToken } from '../shared/auth/session'
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean>
@@ -64,6 +65,7 @@ async function request<T>(
       signal: controller.signal,
       headers: {
         ...API_CONFIG.headers,
+        ...authHeader(),
         ...fetchOptions.headers,
       },
     })
@@ -170,7 +172,15 @@ export async function apiDelete<T>(
   })
 }
 
-// Re-export for convenience
 const defaultFetchOptions: RequestInit = {
   headers: API_CONFIG.headers,
+}
+
+/**
+ * Attaches the stored session token (if any) as a Bearer Authorization header.
+ */
+function authHeader(): Record<string, string> {
+  const token = getStoredToken()
+
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
