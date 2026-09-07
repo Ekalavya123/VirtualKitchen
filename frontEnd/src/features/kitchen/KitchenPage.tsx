@@ -25,6 +25,7 @@ export default function KitchenLayout({
   // Navigate before clearing auth state so the /kitchen route guard
   // doesn't win the race and redirect to /auth instead of home.
   const handleLogoutAndGoHome = () => {
+    navigate('/')
     onLogout()
   }
   return (

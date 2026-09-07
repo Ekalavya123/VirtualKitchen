@@ -8,6 +8,21 @@ export const API = {
   auth: {
     users: '/api/v1/users',
     userByEmail: (email: string) => `/api/v1/users/email/${email}`,
+
+    signup: '/api/v1/auth/signup',
+    login: '/api/v1/auth/login',
+    google: '/api/v1/auth/google',
+    me: '/api/v1/auth/me',
+
+    sendEmailOtp: '/api/v1/auth/email/send-otp',
+    verifyEmailOtp: '/api/v1/auth/email/verify-otp',
+
+    sendLoginOtp: '/api/v1/auth/login/otp/send',
+    verifyLoginOtp: '/api/v1/auth/login/otp/verify',
+
+    forgotPassword: '/api/v1/auth/password/forgot',
+    verifyPasswordResetOtp: '/api/v1/auth/password/verify-otp',
+    resetPassword: '/api/v1/auth/password/reset',
   },
 
   // Kitchens

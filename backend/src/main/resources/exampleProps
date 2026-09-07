@@ -1,0 +1,63 @@
+# Copy this file to application.properties (already git-ignored) and fill in real values.
+# Anything using ${ENV_VAR:default} can instead be supplied as an environment variable
+# at runtime (recommended for secrets) without touching this file at all.
+
+spring.data.mongodb.uri=REPLACE_WITH_YOUR_MONGODB_CONNECTION_STRING
+spring.data.mongodb.database=REPLACE_WITH_YOUR_DATABASE_NAME
+management.health.mongo.enabled=false
+
+# --- Authentication ---
+# JWT signing secret. MUST be overridden (32+ chars) in any shared/production environment.
+app.jwt.secret=${JWT_SECRET:REPLACE_WITH_A_LONG_RANDOM_SECRET}
+app.jwt.expiration-ms=${JWT_EXPIRATION_MS:86400000}
+
+app.otp.expiration-minutes=${OTP_EXPIRATION_MINUTES:10}
+app.otp.max-attempts=${OTP_MAX_ATTEMPTS:5}
+app.otp.resend-window-minutes=${OTP_RESEND_WINDOW_MINUTES:15}
+app.otp.max-per-window=${OTP_MAX_PER_WINDOW:5}
+
+# SMTP account used to send OTP/verification/reset emails.
+app.mail.from=${MAIL_FROM:REPLACE_WITH_SENDER_EMAIL}
+spring.mail.host=${MAIL_HOST:smtp.gmail.com}
+spring.mail.port=${MAIL_PORT:587}
+spring.mail.username=${MAIL_USERNAME:REPLACE_WITH_SMTP_USERNAME}
+spring.mail.password=${MAIL_PASSWORD:REPLACE_WITH_SMTP_APP_PASSWORD}
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+
+# OAuth client ID from Google Cloud Console (Credentials > OAuth 2.0 Client IDs > Web application).
+# Must match the frontend's VITE_GOOGLE_CLIENT_ID.
+google.oauth.client-id=${GOOGLE_CLIENT_ID:REPLACE_WITH_GOOGLE_OAUTH_CLIENT_ID}
+
+supabase.url=REPLACE_WITH_YOUR_SUPABASE_URL
+supabase.serviceKey=REPLACE_WITH_YOUR_SUPABASE_SERVICE_KEY
+supabase.bucket=recipe-images
+supabase.timeoutMs=300000
+
+#ai.provider=openai
+#ai.openai.api-key=${AI_OPENAI_API_KEY:REPLACE_WITH_OPENAI_API_KEY}
+#ai.openai.base-url=https://api.openai.com
+#ai.openai.chat-endpoint=/v1/chat/completions
+#ai.openai.default-model=gpt-4o-mini
+#ai.openai.timeout-ms=30000
+
+#ai.provider=gemini
+#ai.gemini.apiKey=${AI_GEMINI_API_KEY:REPLACE_WITH_GEMINI_API_KEY}
+#ai.gemini.baseUrl=https://generativelanguage.googleapis.com
+#ai.gemini.chatEndpoint=/v1beta/models/{model}:generateContent
+#ai.gemini.defaultModel=gemini-3.5-flash
+#ai.gemini.imageModel=gemini-2.5-flash-image
+#ai.gemini.timeoutMs=30000
+
+ai.provider=ollama
+ai.ollama.baseUrl=http://localhost:11434
+ai.ollama.chatEndpoint=/api/chat
+ai.ollama.defaultModel=qwen3:8b
+ai.ollama.timeoutMs=300000
+
+ai.image.provider=drawthings
+ai.drawthings.baseUrl=http://localhost:7860
+ai.drawthings.endpoint=/sdapi/v1/txt2img
+ai.drawthings.width=512
+ai.drawthings.height=512
+ai.drawthings.timeoutMs=300000

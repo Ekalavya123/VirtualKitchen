@@ -25,6 +25,15 @@ public class User {
 
     private String passwordHash;
 
+    private boolean emailVerified = false;
+
+    private AuthProvider authProvider = AuthProvider.LOCAL;
+
+    @Indexed(unique = true, sparse = true)
+    private String googleId;
+
+    private UserType userType = UserType.USER;
+
     @CreatedDate
     private LocalDateTime createdAt;
 

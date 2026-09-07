@@ -29,6 +29,7 @@ export const INGREDIENT_CATALOG = [
   { id: 'milk', name: 'Milk', category: 'Dairy', icon: 'MK', defaultUnit: 'ml' },
   { id: 'butter', name: 'Butter', category: 'Dairy', icon: 'BT', defaultUnit: 'tbsp' },
   { id: 'chicken', name: 'Chicken', category: 'Protein', icon: 'CK', defaultUnit: 'g' },
+  { id: 'paneer', name: 'Paneer', category: 'Protein', icon: 'PN', defaultUnit: 'g' },
   { id: 'custom', name: 'Custom Ingredient', category: 'Other', icon: 'CU', defaultUnit: 'custom' },
 ] as const
 

@@ -17,7 +17,8 @@ import RecipeHomePage from '../features/flow-editor/RecipeHomePage'
 import FlowEditor from '../features/flow-editor/FlowEditor'
 import HomePage from '../features/HomePage'
 import type { User } from '../types/User'
-import { AuthApi, KitchenApi } from '../api'
+import { AuthenticationApi, KitchenApi } from '../api'
+import { clearStoredToken, isAuthenticated } from '../shared/auth/session'
 import '../App.css'
 
 interface Kitchen {
@@ -25,8 +26,6 @@ interface Kitchen {
   name: string
   ownerId: number
 }
-
-const SESSION_EMAIL_KEY = 'virtual-kitchen.session.email'
 
 type RecipeRouteState = {
   recipeTitle?: string
@@ -96,13 +95,13 @@ function HomeRoute({onLoginSuccess,}: { onLoginSuccess: (user: User, kitchen: Ki
     navigate('/kitchen/inventory')
   }
 
-  const isAuthenticated = Boolean(localStorage.getItem(SESSION_EMAIL_KEY)!== null)
+  const hasSession = isAuthenticated()
 
   return (
     <>
       <HomePage
         onTryIt={() => {
-          isAuthenticated ? navigate('/kitchen/recipes') : setShowAuthModal(true)
+          hasSession ? navigate('/kitchen/recipes') : setShowAuthModal(true)
         }}
         onLogin={() => setShowAuthModal(true)}
       />
@@ -125,15 +124,13 @@ function App() {
 
   useEffect(() => {
     const restoreSession = async () => {
-      const storedEmail = localStorage.getItem(SESSION_EMAIL_KEY)?.trim()
-
-      if (!storedEmail) {
+      if (!isAuthenticated()) {
         setIsRestoringSession(false)
         return
       }
 
       try {
-        const user = await AuthApi.getUserByEmail(storedEmail)
+        const user = await AuthenticationApi.me()
         const kitchensData = await KitchenApi.getKitchenByOwnerId(user.id)
         const kitchens = Array.isArray(kitchensData) ? kitchensData : [kitchensData]
         const kitchen = kitchens[0]
@@ -146,7 +143,7 @@ function App() {
         setCurrentKitchen(kitchen)
       } catch (error) {
         console.error('Session restore failed:', error)
-        localStorage.removeItem(SESSION_EMAIL_KEY)
+        clearStoredToken()
         setCurrentUser(null)
         setCurrentKitchen(null)
       } finally {
@@ -158,13 +155,12 @@ function App() {
   }, [])
 
   const handleLoginSuccess = (user: User, kitchen: Kitchen) => {
-    localStorage.setItem(SESSION_EMAIL_KEY, user.email)
     setCurrentUser(user)
     setCurrentKitchen(kitchen)
   }
 
   const handleLogout = () => {
-    localStorage.removeItem(SESSION_EMAIL_KEY)
+    clearStoredToken()
     setCurrentUser(null)
     setCurrentKitchen(null)
   }
@@ -173,7 +169,7 @@ function App() {
     return null
   }
 
-  const isAuthenticated = Boolean(
+  const isLoggedIn = Boolean(
     currentUser && currentKitchen,
   )
 
@@ -184,7 +180,7 @@ function App() {
         <Route
           path="/auth"
           element={
-            isAuthenticated ? (
+            isLoggedIn ? (
               <Navigate
                 to="/kitchen/inventory"
                 replace
@@ -198,7 +194,7 @@ function App() {
         <Route
           path="/kitchen"
           element={
-            isAuthenticated && currentUser && currentKitchen ? (
+            isLoggedIn && currentUser && currentKitchen ? (
               <KitchenLayout
                 user={currentUser}
                 kitchen={currentKitchen}
@@ -275,7 +271,7 @@ function App() {
           element={
             <Navigate
               to={
-                isAuthenticated
+                isLoggedIn
                   ? '/kitchen/inventory'
                   : '/auth'
               }
