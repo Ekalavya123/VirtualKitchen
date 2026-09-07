@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { RecipeApi, type Recipe } from '../../api'
+import { useNotifications } from '../../shared/components/notifications/NotificationProvider'
 import './styles/flow-editor.css'
 import recipeIcon from '../../assets/kitchen/recipeIcon.png'
 
@@ -14,6 +15,7 @@ type RecipeHomePageProps = {
 type RecipeCardProps = {
   recipe: Recipe
   variant: RecipeTab
+  highlighted?: boolean
   onOpen: () => void
   onDelete?: () => void
   onToggleVisibility?: () => void
@@ -23,13 +25,14 @@ type RecipeCardProps = {
 function RecipeCard({
   recipe,
   variant,
+  highlighted,
   onOpen,
   onDelete,
   onToggleVisibility,
   onAddToMyRecipes,
 }: RecipeCardProps) {
   return (
-    <article className="recipe-card group">
+    <article className={`recipe-card group${highlighted ? ' recipe-card-highlighted' : ''}`}>
       <button
         onClick={onOpen}
         className="recipe-card-content"
@@ -417,6 +420,95 @@ function ViewRecipeModal({
   )
 }
 
+type ConfirmVisibilityModalProps = {
+  recipe: Recipe | null
+  loading: boolean
+  onConfirm: () => void
+  onClose: () => void
+}
+
+function ConfirmVisibilityModal({
+  recipe,
+  loading,
+  onConfirm,
+  onClose,
+}: ConfirmVisibilityModalProps) {
+  if (!recipe) {
+    return null
+  }
+
+  const makingPublic = recipe.visibility !== 'PUBLIC'
+
+  return (
+    <div
+      className="recipe-modal-backdrop"
+      onMouseDown={e => {
+        if (e.target === e.currentTarget && !loading) {
+          onClose()
+        }
+      }}
+    >
+      <div
+        className="recipe-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-visibility-title"
+      >
+        <div className="recipe-modal-header">
+          <div>
+            <div className="mb-1 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-[var(--flow-accent)]">
+              {makingPublic ? 'Make public' : 'Make private'}
+            </div>
+
+            <h2
+              id="confirm-visibility-title"
+              className="text-xl font-bold text-[var(--flow-text)]"
+            >
+              {makingPublic ? 'Make this recipe public?' : 'Make this recipe private?'}
+            </h2>
+          </div>
+
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="recipe-modal-close"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="recipe-modal-body">
+          <p className="text-sm text-[var(--flow-text-muted)]">
+            {makingPublic
+              ? 'Anyone browsing Global Recipes will be able to view this recipe and add a copy of it to their own kitchen. You can make it private again at any time.'
+              : 'This recipe will be removed from Global Recipes and other users will no longer be able to find or add it. Copies already added to other kitchens will not be affected.'}
+          </p>
+        </div>
+
+        <div className="recipe-modal-footer">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="recipe-secondary-button"
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="recipe-primary-button"
+          >
+            {loading ? 'Updating...' : `Confirm`}
+            {!loading && <span aria-hidden="true">→</span>}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function formatDate(value: string) {
   const date = new Date(value)
 
@@ -439,6 +531,8 @@ export default function RecipeHomePage({
   const handleOpenRecipe =
     onCreateRecipe || onOpenRecipies
 
+  const { notifySuccess, notifyError } = useNotifications()
+
   const [activeTab, setActiveTab] = useState<RecipeTab>('mine')
 
   const [title, setTitle] = useState('')
@@ -457,6 +551,12 @@ export default function RecipeHomePage({
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [viewRecipe, setViewRecipe] = useState<Recipe | null>(null)
 
+  const [visibilityRecipe, setVisibilityRecipe] = useState<Recipe | null>(null)
+  const [visibilityLoading, setVisibilityLoading] = useState(false)
+
+  const [highlightedRecipeId, setHighlightedRecipeId] = useState<number | null>(null)
+  const highlightTimeoutRef = useRef<number | null>(null)
+
   const loadRecipes = async () => {
     try {
       setRecipesLoading(true)
@@ -466,7 +566,7 @@ export default function RecipeHomePage({
       setRecipes(items || [])
     } catch (err) {
       console.error(err)
-      setError(
+      notifyError(
         err instanceof Error
           ? err.message
           : 'Unable to load recipes',
@@ -485,7 +585,7 @@ export default function RecipeHomePage({
       setGlobalRecipes(items || [])
     } catch (err) {
       console.error(err)
-      setError(
+      notifyError(
         err instanceof Error
           ? err.message
           : 'Unable to load global recipes',
@@ -494,6 +594,14 @@ export default function RecipeHomePage({
       setGlobalRecipesLoading(false)
     }
   }
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current !== null) {
+        window.clearTimeout(highlightTimeoutRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     void loadRecipes()
@@ -582,10 +690,11 @@ export default function RecipeHomePage({
       setRecipes(current =>
         current.filter(recipe => recipe.id !== recipeId),
       )
+      notifySuccess('Recipe deleted.')
     } catch (err) {
       console.error(err)
 
-      setError(
+      notifyError(
         err instanceof Error
           ? err.message
           : 'Unable to delete recipe',
@@ -593,35 +702,73 @@ export default function RecipeHomePage({
     }
   }
 
-  const handleToggleVisibility = async (recipe: Recipe) => {
+  const requestToggleVisibility = (recipe: Recipe) => {
+    setVisibilityRecipe(recipe)
+  }
+
+  const closeVisibilityModal = () => {
+    if (visibilityLoading) {
+      return
+    }
+
+    setVisibilityRecipe(null)
+  }
+
+  const confirmToggleVisibility = async () => {
+    if (!visibilityRecipe) {
+      return
+    }
+
+    const recipe = visibilityRecipe
     const nextVisibility = recipe.visibility === 'PUBLIC' ? 'PRIVATE' : 'PUBLIC'
 
     try {
+      setVisibilityLoading(true)
+
       const updated = await RecipeApi.updateVisibility(recipe.id, userId, nextVisibility)
 
       setRecipes(current =>
         current.map(item => (item.id === recipe.id ? updated : item)),
       )
+      setVisibilityRecipe(null)
+      notifySuccess(
+        nextVisibility === 'PUBLIC'
+          ? 'Recipe is now public.'
+          : 'Recipe is now private.',
+      )
     } catch (err) {
       console.error(err)
 
-      setError(
+      notifyError(
         err instanceof Error
           ? err.message
           : 'Unable to update recipe visibility',
       )
+    } finally {
+      setVisibilityLoading(false)
     }
   }
 
   const handleAddToMyRecipes = async (recipe: Recipe) => {
     try {
-      await RecipeApi.copyRecipe(recipe.id, userId)
+      const copy = await RecipeApi.copyRecipe(recipe.id, userId)
       await loadRecipes()
       setActiveTab('mine')
+
+      notifySuccess('Recipe added to your kitchen.')
+
+      if (highlightTimeoutRef.current !== null) {
+        window.clearTimeout(highlightTimeoutRef.current)
+      }
+
+      setHighlightedRecipeId(copy.id)
+      highlightTimeoutRef.current = window.setTimeout(() => {
+        setHighlightedRecipeId(null)
+      }, 3000)
     } catch (err) {
       console.error(err)
 
-      setError(
+      notifyError(
         err instanceof Error
           ? err.message
           : 'Unable to add recipe to My Recipes',
@@ -683,13 +830,6 @@ export default function RecipeHomePage({
           recipeCount={filteredRecipes.length}
         />
 
-        {/* Error */}
-        {error && !createModalOpen && (
-          <div className="recipe-form-error mb-5">
-            {error}
-          </div>
-        )}
-
         {/* Loading */}
         {(activeTab === 'mine' ? recipesLoading : globalRecipesLoading) ? (
           <div className="recipe-grid">
@@ -721,6 +861,7 @@ export default function RecipeHomePage({
                 key={recipe.id}
                 recipe={recipe}
                 variant={activeTab}
+                highlighted={recipe.id === highlightedRecipeId}
                 onOpen={() =>
                   activeTab === 'mine'
                     ? handleOpenRecipe?.(recipe.id, recipe.name)
@@ -730,7 +871,7 @@ export default function RecipeHomePage({
                   void handleDeleteRecipe(recipe.id)
                 }
                 onToggleVisibility={() =>
-                  void handleToggleVisibility(recipe)
+                  requestToggleVisibility(recipe)
                 }
                 onAddToMyRecipes={() =>
                   void handleAddToMyRecipes(recipe)
@@ -758,6 +899,14 @@ export default function RecipeHomePage({
       <ViewRecipeModal
         recipe={viewRecipe}
         onClose={() => setViewRecipe(null)}
+      />
+
+      {/* Public/Private Confirmation Modal */}
+      <ConfirmVisibilityModal
+        recipe={visibilityRecipe}
+        loading={visibilityLoading}
+        onConfirm={() => void confirmToggleVisibility()}
+        onClose={closeVisibilityModal}
       />
     </div>
   )

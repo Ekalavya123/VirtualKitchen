@@ -1,16 +1,16 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
-import com.processVisualisation.virtualKitchen.recipe.dto.StepExecutionRequestDTO;
-import com.processVisualisation.virtualKitchen.recipe.dto.StepExecutionResponseDTO;
-import com.processVisualisation.virtualKitchen.recipe.dto.StepExecutionUpdateDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeStepExecutionRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeStepExecutionResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeStepExecutionUpdateDTO;
 
 import java.util.List;
 
 public interface IStepExecutionService {
 
-    StepExecutionResponseDTO create(StepExecutionRequestDTO dto);
+    RecipeStepExecutionResponseDTO create(RecipeStepExecutionRequestDTO dto);
 
-    StepExecutionResponseDTO update(Long id, StepExecutionUpdateDTO dto);
+    RecipeStepExecutionResponseDTO update(Long id, RecipeStepExecutionUpdateDTO dto);
 
-    List<StepExecutionResponseDTO> getByProcess(Long processExecutionId);
+    List<RecipeStepExecutionResponseDTO> getByProcess(Long processExecutionId);
 }

@@ -1,8 +1,8 @@
 package com.processVisualisation.virtualKitchen.service;
 
 import com.processVisualisation.virtualKitchen.ai.dto.VisualizationResponseDTO;
-import com.processVisualisation.virtualKitchen.recipe.model.FlowDocument;
-import com.processVisualisation.virtualKitchen.recipe.repository.FlowRepository;
+import com.processVisualisation.virtualKitchen.recipe.model.Recipe;
+import com.processVisualisation.virtualKitchen.recipe.repository.RecipeRepository;
 import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationClipRepository;
 import com.processVisualisation.virtualKitchen.ai.service.AIVisualizationServiceImpl;
 import org.junit.jupiter.api.Test;
@@ -24,21 +24,21 @@ class AIVisualizationServiceImplTest {
     @Test
     void shouldGenerateRootAndChildClipsForOrderedSteps() {
         AIVisualizationClipRepository clipRepository = mock(AIVisualizationClipRepository.class);
-        FlowRepository flowRepository = mock(FlowRepository.class);
+        RecipeRepository recipeRepository = mock(RecipeRepository.class);
         
         when(clipRepository.findByProcessTemplateIdOrderByStepOrderAsc(101L)).thenReturn(List.of());
         when(clipRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         
         // Create flow document with nodes and templateId
-        FlowDocument flow = new FlowDocument();
+        Recipe flow = new Recipe();
         flow.setFlowId("flow-101");
         flow.setTemplateId(101L);
         flow.setNodes(createTestNodes());
         flow.setEdges(new ArrayList<>());
         
-        when(flowRepository.findByFlowId("flow-101")).thenReturn(java.util.Optional.of(flow));
+        when(recipeRepository.findByFlowId("flow-101")).thenReturn(java.util.Optional.of(flow));
 
-        AIVisualizationServiceImpl service = new AIVisualizationServiceImpl(clipRepository, flowRepository);
+        AIVisualizationServiceImpl service = new AIVisualizationServiceImpl(clipRepository, recipeRepository);
 
         VisualizationResponseDTO response = service.generateVisualization("flow-101");
 
@@ -50,10 +50,10 @@ class AIVisualizationServiceImplTest {
         assertEquals("Cook", response.getClips().get(1).getTitle());
     }
 
-    private List<FlowDocument.NodeDocument> createTestNodes() {
-        List<FlowDocument.NodeDocument> nodes = new ArrayList<>();
+    private List<Recipe.NodeDocument> createTestNodes() {
+        List<Recipe.NodeDocument> nodes = new ArrayList<>();
         
-        FlowDocument.NodeDocument node1 = new FlowDocument.NodeDocument();
+        Recipe.NodeDocument node1 = new Recipe.NodeDocument();
         node1.setId("node-1");
         node1.setType("recipeStepNode");
         Map<String, Object> data1 = new LinkedHashMap<>();
@@ -61,7 +61,7 @@ class AIVisualizationServiceImplTest {
         node1.setData(data1);
         nodes.add(node1);
         
-        FlowDocument.NodeDocument node2 = new FlowDocument.NodeDocument();
+        Recipe.NodeDocument node2 = new Recipe.NodeDocument();
         node2.setId("node-2");
         node2.setType("recipeStepNode");
         Map<String, Object> data2 = new LinkedHashMap<>();

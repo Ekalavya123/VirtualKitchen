@@ -1,24 +1,24 @@
 package com.processVisualisation.virtualKitchen.common.mapper;
 
-import com.processVisualisation.virtualKitchen.recipe.model.StepExecution;
-import com.processVisualisation.virtualKitchen.recipe.model.StepStatus;
-import com.processVisualisation.virtualKitchen.recipe.dto.StepExecutionRequestDTO;
-import com.processVisualisation.virtualKitchen.recipe.dto.StepExecutionResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeStepExecution;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeStepStatus;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeStepExecutionRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeStepExecutionResponseDTO;
 import org.springframework.stereotype.Component;
 
 @Component
 public class StepExecutionMapper {
 
-    public StepExecution toEntity(StepExecutionRequestDTO dto){
-        StepExecution step = new StepExecution();
+    public RecipeStepExecution toEntity(RecipeStepExecutionRequestDTO dto){
+        RecipeStepExecution step = new RecipeStepExecution();
         step.setProcessExecutionId(dto.getProcessExecutionId());
         step.setStepDefinitionId(dto.getStepDefinitionId());
-        step.setStatus(StepStatus.NOT_STARTED);
+        step.setStatus(RecipeStepStatus.NOT_STARTED);
         return step;
     }
 
-    public StepExecutionResponseDTO toDTO(StepExecution step){
-        return StepExecutionResponseDTO.builder()
+    public RecipeStepExecutionResponseDTO toDTO(RecipeStepExecution step){
+        return RecipeStepExecutionResponseDTO.builder()
                 .id(step.getId())
                 .processExecutionId(step.getProcessExecutionId())
                 .stepDefinitionId(step.getStepDefinitionId())

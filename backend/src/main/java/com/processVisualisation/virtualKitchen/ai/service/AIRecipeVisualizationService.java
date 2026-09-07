@@ -9,10 +9,10 @@ import com.processVisualisation.virtualKitchen.restclient.dto.AIRequest;
 import com.processVisualisation.virtualKitchen.restclient.dto.AIResponse;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeVisualizationResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeVisualizationStepResponseDTO;
-import com.processVisualisation.virtualKitchen.recipe.model.FlowDocument;
+import com.processVisualisation.virtualKitchen.recipe.model.Recipe;
 import com.processVisualisation.virtualKitchen.ai.model.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.ai.model.VisualizationAssetType;
-import com.processVisualisation.virtualKitchen.recipe.repository.FlowRepository;
+import com.processVisualisation.virtualKitchen.recipe.repository.RecipeRepository;
 import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationAssetRepository;
 import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.common.utils.VisualizationKeyBuilder;
@@ -31,7 +31,7 @@ public class AIRecipeVisualizationService {
     private static final String RECIPE_STEP_NODE_TYPE = "recipeStepNode";
     private static final Logger logger = LoggerFactory.getLogger(AIRecipeVisualizationService.class);
 
-    private final FlowRepository flowRepository;
+    private final RecipeRepository recipeRepository;
     private final AIVisualizationAssetRepository AIVisualizationAssetRepository;
     private final SequenceGeneratorService sequenceGeneratorService;
     private final ImageStorageClient imageStorageClient;
@@ -41,7 +41,7 @@ public class AIRecipeVisualizationService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AIRecipeVisualizationService(
-            FlowRepository flowRepository,
+            RecipeRepository recipeRepository,
             AIVisualizationAssetRepository AIVisualizationAssetRepository,
             SequenceGeneratorService sequenceGeneratorService,
             AIClient aiClient,
@@ -49,7 +49,7 @@ public class AIRecipeVisualizationService {
             ImageStorageClient imageStorageClient,
             AIVisualizationPromptBuilder promptBuilder
     ) {
-        this.flowRepository = flowRepository;
+        this.recipeRepository = recipeRepository;
         this.AIVisualizationAssetRepository = AIVisualizationAssetRepository;
         this.sequenceGeneratorService = sequenceGeneratorService;
         this.aiClient = aiClient;
@@ -59,7 +59,7 @@ public class AIRecipeVisualizationService {
     }
 
     public RecipeVisualizationResponseDTO generateVisualization(String recipeId) {
-        Optional<FlowDocument> flowOpt = flowRepository.findByFlowId(recipeId);
+        Optional<Recipe> flowOpt = recipeRepository.findByFlowId(recipeId);
         if (flowOpt.isEmpty()) {
             return RecipeVisualizationResponseDTO.builder()
                     .recipeId(recipeId)
@@ -68,13 +68,13 @@ public class AIRecipeVisualizationService {
                     .build();
         }
 
-        FlowDocument flow = flowOpt.get();
-        List<FlowDocument.NodeDocument> orderedSteps = orderRecipeStepNodes(flow);
+        Recipe flow = flowOpt.get();
+        List<Recipe.NodeDocument> orderedSteps = orderRecipeStepNodes(flow);
 
         List<RecipeVisualizationStepResponseDTO> results = new ArrayList<>();
         Map<String, Object> previousStepFields = null;
 
-        for (FlowDocument.NodeDocument node : orderedSteps) {
+        for (Recipe.NodeDocument node : orderedSteps) {
             Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
             Map<String, Object> stepFields = extractStepFields(data);
 
@@ -106,7 +106,7 @@ public class AIRecipeVisualizationService {
             previousStepFields = stepFields;
         }
 
-        flowRepository.save(flow);
+        recipeRepository.save(flow);
 
         return RecipeVisualizationResponseDTO.builder()
                 .recipeId(recipeId)
@@ -205,7 +205,7 @@ public class AIRecipeVisualizationService {
         return content;
     }
 
-    private void attachAssetToNode(FlowDocument.NodeDocument node, Map<String, Object> data, VisualizationAsset asset) {
+    private void attachAssetToNode(Recipe.NodeDocument node, Map<String, Object> data, VisualizationAsset asset) {
         data.put("visualizationAssetId", asset.getId());
         data.put("imagePrompt", asset.getImagePrompt());
         data.put("imageUrl", asset.getImageUrl());
@@ -222,13 +222,13 @@ public class AIRecipeVisualizationService {
      * Orders recipeStepNode nodes by following the flow's edges (topological order)
      * instead of relying on array position, so previous-step continuity is accurate.
      */
-    private List<FlowDocument.NodeDocument> orderRecipeStepNodes(FlowDocument flow) {
-        List<FlowDocument.NodeDocument> recipeStepNodes = flow.getNodes().stream()
+    private List<Recipe.NodeDocument> orderRecipeStepNodes(Recipe flow) {
+        List<Recipe.NodeDocument> recipeStepNodes = flow.getNodes().stream()
                 .filter(node -> RECIPE_STEP_NODE_TYPE.equals(node.getType()))
                 .collect(Collectors.toList());
 
         Set<String> stepIds = recipeStepNodes.stream()
-                .map(FlowDocument.NodeDocument::getId)
+                .map(Recipe.NodeDocument::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         Map<String, List<String>> adjacency = new HashMap<>();
@@ -236,7 +236,7 @@ public class AIRecipeVisualizationService {
         stepIds.forEach(id -> indegree.put(id, 0));
 
         if (flow.getEdges() != null) {
-            for (FlowDocument.EdgeDocument edge : flow.getEdges()) {
+            for (Recipe.EdgeDocument edge : flow.getEdges()) {
                 String source = edge.getSource();
                 String target = edge.getTarget();
                 if (stepIds.contains(source) && stepIds.contains(target)) {
@@ -271,12 +271,12 @@ public class AIRecipeVisualizationService {
             }
         }
 
-        Map<String, FlowDocument.NodeDocument> nodeById = recipeStepNodes.stream()
-                .collect(Collectors.toMap(FlowDocument.NodeDocument::getId, node -> node, (a, b) -> a));
+        Map<String, Recipe.NodeDocument> nodeById = recipeStepNodes.stream()
+                .collect(Collectors.toMap(Recipe.NodeDocument::getId, node -> node, (a, b) -> a));
 
-        List<FlowDocument.NodeDocument> ordered = new ArrayList<>();
+        List<Recipe.NodeDocument> ordered = new ArrayList<>();
         for (String id : orderedIds) {
-            FlowDocument.NodeDocument node = nodeById.get(id);
+            Recipe.NodeDocument node = nodeById.get(id);
             if (node != null) {
                 ordered.add(node);
             }

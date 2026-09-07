@@ -136,6 +136,23 @@
   box-shadow: var(--flow-shadow-panel);
 }
 
+.recipe-card-highlighted {
+  border-color: var(--flow-accent);
+  box-shadow: 0 0 0 3px var(--flow-accent-soft), var(--flow-shadow-panel);
+  animation: recipe-card-highlight-pulse 1.4s ease-in-out 2;
+}
+
+@keyframes recipe-card-highlight-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px var(--flow-accent-soft), var(--flow-shadow-panel);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px var(--flow-accent-soft), var(--flow-shadow-panel);
+  }
+}
+
 .recipe-card-content {
   display: block;
   width: 100%;

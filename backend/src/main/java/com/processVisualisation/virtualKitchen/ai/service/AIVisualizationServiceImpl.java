@@ -2,9 +2,9 @@ package com.processVisualisation.virtualKitchen.ai.service;
 
 import com.processVisualisation.virtualKitchen.ai.dto.VisualizationClipResponseDTO;
 import com.processVisualisation.virtualKitchen.ai.dto.VisualizationResponseDTO;
-import com.processVisualisation.virtualKitchen.recipe.model.FlowDocument;
+import com.processVisualisation.virtualKitchen.recipe.model.Recipe;
 import com.processVisualisation.virtualKitchen.ai.model.VisualizationClip;
-import com.processVisualisation.virtualKitchen.recipe.repository.FlowRepository;
+import com.processVisualisation.virtualKitchen.recipe.repository.RecipeRepository;
 import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationClipRepository;
 import org.springframework.stereotype.Service;
 
@@ -18,17 +18,17 @@ import java.util.Optional;
 public class AIVisualizationServiceImpl implements AIVisualizationService {
 
     private final AIVisualizationClipRepository clipRepository;
-    private final FlowRepository flowRepository;
+    private final RecipeRepository recipeRepository;
 
-    public AIVisualizationServiceImpl(AIVisualizationClipRepository clipRepository, FlowRepository flowRepository) {
+    public AIVisualizationServiceImpl(AIVisualizationClipRepository clipRepository, RecipeRepository recipeRepository) {
         this.clipRepository = clipRepository;
-        this.flowRepository = flowRepository;
+        this.recipeRepository = recipeRepository;
     }
 
     @Override
     public VisualizationResponseDTO generateVisualization(String flowId) {
         // Fetch flow document from database using flowId
-        Optional<FlowDocument> flowOpt = flowRepository.findByFlowId(flowId);
+        Optional<Recipe> flowOpt = recipeRepository.findByFlowId(flowId);
         if (flowOpt.isEmpty()) {
             return VisualizationResponseDTO.builder()
                     .message("Flow not found for flowId: " + flowId)
@@ -36,7 +36,7 @@ public class AIVisualizationServiceImpl implements AIVisualizationService {
                     .build();
         }
 
-        FlowDocument flow = flowOpt.get();
+        Recipe flow = flowOpt.get();
         Long processTemplateId = flow.getTemplateId();
         
         if (processTemplateId == null) {
@@ -51,7 +51,7 @@ public class AIVisualizationServiceImpl implements AIVisualizationService {
         VisualizationClip previousClip = null;
 
         int stepOrder = 0;
-        for (FlowDocument.NodeDocument node : flow.getNodes()) {
+        for (Recipe.NodeDocument node : flow.getNodes()) {
             String type = node.getType();
             if (!"recipeStepNode".equals(type)) {
                 continue;
