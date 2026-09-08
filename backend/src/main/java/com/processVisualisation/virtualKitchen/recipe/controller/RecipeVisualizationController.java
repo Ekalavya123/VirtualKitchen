@@ -1,6 +1,7 @@
 package com.processVisualisation.virtualKitchen.recipe.controller;
 
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeVisualizationResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeVisualizationStepResponseDTO;
 import com.processVisualisation.virtualKitchen.ai.service.AIRecipeVisualizationService;
 import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,6 +27,20 @@ public class RecipeVisualizationController {
         return ApiResponse.<RecipeVisualizationResponseDTO>builder()
                 .success(true)
                 .message(data.getMessage())
+                .data(data)
+                .timestamp(LocalDateTime.now())
+                .build();
+    }
+
+    @PostMapping("/{recipeId}/visualization/steps/{stepId}/generate")
+    public ApiResponse<RecipeVisualizationStepResponseDTO> generateStep(
+            @PathVariable String recipeId,
+            @PathVariable String stepId
+    ) {
+        RecipeVisualizationStepResponseDTO data = AIRecipeVisualizationService.generateVisualizationForStep(recipeId, stepId);
+        return ApiResponse.<RecipeVisualizationStepResponseDTO>builder()
+                .success(true)
+                .message("Visualization generated for step")
                 .data(data)
                 .timestamp(LocalDateTime.now())
                 .build();

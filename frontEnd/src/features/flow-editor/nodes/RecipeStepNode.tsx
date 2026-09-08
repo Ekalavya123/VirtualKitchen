@@ -98,7 +98,9 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
   const cardPaddingY = Math.round(12 * scale)
   const cardPaddingX = Math.round(14 * scale)
   const cardGap = Math.round(9 * scale)
-  const imageHeight = Math.round(88 * scale)
+  // Square-ish thumbnail (roughly matching typical generated image proportions) sized off the
+  // card width, so object-fit: contain has little letterboxing to show around it.
+  const imageBoxSize = Math.round(Math.min(148, Math.max(84, computedWidth * 0.32)))
 
   const syncNodeLayout = useCallback(() => {
     if (nodeId) {
@@ -262,146 +264,150 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
         </span>
       </div>
 
-      {/* Image area */}
-      <div
-        style={{
-          width: '100%',
-          height: imageHeight,
-          borderRadius: 10,
-          overflow: 'hidden',
-          border: `1px solid ${theme.border}`,
-          background: imageUrl ? '#0f172a' : `linear-gradient(135deg, ${theme.soft}, #ffffff)`,
-          flexShrink: 0,
-          position: 'relative',
-        }}
-      >
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt={normalized.title || 'Recipe step'}
-            onError={() => setImageFailed(true)}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-          />
-        ) : (
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 2,
-              color: theme.accentStrong,
-              opacity: 0.55,
-            }}
-          >
-            <span style={{ fontSize: Math.max(16, Math.round(22 * scale)) }} aria-hidden>{theme.emoji}</span>
-            <span style={{ fontSize: Math.max(8, pillFontSize - 1), fontWeight: 700 }}>No image yet</span>
-          </div>
-        )}
-      </div>
-
-      {/* Ingredient emphasis */}
-      {(ingredientName || quantityLabel) && (
-        <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 6 }}>
-          {ingredientName && (
-            <span style={{ fontSize: ingredientFontSize, fontWeight: 700, color: '#0f172a' }}>
-              {ingredientName}
-            </span>
-          )}
-          {quantityLabel && (
-            <span
+      {/* Media row: image thumbnail on the left, step details stacked on the right */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: Math.round(10 * scale) }}>
+        <div
+          style={{
+            width: imageBoxSize,
+            height: imageBoxSize,
+            borderRadius: 10,
+            overflow: 'hidden',
+            border: `1px solid ${theme.border}`,
+            background: imageUrl ? '#0f172a' : `linear-gradient(135deg, ${theme.soft}, #ffffff)`,
+            flexShrink: 0,
+            position: 'relative',
+          }}
+        >
+          {imageUrl ? (
+            <img
+              src={imageUrl}
+              alt={normalized.title || 'Recipe step'}
+              onError={() => setImageFailed(true)}
+              style={{ width: '100%', height: '100%', objectFit: 'contain', objectPosition: 'center', display: 'block' }}
+            />
+          ) : (
+            <div
               style={{
-                fontSize: pillFontSize,
-                fontWeight: 700,
-                padding: '2px 8px',
-                borderRadius: 999,
-                background: theme.soft,
-                color: theme.accentStrong,
-                border: `1px solid ${theme.border}`,
-              }}
-            >
-              {quantityLabel}
-            </span>
-          )}
-          {preparationStyle && (
-            <span style={{ fontSize: pillFontSize, color: '#64748b', fontWeight: 600 }}>
-              {FIELD_ICONS.preparationStyleId} {preparationStyle}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Duration / temperature / flame / repeat badges */}
-      {detailRows.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {detailRows.map((row) => (
-            <span
-              key={row.key}
-              style={{
-                display: 'inline-flex',
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
                 alignItems: 'center',
-                gap: 4,
-                fontSize: pillFontSize,
-                fontWeight: 700,
-                padding: '3px 8px',
-                borderRadius: 999,
-                background: '#f8fafc',
-                color: '#475569',
-                border: '1px solid #e2e8f0',
-              }}
-            >
-              <span aria-hidden>{FIELD_ICONS[row.key] ?? '•'}</span>
-              {row.value}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Notes */}
-      {notes && (
-        <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: Math.round(6 * scale) }}>
-          <div
-            ref={notesRef}
-            style={{
-              fontSize: notesFontSize,
-              color: '#64748b',
-              lineHeight: 1.45,
-              overflow: 'hidden',
-              whiteSpace: 'pre-wrap',
-              display: isNotesExpanded ? 'block' : '-webkit-box',
-              WebkitBoxOrient: isNotesExpanded ? undefined : 'vertical',
-              WebkitLineClamp: isNotesExpanded ? undefined : 2,
-              wordBreak: 'break-word',
-              overflowWrap: 'anywhere',
-              width: '100%',
-            }}
-          >
-            {notes}
-          </div>
-          {(shouldShowReadMore || isNotesExpanded) && (
-            <button
-              type="button"
-              onClick={() => setIsNotesExpanded((value) => !value)}
-              className="nodrag"
-              style={{
-                marginTop: 4,
-                alignSelf: 'flex-start',
-                border: 'none',
-                background: 'transparent',
+                justifyContent: 'center',
+                gap: 2,
                 color: theme.accentStrong,
-                fontSize: readMoreFontSize,
-                fontWeight: 700,
-                cursor: 'pointer',
-                padding: 0,
+                opacity: 0.55,
               }}
             >
-              {isNotesExpanded ? 'Read less' : 'Read more'}
-            </button>
+              <span style={{ fontSize: Math.max(16, Math.round(22 * scale)) }} aria-hidden>{theme.emoji}</span>
+              <span style={{ fontSize: Math.max(8, pillFontSize - 1), fontWeight: 700, textAlign: 'center' }}>No image yet</span>
+            </div>
           )}
         </div>
-      )}
+
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: Math.round(8 * scale) }}>
+          {/* Ingredient emphasis */}
+          {(ingredientName || quantityLabel) && (
+            <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 6 }}>
+              {ingredientName && (
+                <span style={{ fontSize: ingredientFontSize, fontWeight: 700, color: '#0f172a' }}>
+                  {ingredientName}
+                </span>
+              )}
+              {quantityLabel && (
+                <span
+                  style={{
+                    fontSize: pillFontSize,
+                    fontWeight: 700,
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: theme.soft,
+                    color: theme.accentStrong,
+                    border: `1px solid ${theme.border}`,
+                  }}
+                >
+                  {quantityLabel}
+                </span>
+              )}
+              {preparationStyle && (
+                <span style={{ fontSize: pillFontSize, color: '#64748b', fontWeight: 600 }}>
+                  {FIELD_ICONS.preparationStyleId} {preparationStyle}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Duration / temperature / flame / repeat badges */}
+          {detailRows.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {detailRows.map((row) => (
+                <span
+                  key={row.key}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: pillFontSize,
+                    fontWeight: 700,
+                    padding: '3px 8px',
+                    borderRadius: 999,
+                    background: '#f8fafc',
+                    color: '#475569',
+                    border: '1px solid #e2e8f0',
+                  }}
+                >
+                  <span aria-hidden>{FIELD_ICONS[row.key] ?? '•'}</span>
+                  {row.value}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Notes */}
+          {notes && (
+            <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: Math.round(6 * scale) }}>
+              <div
+                ref={notesRef}
+                style={{
+                  fontSize: notesFontSize,
+                  color: '#64748b',
+                  lineHeight: 1.45,
+                  overflow: 'hidden',
+                  whiteSpace: 'pre-wrap',
+                  display: isNotesExpanded ? 'block' : '-webkit-box',
+                  WebkitBoxOrient: isNotesExpanded ? undefined : 'vertical',
+                  WebkitLineClamp: isNotesExpanded ? undefined : 2,
+                  wordBreak: 'break-word',
+                  overflowWrap: 'anywhere',
+                  width: '100%',
+                }}
+              >
+                {notes}
+              </div>
+              {(shouldShowReadMore || isNotesExpanded) && (
+                <button
+                  type="button"
+                  onClick={() => setIsNotesExpanded((value) => !value)}
+                  className="nodrag"
+                  style={{
+                    marginTop: 4,
+                    alignSelf: 'flex-start',
+                    border: 'none',
+                    background: 'transparent',
+                    color: theme.accentStrong,
+                    fontSize: readMoreFontSize,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  {isNotesExpanded ? 'Read less' : 'Read more'}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       <Handle
         type="source"

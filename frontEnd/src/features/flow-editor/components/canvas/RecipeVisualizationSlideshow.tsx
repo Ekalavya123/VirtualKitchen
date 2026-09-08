@@ -14,22 +14,30 @@ type RecipeVisualizationSlideshowProps = {
   onClose: () => void
 }
 
-const AUTO_PLAY_INTERVAL_MS = 3500
+const AUTO_PLAY_INTERVAL_MS = 1800
 
 export default function RecipeVisualizationSlideshow({ steps, onClose }: RecipeVisualizationSlideshowProps) {
   const [index, setIndex] = useState(0)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [direction, setDirection] = useState<'next' | 'prev'>('next')
 
   const hasSteps = steps.length > 0
   const currentStep = hasSteps ? steps[Math.min(index, steps.length - 1)] : undefined
 
-  const goToPrevious = () => setIndex((current) => Math.max(0, current - 1))
-  const goToNext = () => setIndex((current) => Math.min(steps.length - 1, current + 1))
+  const goToPrevious = () => {
+    setDirection('prev')
+    setIndex((current) => Math.max(0, current - 1))
+  }
+  const goToNext = () => {
+    setDirection('next')
+    setIndex((current) => Math.min(steps.length - 1, current + 1))
+  }
 
   useEffect(() => {
     if (!isPlaying || !hasSteps) return
 
     const timer = window.setInterval(() => {
+      setDirection('next')
       setIndex((current) => {
         if (current >= steps.length - 1) {
           return 0
@@ -55,25 +63,30 @@ export default function RecipeVisualizationSlideshow({ steps, onClose }: RecipeV
           </div>
         ) : (
           <>
-            <div className="recipe-slideshow-body">
-              {currentStep?.imageUrl ? (
-                <img className="recipe-slideshow-image" src={currentStep.imageUrl} alt={currentStep.title} />
-              ) : (
-                <div className="recipe-slideshow-placeholder">
-                  <span className="recipe-slideshow-placeholder-icon">🖼️</span>
-                  <span>Image not generated yet</span>
-                </div>
-              )}
-            </div>
-
-            <div className="recipe-slideshow-caption">
-              <div className="recipe-slideshow-step-label">
-                Step {currentStep?.stepNumber ?? index + 1} of {steps.length}
+            <div
+              key={currentStep?.id ?? index}
+              className={`recipe-slideshow-stage recipe-slideshow-stage-${direction}`}
+            >
+              <div className="recipe-slideshow-body">
+                {currentStep?.imageUrl ? (
+                  <img className="recipe-slideshow-image" src={currentStep.imageUrl} alt={currentStep.title} />
+                ) : (
+                  <div className="recipe-slideshow-placeholder">
+                    <span className="recipe-slideshow-placeholder-icon">🖼️</span>
+                    <span>Image not generated yet</span>
+                  </div>
+                )}
               </div>
-              <div className="recipe-slideshow-step-title">{currentStep?.title || 'Untitled step'}</div>
-              {currentStep?.description && (
-                <div className="recipe-slideshow-step-description">{currentStep.description}</div>
-              )}
+
+              <div className="recipe-slideshow-caption">
+                <div className="recipe-slideshow-step-label">
+                  Step {currentStep?.stepNumber ?? index + 1} of {steps.length}
+                </div>
+                <div className="recipe-slideshow-step-title">{currentStep?.title || 'Untitled step'}</div>
+                {currentStep?.description && (
+                  <div className="recipe-slideshow-step-description">{currentStep.description}</div>
+                )}
+              </div>
             </div>
 
             <div className="recipe-slideshow-controls">

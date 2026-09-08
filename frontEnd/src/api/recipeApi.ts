@@ -175,4 +175,14 @@ export const RecipeVisualizationApi = {
       {}
     )
   },
+
+  /**
+   * Generate (or reuse) the visualization asset for a single recipe step
+   */
+  async generateStep(recipeId: number | string, stepId: string): Promise<RecipeVisualizationStep> {
+    return apiPost<RecipeVisualizationStep>(
+      API.recipeVisualization.generateStep(recipeId, stepId),
+      {}
+    )
+  },
 }

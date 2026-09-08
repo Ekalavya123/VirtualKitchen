@@ -37,6 +37,46 @@
   background: #f1f5f9;
 }
 
+.recipe-slideshow-stage {
+  display: flex;
+  flex-direction: column;
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: both;
+}
+
+.recipe-slideshow-stage-next {
+  animation-name: recipe-slideshow-slide-in-next;
+}
+
+.recipe-slideshow-stage-prev {
+  animation-name: recipe-slideshow-slide-in-prev;
+}
+
+@keyframes recipe-slideshow-slide-in-next {
+  from {
+    transform: translateX(28px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes recipe-slideshow-slide-in-prev {
+  from {
+    transform: translateX(-28px);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recipe-slideshow-stage {
+    animation: none;
+  }
+}
+
 .recipe-slideshow-empty {
   padding: 48px 24px;
   text-align: center;

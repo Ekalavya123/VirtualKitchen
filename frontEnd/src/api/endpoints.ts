@@ -76,5 +76,7 @@ export const API = {
   // Recipe step visualization assets (image/video prompts per step)
   recipeVisualization: {
     generate: (recipeId: number | string) => `/api/recipes/${String(recipeId)}/visualization/generate`,
+    generateStep: (recipeId: number | string, stepId: string) =>
+      `/api/recipes/${String(recipeId)}/visualization/steps/${stepId}/generate`,
   },
 }
