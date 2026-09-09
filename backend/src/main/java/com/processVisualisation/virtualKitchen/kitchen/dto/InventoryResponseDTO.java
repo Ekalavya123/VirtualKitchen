@@ -7,6 +7,11 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Response payload returned to clients describing an inventory item's current
+ * state, including its kitchen/user scope, item identity and name, quantity,
+ * unit, and when it was last updated.
+ */
 @Data
 @Builder
 public class InventoryResponseDTO {

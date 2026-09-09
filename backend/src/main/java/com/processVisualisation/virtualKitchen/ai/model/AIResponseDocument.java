@@ -11,6 +11,11 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * MongoDB document persisting a single AI interaction record (chat, flow
+ * generation, etc.) in the {@code ai_responses} collection, used for
+ * analytics and training purposes.
+ */
 @Data
 @Document(collection = "ai_responses")
 public class AIResponseDocument {

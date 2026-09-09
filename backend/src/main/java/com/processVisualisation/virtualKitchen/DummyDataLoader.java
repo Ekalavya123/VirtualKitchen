@@ -64,6 +64,16 @@ public class DummyDataLoader implements CommandLineRunner {
         this.sequenceGeneratorService = sequenceGeneratorService;
     }
 
+    /**
+     * Seeds a demo user (if not already resolvable by id or email), a default kitchen for
+     * that user, a small set of demo equipment/ingredients, and matching inventory and
+     * kitchen-inventory associations. Existing records are reused rather than duplicated.
+     *
+     * @param targetUserId    id of an existing user to reuse, or {@code null} to fall back to email/defaults
+     * @param targetUserEmail email used to look up or create the demo user; falls back to {@link #DEFAULT_USER_EMAIL} if blank/null
+     * @param targetUserName  name used when creating a new demo user; falls back to {@link #DEFAULT_USER_NAME} if null
+     * @param targetKitchenName name used when creating the demo kitchen; falls back to {@link #DEFAULT_KITCHEN_NAME} if null
+     */
     public void runLoader(Long targetUserId, String targetUserEmail, String targetUserName, String targetKitchenName) {
         Long userId = targetUserId != null ? targetUserId : DEFAULT_USER_ID;
         String userEmail = targetUserEmail != null ? targetUserEmail : DEFAULT_USER_EMAIL;
@@ -198,6 +208,14 @@ public class DummyDataLoader implements CommandLineRunner {
                 });
     }
 
+    /**
+     * No-op override of {@link CommandLineRunner#run}. This loader no longer runs
+     * automatically at application startup; invoke {@link #runLoader} manually instead
+     * (for example, from the {@code PresetUp} utility).
+     *
+     * @param args command-line arguments passed by Spring Boot (unused)
+     * @throws Exception never thrown by this implementation; declared by the {@link CommandLineRunner} contract
+     */
     @Override
     public void run(String... args) throws Exception {
         runLoader(null,null,null,null);

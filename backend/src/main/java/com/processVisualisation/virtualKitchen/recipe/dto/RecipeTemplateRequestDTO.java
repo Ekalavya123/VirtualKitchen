@@ -4,6 +4,10 @@ import lombok.Data;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
+/**
+ * Request payload for creating a new recipe template, capturing its name,
+ * description and the id of the user creating it.
+ */
 @Data
 public class RecipeTemplateRequestDTO {
 

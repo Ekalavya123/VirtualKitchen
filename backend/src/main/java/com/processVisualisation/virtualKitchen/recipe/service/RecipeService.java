@@ -12,6 +12,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Service for persisting and retrieving the React Flow-style process visualization graph
+ * (nodes, edges, viewport) for a recipe. Converts the loosely-typed JSON-like maps received
+ * from the frontend into typed Recipe document sub-objects (NodeDocument, EdgeDocument,
+ * ViewportDocument) before saving via RecipeRepository, and returns the stored document as-is
+ * on read.
+ */
 @Service
 public class RecipeService {
 
@@ -21,6 +28,14 @@ public class RecipeService {
         this.recipeRepository = recipeRepository;
     }
 
+    /**
+     * Creates or updates the saved flow document for the request flow id: if a document already
+     * exists for that flow id it is updated in place, otherwise a new one is created. Nodes,
+     * edges, and viewport are converted from raw maps into typed sub-documents before saving.
+     *
+     * @param request the flow payload (flow id, user id, template id, nodes, edges, viewport) to persist
+     * @return a response containing the saved flow id, user id, and a confirmation message
+     */
     public RecipeSaveResponseDTO saveFlow(RecipeFlowSaveRequestDTO request) {
         Recipe document = Optional.ofNullable(request.getFlowId())
                 .flatMap(recipeRepository::findByFlowId)
@@ -42,10 +57,23 @@ public class RecipeService {
         return response;
     }
 
+    /**
+     * Retrieves the saved flow document for a given flow id.
+     *
+     * @param flowId the id of the flow to look up
+     * @return the matching Recipe document, if one has been saved under that flow id
+     */
     public Optional<Recipe> getFlow(String flowId) {
         return recipeRepository.findByFlowId(flowId);
     }
 
+    /**
+     * Converts a list of raw node maps (as received from the frontend flow editor) into typed
+     * NodeDocument instances, extracting nested position and measured-size objects.
+     *
+     * @param nodes the raw node maps to convert, may be null
+     * @return the converted list of node documents, empty if nodes was null
+     */
     private List<Recipe.NodeDocument> mapNodes(List<Map<String, Object>> nodes) {
         List<Recipe.NodeDocument> result = new ArrayList<>();
         if (nodes == null) {
@@ -87,6 +115,13 @@ public class RecipeService {
         return result;
     }
 
+    /**
+     * Converts a list of raw edge maps (as received from the frontend flow editor) into typed
+     * EdgeDocument instances.
+     *
+     * @param edges the raw edge maps to convert, may be null
+     * @return the converted list of edge documents, empty if edges was null
+     */
     private List<Recipe.EdgeDocument> mapEdges(List<Map<String, Object>> edges) {
         List<Recipe.EdgeDocument> result = new ArrayList<>();
         if (edges == null) {
@@ -110,6 +145,14 @@ public class RecipeService {
         return result;
     }
 
+    /**
+     * Extracts the value under the given key as a Map, normalizing its keys to Strings, if the
+     * value is itself a Map.
+     *
+     * @param source the source map to read from
+     * @param key    the key whose value should be extracted
+     * @return the extracted map with String keys, or null if the value under key is not a Map
+     */
     private Map<String, Object> extractObject(Map<String, Object> source, String key) {
         Object value = source.get(key);
         if (value instanceof Map<?, ?> map) {
@@ -122,6 +165,12 @@ public class RecipeService {
         return null;
     }
 
+    /**
+     * Converts a raw viewport map (pan/zoom state) into a typed ViewportDocument.
+     *
+     * @param viewport the raw viewport map to convert, may be null
+     * @return the converted viewport document, or null if viewport was null
+     */
     private Recipe.ViewportDocument mapViewport(Map<String, Object> viewport) {
         if (viewport == null) {
             return null;
@@ -134,6 +183,12 @@ public class RecipeService {
         return document;
     }
 
+    /**
+     * Converts a raw numeric value into a Double.
+     *
+     * @param value the value to convert, expected to be a Number or null
+     * @return the value as a Double, or null if value is not a Number
+     */
     private Double toDouble(Object value) {
         if (value instanceof Number number) {
             return number.doubleValue();

@@ -16,6 +16,12 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * {@link ImageGenerationClient} implementation that talks to Google's
+ * Gemini API to generate images from text prompts for the Virtual Kitchen
+ * application's process-visualization feature. Active when the
+ * {@code ai.image.provider} property is set to {@code gemini}.
+ */
 @ConditionalOnProperty(prefix = "ai.image", name = "provider", havingValue = "gemini", matchIfMissing = false)
 @Component
 public class GeminiImageClient implements ImageGenerationClient {
@@ -24,6 +30,13 @@ public class GeminiImageClient implements ImageGenerationClient {
     private final GeminiProperties properties;
     private final ObjectMapper objectMapper;
 
+    /**
+     * Creates a client bound to the Gemini REST client and configuration.
+     *
+     * @param restClient the pre-configured REST client used to call the Gemini API
+     * @param properties the configured Gemini API key, endpoint, and image model
+     * @param objectMapper the JSON mapper used to parse Gemini responses
+     */
     public GeminiImageClient(
             @Qualifier("geminiRestClient") RestClient restClient,
             GeminiProperties properties,
@@ -33,6 +46,15 @@ public class GeminiImageClient implements ImageGenerationClient {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * Extracts and decodes the first inline image found in a raw Gemini
+     * generateContent JSON response.
+     *
+     * @param response the raw JSON response body returned by Gemini
+     * @return the decoded generated image
+     * @throws JsonProcessingException if the response body is not valid JSON
+     * @throws AIInvalidResponseException if the response contains no inline image data
+     */
     private GeneratedImage parseImage(String response) throws JsonProcessingException {
         JsonNode root = objectMapper.readTree(response);
         for (JsonNode candidate : root.path("candidates")) {
@@ -52,6 +74,14 @@ public class GeminiImageClient implements ImageGenerationClient {
         throw new AIInvalidResponseException("Gemini response did not contain an image");
     }
 
+    /**
+     * Generates an image for the given prompt by calling the Gemini
+     * generateContent endpoint and decoding the returned inline image data.
+     *
+     * @param prompt the text prompt describing the image to generate
+     * @return the generated image data and its MIME type
+     * @throws JsonProcessingException if the Gemini response cannot be parsed as JSON
+     */
     @Override
     public GeneratedImage generate(String prompt) throws JsonProcessingException {
 

@@ -11,6 +11,11 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * REST controller exposing endpoints for the equipment catalog under
+ * {@code /api/v1/equipments}. Delegates persistence and business logic to
+ * {@link IEquipmentService} and wraps every response in an {@link ApiResponse}.
+ */
 @RestController
 @RequestMapping("/api/v1/equipments")
 public class EquipmentController {
@@ -18,11 +23,23 @@ public class EquipmentController {
     @Autowired
     private IEquipmentService service;
 
+    /**
+     * Creates a new equipment catalog entry.
+     *
+     * @param dto the equipment name/description to create
+     * @return an {@link ApiResponse} wrapping the created equipment
+     * @throws RuntimeException if equipment with the same name already exists
+     */
     @PostMapping
     public ApiResponse<EquipmentResponseDTO> create(@RequestBody EquipmentRequestDTO dto){
         return build(service.create(dto), "created");
     }
 
+    /**
+     * Retrieves every equipment catalog entry.
+     *
+     * @return an {@link ApiResponse} wrapping the list of all equipment
+     */
     @GetMapping
     public ApiResponse<List<EquipmentResponseDTO>> getAll(){
         return build(service.getAll(), "fetched");

@@ -4,6 +4,12 @@ import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+/**
+ * MongoDB document defining a reusable recipe step (name, description, media and
+ * estimated duration) that can be attached to one or more recipe templates via
+ * {@link RecipeTemplateStep}. {@code SEQUENCE_NAME} names the counter used to
+ * generate its id.
+ */
 @Data
 @Document(collection = "step_definition")
 public class RecipeStepDefinition {

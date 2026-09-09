@@ -23,6 +23,16 @@ public class GoogleTokenVerifierService {
     @Value("${google.oauth.client-id}")
     private String clientId;
 
+    /**
+     * Verifies the given Google ID token by calling Google's tokeninfo
+     * endpoint, confirming it was issued for this application (audience
+     * claim matches the configured client id) and that the associated Google
+     * account email is verified.
+     *
+     * @param idToken the Google-issued ID token to verify
+     * @return the verified identity (Google id, email, name) extracted from the token
+     * @throws AuthException if the token cannot be reached/parsed, is invalid or expired, was not issued for this application, or belongs to an unverified email
+     */
     public GoogleUserInfo verify(String idToken) {
         Map<String, Object> body;
 

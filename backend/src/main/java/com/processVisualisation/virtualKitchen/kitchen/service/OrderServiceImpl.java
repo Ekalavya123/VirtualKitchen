@@ -20,6 +20,18 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Default implementation of {@link IOrderService}.
+ * <p>
+ * Validates and persists new orders, computing the order total from its line
+ * items' subtotals and assigning a generated id via
+ * {@link SequenceGeneratorService}. After an order is saved, this
+ * implementation best-effort applies each ordered item to the owning user's
+ * kitchen inventory through {@link IInventoryService}; failures to sync
+ * inventory are logged and swallowed so they do not fail order creation,
+ * except when the user has no kitchen at all, in which case the failure is
+ * rethrown.
+ */
 @Service
 public class OrderServiceImpl implements IOrderService {
 
@@ -42,6 +54,25 @@ public class OrderServiceImpl implements IOrderService {
     private KitchenRepository kitchenRepository;
 
     private static final Logger logger = LoggerFactory.getLogger(OrderServiceImpl.class);
+    /**
+     * Creates a new order for the requested items.
+     * <p>
+     * Validates that a user id and at least one item were supplied and that
+     * the user exists, then persists the order with a generated id, creation
+     * timestamp, and a total computed from the line items' subtotals. After
+     * the order is saved, each ordered item is applied to the user's kitchen
+     * inventory via {@link IInventoryService#addOrUpdate}; if the user has no
+     * kitchen, the resulting failure is rethrown, but any other inventory
+     * sync failure is logged and does not fail order creation.
+     *
+     * @param dto the ordering user id and the requested line items
+     * @return the created order
+     * @throws IllegalArgumentException if {@code dto} or its user id is null,
+     *                                  no items were supplied, or the user
+     *                                  does not exist
+     * @throws IllegalStateException    if the user has no kitchen to receive
+     *                                  the ordered inventory
+     */
     @Override
     public OrderResponseDTO createOrder(OrderCreateRequestDTO dto) {
         if (dto == null || dto.getUserId() == null) {
@@ -95,6 +126,12 @@ public class OrderServiceImpl implements IOrderService {
         return orderMapper.toDTO(saved);
     }
 
+    /**
+     * Fetches all orders placed by the given user, most recently created first.
+     *
+     * @param userId id of the user
+     * @return the user's orders
+     */
     @Override
     public List<OrderResponseDTO> getOrdersByUser(Long userId) {
         return orderRepository.findByUserIdOrderByCreatedAtDesc(userId)

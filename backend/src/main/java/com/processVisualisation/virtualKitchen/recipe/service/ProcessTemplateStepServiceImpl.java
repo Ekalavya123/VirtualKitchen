@@ -13,6 +13,11 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Default {@link IProcessTemplateStepService} implementation. Persists recipe template steps
+ * via {@link RecipeTemplateStepRepository}, assigning each new step a sequence-generated id
+ * before saving, and maps between entities and DTOs via {@link ProcessTemplateStepMapper}.
+ */
 @Service
 public class ProcessTemplateStepServiceImpl implements IProcessTemplateStepService {
 
@@ -25,6 +30,12 @@ public class ProcessTemplateStepServiceImpl implements IProcessTemplateStepServi
     @Autowired
     private SequenceGeneratorService seq;
 
+    /**
+     * Creates and persists a new recipe template step, assigning it a new sequence-generated id.
+     *
+     * @param dto the step details to persist
+     * @return the created step
+     */
     @Override
     public RecipeTemplateStepResponseDTO create(RecipeTemplateStepRequestDTO dto){
         RecipeTemplateStep step = mapper.toEntity(dto);
@@ -32,6 +43,12 @@ public class ProcessTemplateStepServiceImpl implements IProcessTemplateStepServi
         return mapper.toDTO(repo.save(step));
     }
 
+    /**
+     * Retrieves all steps for a given recipe template, ordered by step order ascending.
+     *
+     * @param processTemplateId the id of the owning template
+     * @return the template's steps, ordered by step order
+     */
     @Override
     public List<RecipeTemplateStepResponseDTO> getSteps(Long processTemplateId){
         return repo.findByProcessTemplateIdOrderByStepOrderAsc(processTemplateId)

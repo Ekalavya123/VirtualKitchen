@@ -7,6 +7,11 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
+/**
+ * MongoDB document representing a single run of a {@link RecipeTemplate} by a
+ * user in a kitchen, tracking its {@link RecipeStatus}, timing and any generated
+ * media. {@code SEQUENCE_NAME} names the counter used to generate its id.
+ */
 @Data
 @Document(collection = "process_execution")
 public class RecipeExecution {

@@ -22,6 +22,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Orchestrates AI-driven generation of a structured recipe execution flow
+ * from free-form recipe text: builds prompts via {@link AIRecipeFlowPromptBuilder},
+ * calls {@link AIClient} to invoke the AI provider, parses and validates the
+ * resulting JSON graph via {@link AIRecipeValidator}, retries once on
+ * validation failure, and persists each attempt (success or failure) via
+ * {@link IAIResponseService} for analytics.
+ */
 @Service
 public class AIRecipeGenerationService {
 
@@ -50,6 +58,16 @@ public class AIRecipeGenerationService {
         this.aiResponseService = aiResponseService;
     }
 
+    /**
+     * Generates a structured recipe execution flow from free-form recipe
+     * text. Makes one AI generation attempt; if the result fails validation,
+     * retries once with the validation errors fed back to the model.
+     *
+     * @param recipeText the free-form recipe text to convert
+     * @return the generated recipe flow (steps and edges)
+     * @throws RecipeFlowGenerationException if a valid flow could not be
+     *         produced after the retry attempt
+     */
     public RecipeFlowGenerationResponseDTO generateFlow(String recipeText) {
         System.out.println("[RECIPE-GEN] Start generate flow");
         AttemptResult firstAttempt = runAttempt(recipeText, null);

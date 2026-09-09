@@ -13,6 +13,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * MongoDB document representing a saved recipe process-flow graph ("flow") as
+ * edited in the visualization UI, owned by a user and optionally derived from a
+ * {@link RecipeTemplate}. Stores the graph's nodes, edges and viewport state
+ * exactly as produced by the front-end flow editor.
+ */
 @Data
 @Document(collection = "flows")
 public class Recipe {
@@ -41,6 +47,10 @@ public class Recipe {
     @LastModifiedDate
     private LocalDateTime updatedAt;
 
+    /**
+     * Embedded document representing a single node (step) in a {@link Recipe}
+     * flow graph, including its layout position, size and arbitrary node data.
+     */
     @Data
     public static class NodeDocument {
         private String id;
@@ -57,6 +67,10 @@ public class Recipe {
         private Boolean deletable;
     }
 
+    /**
+     * Embedded document representing a single edge (connection) between two nodes
+     * in a {@link Recipe} flow graph, including its styling and label.
+     */
     @Data
     public static class EdgeDocument {
         private String id;
@@ -71,18 +85,24 @@ public class Recipe {
         private String label;
     }
 
+    /** Embedded document holding the x/y canvas coordinates of a {@link NodeDocument}. */
     @Data
     public static class PositionDocument {
         private Double x;
         private Double y;
     }
 
+    /** Embedded document holding the rendered width/height of a {@link NodeDocument}. */
     @Data
     public static class MeasuredDocument {
         private Double width;
         private Double height;
     }
 
+    /**
+     * Embedded document holding the flow editor's viewport (pan/zoom) state for a
+     * {@link Recipe}, so the canvas can be restored to how the user left it.
+     */
     @Data
     public static class ViewportDocument {
         private Double x;

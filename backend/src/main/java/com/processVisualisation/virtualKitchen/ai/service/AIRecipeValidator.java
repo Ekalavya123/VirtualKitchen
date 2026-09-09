@@ -12,6 +12,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Validates AI-generated (or user-supplied) recipe execution flows before
+ * they are persisted or visualized. Checks structural integrity of the
+ * step/edge graph: required fields per node type, unique ids, edge
+ * references, condition-node YES/NO branching, and matching parallel
+ * start/end pairs.
+ */
 @Component
 public class AIRecipeValidator {
 
@@ -27,6 +34,15 @@ public class AIRecipeValidator {
             NODE_TYPE_PARALLEL_END
     );
 
+    /**
+     * Validates a recipe flow's steps and edges, collecting all structural
+     * errors found rather than failing fast on the first one.
+     *
+     * @param steps the flow's step/node definitions
+     * @param edges the flow's edges connecting steps
+     * @return a result indicating whether the flow is valid and, if not, the
+     *         list of validation error messages
+     */
     public AIRecipeFlowValidationResult validate(List<RecipeExecutionStepDTO> steps, List<RecipeExecutionEdgeDTO> edges) {
         List<String> errors = new ArrayList<>();
 

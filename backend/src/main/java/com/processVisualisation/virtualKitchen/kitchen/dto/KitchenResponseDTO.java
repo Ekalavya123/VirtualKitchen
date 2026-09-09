@@ -5,6 +5,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Response payload returned to clients describing a kitchen, including its
+ * identity, name, owner, and creation/last-updated timestamps.
+ */
 @Data
 @Builder
 public class KitchenResponseDTO {

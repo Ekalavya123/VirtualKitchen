@@ -13,6 +13,12 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Default {@link IProcessEquipmentUsageService} implementation. Persists equipment usage
+ * records via {@link RecipeEquipmentUsageRepository}, assigning each new record a
+ * sequence-generated id before saving, and maps between entities and DTOs via
+ * {@link ProcessEquipmentUsageMapper}.
+ */
 @Service
 public class RecipeEquipmentUsageServiceImpl implements IProcessEquipmentUsageService {
 
@@ -25,6 +31,12 @@ public class RecipeEquipmentUsageServiceImpl implements IProcessEquipmentUsageSe
     @Autowired
     private SequenceGeneratorService seq;
 
+    /**
+     * Creates and persists a new equipment usage record, assigning it a new sequence-generated id.
+     *
+     * @param dto the equipment usage details to persist
+     * @return the created equipment usage record
+     */
     @Override
     public RecipeEquipmentUsageResponseDTO create(RecipeEquipmentUsageRequestDTO dto){
         RecipeEquipmentUsage p = mapper.toEntity(dto);
@@ -32,6 +44,12 @@ public class RecipeEquipmentUsageServiceImpl implements IProcessEquipmentUsageSe
         return mapper.toDTO(repo.save(p));
     }
 
+    /**
+     * Retrieves all equipment usage records for a given process execution.
+     *
+     * @param processExecutionId the id of the process execution to filter by
+     * @return the equipment usage records for that execution
+     */
     @Override
     public List<RecipeEquipmentUsageResponseDTO> getByProcess(Long processExecutionId){
         return repo.findByProcessExecutionId(processExecutionId)

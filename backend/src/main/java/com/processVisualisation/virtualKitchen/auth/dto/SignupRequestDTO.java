@@ -5,6 +5,11 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * Inbound payload for registering a new user account with email/password
+ * credentials, carrying the account name, email, and the new password
+ * together with its confirmation.
+ */
 @Data
 public class SignupRequestDTO {
 

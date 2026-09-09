@@ -6,6 +6,11 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Response payload representing the current state of a recipe execution, including
+ * its lifecycle {@link RecipeStatus}, timing information and any generated media
+ * produced while the recipe was run.
+ */
 @Data
 @Builder
 public class RecipeExecutionResponseDTO {

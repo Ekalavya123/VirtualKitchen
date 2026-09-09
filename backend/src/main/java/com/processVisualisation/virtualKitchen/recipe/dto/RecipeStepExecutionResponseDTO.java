@@ -6,6 +6,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Response payload representing the state of a single step's execution within a
+ * recipe execution, including its {@link RecipeStepStatus}, timing and notes.
+ */
 @Data
 @Builder
 public class RecipeStepExecutionResponseDTO {

@@ -10,6 +10,12 @@ import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+/**
+ * Default {@link IItemCostService} implementation backed by MongoDB via
+ * {@link ItemCostRepository}. Assigns identifiers using
+ * {@link SequenceGeneratorService} and converts between entities and DTOs
+ * using {@link ItemCostMapper}.
+ */
 @Service
 public class ItemCostServiceImpl implements IItemCostService {
 
@@ -22,6 +28,13 @@ public class ItemCostServiceImpl implements IItemCostService {
     @Autowired
     private SequenceGeneratorService seq;
 
+    /**
+     * Creates a new cost record for an ingredient or equipment item,
+     * assigning it a generated sequence id.
+     *
+     * @param dto the item type, item id, unit, cost per unit, currency and effective date
+     * @return the created cost record
+     */
     @Override
     public ItemCostResponseDTO create(ItemCostRequestDTO dto){
         ItemCost cost = mapper.toEntity(dto);

@@ -5,6 +5,12 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * Models the parsed result of a chat/completion request from any AIClient
+ * provider (Gemini, OpenAI, Ollama), normalizing the generated content,
+ * resolved model, token usage, finish reason, and raw response body into a
+ * provider-agnostic shape.
+ */
 @Data
 @Builder
 @NoArgsConstructor

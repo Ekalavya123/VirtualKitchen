@@ -8,6 +8,12 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Outbound representation of a user account returned by both the auth and
+ * user-management endpoints. Exposes profile, verification, status, role,
+ * and audit metadata while deliberately excluding sensitive fields such as
+ * the password hash.
+ */
 @Data
 @Builder
 public class UserResponseDTO {

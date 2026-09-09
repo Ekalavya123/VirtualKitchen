@@ -9,6 +9,14 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
+/**
+ * Persistent entity representing a Virtual Kitchen user account, stored in
+ * the "users" MongoDB collection. Captures identity (email, optional Google
+ * account link), credentials (a hashed password for local accounts),
+ * verification and lifecycle status, role, and audit timestamps. Populated
+ * and read by UserRepository, and mapped to/from request and response DTOs
+ * by UserMapper.
+ */
 @Data
 @Document(collection = "users")
 public class User {

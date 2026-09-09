@@ -7,6 +7,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
+/**
+ * MongoDB document tracking the execution of a single {@link RecipeStepDefinition}
+ * within a {@link RecipeExecution}, including its {@link RecipeStepStatus},
+ * timing and free-text notes. {@code SEQUENCE_NAME} names the counter used to
+ * generate its id.
+ */
 @Data
 @Document(collection = "step_execution")
 public class RecipeStepExecution {

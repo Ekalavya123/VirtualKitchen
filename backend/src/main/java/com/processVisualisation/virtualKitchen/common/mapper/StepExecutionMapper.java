@@ -6,9 +6,26 @@ import com.processVisualisation.virtualKitchen.recipe.dto.RecipeStepExecutionReq
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeStepExecutionResponseDTO;
 import org.springframework.stereotype.Component;
 
+/**
+ * Centralizes conversion between the {@link RecipeStepExecution} entity (the
+ * execution state of one step within a recipe execution) and its
+ * {@link RecipeStepExecutionRequestDTO}/{@link RecipeStepExecutionResponseDTO}
+ * representations.
+ */
 @Component
 public class StepExecutionMapper {
 
+    /**
+     * Converts an incoming request DTO into a new {@link RecipeStepExecution}
+     * entity. Lossy/derived field: {@code status} is always hardcoded to
+     * {@link RecipeStepStatus#NOT_STARTED} rather than read from the DTO.
+     * {@code startedAt}, {@code completedAt} and {@code notes} are left
+     * unset here — they are only populated later during execution and
+     * appear only in the response.
+     *
+     * @param dto the request payload describing the step execution to create
+     * @return a new, unpersisted {@link RecipeStepExecution} entity populated from {@code dto}
+     */
     public RecipeStepExecution toEntity(RecipeStepExecutionRequestDTO dto){
         RecipeStepExecution step = new RecipeStepExecution();
         step.setProcessExecutionId(dto.getProcessExecutionId());
@@ -17,6 +34,13 @@ public class StepExecutionMapper {
         return step;
     }
 
+    /**
+     * Converts a {@link RecipeStepExecution} entity into its response DTO
+     * representation for returning to clients.
+     *
+     * @param step the entity to convert
+     * @return a fully populated {@link RecipeStepExecutionResponseDTO}
+     */
     public RecipeStepExecutionResponseDTO toDTO(RecipeStepExecution step){
         return RecipeStepExecutionResponseDTO.builder()
                 .id(step.getId())

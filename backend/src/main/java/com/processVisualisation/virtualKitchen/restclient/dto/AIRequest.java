@@ -5,6 +5,12 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * Models an outbound chat/completion request sent to any AIClient
+ * provider (Gemini, OpenAI, Ollama), carrying the system/user prompts,
+ * target model, and generation parameters that each client maps onto its
+ * own provider-specific request payload.
+ */
 @Data
 @Builder
 @NoArgsConstructor
