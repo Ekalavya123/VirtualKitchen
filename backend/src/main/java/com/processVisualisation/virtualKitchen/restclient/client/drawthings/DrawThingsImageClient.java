@@ -15,6 +15,13 @@ import org.springframework.web.client.RestClient;
 import java.util.Base64;
 import java.util.Map;
 
+/**
+ * {@link ImageGenerationClient} implementation that talks to a self-hosted
+ * Draw Things image generation server. It is the default image provider for
+ * the Virtual Kitchen application, used to render process-visualization
+ * images from text prompts. Active when the {@code ai.image.provider}
+ * property is unset or set to {@code drawthings}.
+ */
 @ConditionalOnProperty(prefix = "ai.image", name = "provider", havingValue = "drawthings", matchIfMissing = true)
 @Component
 public class DrawThingsImageClient implements ImageGenerationClient {
@@ -23,12 +30,28 @@ public class DrawThingsImageClient implements ImageGenerationClient {
     private final DrawThingsProperties drawThingsProperties;
     private final ObjectMapper objectMapper;
 
+    /**
+     * Creates a client bound to the Draw Things REST client and configuration.
+     *
+     * @param restClient the pre-configured REST client used to call the Draw Things endpoint
+     * @param drawThingsProperties the configured Draw Things endpoint, dimensions, and timeout
+     * @param objectMapper the JSON mapper used to parse Draw Things responses
+     */
     public DrawThingsImageClient(@Qualifier("drawThingsRestClient") RestClient restClient, DrawThingsProperties drawThingsProperties, ObjectMapper objectMapper) {
         this.restClient = restClient;
         this.drawThingsProperties = drawThingsProperties;
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * Extracts and decodes the first generated image from a raw Draw Things
+     * JSON response.
+     *
+     * @param response the raw JSON response body returned by Draw Things
+     * @return the decoded generated image
+     * @throws JsonProcessingException if the response body is not valid JSON
+     * @throws AIInvalidResponseException if the response contains no image or an invalid/empty base64 payload
+     */
     private GeneratedImage parseImage(String response) throws JsonProcessingException {
 
         JsonNode root = objectMapper.readTree(response);
@@ -74,6 +97,14 @@ public class DrawThingsImageClient implements ImageGenerationClient {
         }
     }
 
+    /**
+     * Generates an image for the given prompt by calling the configured
+     * Draw Things endpoint and decoding the returned base64 image.
+     *
+     * @param prompt the text prompt describing the image to generate
+     * @return the generated image data and its MIME type
+     * @throws JsonProcessingException if the Draw Things response cannot be parsed as JSON
+     */
     @Override
     public GeneratedImage generate(String prompt)
             throws JsonProcessingException {

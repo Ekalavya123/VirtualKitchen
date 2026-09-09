@@ -11,6 +11,12 @@ import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
+/**
+ * SMTP-backed implementation of EmailService that sends OTP notification
+ * emails via a configured JavaMailSender, using the from address in
+ * app.mail.from and subject/body text tailored to the OTP purpose
+ * (email verification, login, or password reset).
+ */
 @Service
 public class EmailServiceImpl implements EmailService {
 
@@ -25,6 +31,15 @@ public class EmailServiceImpl implements EmailService {
         this.mailSender = mailSender;
     }
 
+    /**
+     * Builds and sends an OTP notification email via the configured mail
+     * sender, choosing subject and body text based on the OTP purpose.
+     *
+     * @param to the destination email address
+     * @param otp the one-time passcode to include in the email body
+     * @param purpose the reason the OTP was generated, used to select subject/body wording
+     * @throws AuthException if the underlying mail sender fails to deliver the message
+     */
     @Override
     public void sendOtpEmail(String to, String otp, OtpPurpose purpose) {
         SimpleMailMessage message = new SimpleMailMessage();
@@ -41,6 +56,12 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
+    /**
+     * Selects the email subject line for the given OTP purpose.
+     *
+     * @param purpose the reason the OTP was generated
+     * @return the subject line to use
+     */
     private String subjectFor(OtpPurpose purpose) {
         return switch (purpose) {
             case EMAIL_VERIFICATION -> "Verify your Virtual Kitchen email";
@@ -49,6 +70,14 @@ public class EmailServiceImpl implements EmailService {
         };
     }
 
+    /**
+     * Builds the email body text embedding the OTP code, worded according to
+     * the OTP purpose.
+     *
+     * @param otp the one-time passcode to include in the body
+     * @param purpose the reason the OTP was generated
+     * @return the email body text
+     */
     private String bodyFor(String otp, OtpPurpose purpose) {
         String action = switch (purpose) {
             case EMAIL_VERIFICATION -> "verify your email";

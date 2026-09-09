@@ -6,6 +6,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Response payload representing an ingredient catalog entry, including its
+ * identifier, default {@link UnitType}, and creation/update timestamps.
+ */
 @Data
 @Builder
 public class IngredientResponseDTO {

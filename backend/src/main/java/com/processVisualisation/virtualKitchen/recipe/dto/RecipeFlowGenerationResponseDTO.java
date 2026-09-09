@@ -6,6 +6,10 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
+/**
+ * Response payload for AI-driven recipe flow generation, containing the full set
+ * of steps and edges that make up the generated process-flow graph for a recipe.
+ */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

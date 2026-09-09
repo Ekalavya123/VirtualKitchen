@@ -11,12 +11,27 @@ import java.util.Map;
 @Component
 public class AIVisualizationPromptBuilder {
 
+    /**
+     * Builds the fixed system prompt instructing the AI model to act as a
+     * culinary visualization prompt writer and to respond with strict JSON.
+     *
+     * @return the system prompt text
+     */
     public String buildSystemPrompt() {
         return "You are a culinary visualization prompt writer. "
                 + "Return strict JSON only: {\"imagePrompt\": \"...\", \"videoPrompt\": \"...\"}. "
                 + "No markdown, prose, or code fences.";
     }
 
+    /**
+     * Builds the user prompt describing the current recipe step (and, when
+     * available, the previous step for visual continuity) that the AI model
+     * should turn into image/video generation prompts.
+     *
+     * @param currentStep the step data to visualize
+     * @param previousStep the preceding step's data, or {@code null} if this is the first step
+     * @return the composed user prompt text
+     */
     public String buildUserPrompt(Map<String, Object> currentStep, Map<String, Object> previousStep) {
         StringBuilder prompt = new StringBuilder();
         prompt.append("Describe a photorealistic kitchen visualization for the current cooking step.\n\n");

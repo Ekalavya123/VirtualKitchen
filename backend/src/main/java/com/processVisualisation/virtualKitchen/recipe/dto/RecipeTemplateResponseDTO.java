@@ -6,6 +6,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Response payload representing a persisted recipe template, including its
+ * ownership, {@link Visibility} setting and creation/update timestamps.
+ */
 @Data
 @Builder
 public class RecipeTemplateResponseDTO {

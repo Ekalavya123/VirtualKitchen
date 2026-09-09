@@ -7,6 +7,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Response payload representing a stored cost entry for an ingredient or
+ * equipment item, including its identifier and creation timestamp.
+ */
 @Data
 @Builder
 public class ItemCostResponseDTO {

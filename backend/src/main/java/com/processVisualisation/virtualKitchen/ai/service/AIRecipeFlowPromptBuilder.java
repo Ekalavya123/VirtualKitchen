@@ -4,6 +4,12 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
+/**
+ * Builds the system and user prompts used to convert free-form recipe text
+ * into a structured, executable recipe flow (steps/edges JSON graph) via the
+ * AI provider, including the controlled vocabularies (actions, ingredients,
+ * units, etc.) and schema/rules the model must follow.
+ */
 @Component
 public class AIRecipeFlowPromptBuilder {
 
@@ -23,6 +29,12 @@ public class AIRecipeFlowPromptBuilder {
             "low|medium|high|custom";
 
 
+    /**
+     * Builds the fixed system prompt instructing the AI model to convert
+     * recipe text into a JSON cooking execution flow with no extra formatting.
+     *
+     * @return the system prompt text
+     */
     public String buildSystemPrompt() {
         return """
                 Convert recipe text into a cooking execution flow.
@@ -34,6 +46,13 @@ public class AIRecipeFlowPromptBuilder {
     }
 
 
+    /**
+     * Builds the initial user prompt for a first-pass flow generation
+     * attempt, combining the schema/rules block with the raw recipe text.
+     *
+     * @param recipeText the free-form recipe text to convert
+     * @return the composed initial prompt
+     */
     public String buildInitialPrompt(String recipeText) {
         return buildSchemaAndRulesBlock()
                 + "\nRECIPE:\n"
@@ -42,6 +61,16 @@ public class AIRecipeFlowPromptBuilder {
     }
 
 
+    /**
+     * Builds a retry prompt asking the AI model to correct a previous
+     * invalid flow generation attempt, including the prior output and the
+     * validation errors it produced.
+     *
+     * @param recipeText the original free-form recipe text
+     * @param previousOutput the raw JSON content returned by the prior attempt
+     * @param validationErrors the validation errors found in the prior attempt
+     * @return the composed retry prompt
+     */
     public String buildRetryPrompt(
             String recipeText,
             String previousOutput,

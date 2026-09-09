@@ -5,6 +5,12 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+/**
+ * MongoDB document recording an ingredient's usage during a
+ * {@link RecipeExecution}, including the quantity used (in a given
+ * {@link UnitType}) and its cost at that time. {@code SEQUENCE_NAME} names the
+ * counter used to generate its id.
+ */
 @Data
 @Document(collection = "process_ingredient_usage")
 public class RecipeIngredientUsage {

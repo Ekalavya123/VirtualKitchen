@@ -28,6 +28,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * {@link AIClient} implementation that talks to OpenAI's chat completion
+ * API. Used by the Virtual Kitchen application as a text-generation
+ * provider. Active when the {@code ai.provider} property is set to
+ * {@code openai}.
+ */
 @ConditionalOnProperty(prefix = "ai", name = "provider", havingValue = "openai")
 @Component
 public class OpenAIClient implements AIClient {
@@ -36,6 +42,12 @@ public class OpenAIClient implements AIClient {
     private final OpenAIProperties properties;
         private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * Creates a client bound to the OpenAI REST client and configuration.
+     *
+     * @param restClient the pre-configured REST client used to call the OpenAI API
+     * @param properties the configured OpenAI API key, endpoints, and default model
+     */
     public OpenAIClient(
             @Qualifier("openAiRestClient") RestClient restClient,
             OpenAIProperties properties
@@ -44,6 +56,19 @@ public class OpenAIClient implements AIClient {
         this.properties = properties;
     }
 
+    /**
+     * Sends a chat request to the OpenAI API and returns the parsed
+     * response. Validates configuration and the request, builds the OpenAI
+     * request payload, logs request/response outcomes, and maps HTTP and
+     * connectivity failures to the appropriate AI client exception subtype.
+     *
+     * @param request the prompt, model, and generation parameters to send
+     * @return the parsed OpenAI response, including content and usage metadata
+     * @throws AICommunicationException if OpenAI is not configured correctly, the request is invalid, or the API call fails with a non-authentication HTTP error
+     * @throws AIAuthenticationException if OpenAI rejects the request due to invalid or missing credentials
+     * @throws AITimeoutException if the request times out or the connection fails
+     * @throws AIInvalidResponseException if OpenAI returns an empty response, a response without message content, or unparsable JSON
+     */
     @Override
     public AIResponse chat(AIRequest request) {
         validateConfiguration();

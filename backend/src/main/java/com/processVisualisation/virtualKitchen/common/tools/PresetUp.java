@@ -14,6 +14,17 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.Properties;
 
+/**
+ * Standalone, one-off command-line tool for seeding a MongoDB database with
+ * demo/preset data (a demo user, a demo kitchen, sample equipment and
+ * ingredients, inventory rows, and the kitchen-to-inventory links tying them
+ * together) so the application has something to display without manual setup.
+ * Not a Spring-managed component — it is run directly via its {@link #main}
+ * method and connects to MongoDB using the low-level Mongo driver rather than
+ * the application's Spring Data configuration. Each upsert helper is
+ * idempotent: it looks for an existing matching document before inserting a
+ * new one, so the tool can be re-run safely.
+ */
 public class PresetUp {
 
     // Edit these if you prefer hard-coded values.
@@ -21,6 +32,16 @@ public class PresetUp {
     private static final String DEFAULT_USER_NAME = "Demo User";
     private static final String DEFAULT_KITCHEN_NAME = "Demo Kitchen";
 
+    /**
+     * Entry point: resolves the MongoDB connection URI, then seeds a demo
+     * user, a demo kitchen owned by that user, two equipment items, two
+     * ingredients, inventory rows for each of them, and the kitchen-inventory
+     * links associating those inventory rows with the demo kitchen.
+     *
+     * @param args unused
+     * @throws Exception if the MongoDB URI cannot be resolved or a database
+     *                    operation fails
+     */
     public static void main(String[] args) throws Exception {
         String mongoUri = resolveMongoUri();
         System.out.println("Using Mongo URI: " + (mongoUri == null ? "(null)" : "[hidden]") );
@@ -92,6 +113,14 @@ public class PresetUp {
         throw new IllegalStateException("MongoDB URI not found. Set SPRING_DATA_MONGODB_URI or MONGODB_URI environment variable or provide application.properties in classpath.");
     }
 
+    /**
+     * Naively extracts the database name from a Mongo connection URI's path
+     * segment (the text after the last {@code /} and before any {@code ?}
+     * query string).
+     *
+     * @param uri the MongoDB connection URI
+     * @return the extracted database name, or {@code "test"} if none can be parsed
+     */
     private static String getDatabaseNameFromUri(String uri) {
         // naive parse for mongodb+srv://.../DatabaseName
         int idx = uri.lastIndexOf('/');
@@ -103,6 +132,16 @@ public class PresetUp {
         return "test";
     }
 
+    /**
+     * Atomically increments (creating if absent) the named counter document
+     * in the {@code database_sequences} collection and returns its new value,
+     * mirroring the behavior of {@code SequenceGeneratorService} for this
+     * standalone tool.
+     *
+     * @param db the target MongoDB database
+     * @param seqName id of the sequence counter document to increment
+     * @return the next value in the sequence
+     */
     private static long generateSequence(MongoDatabase db, String seqName) {
         MongoCollection<Document> seqCol = db.getCollection("database_sequences");
         Document updated = seqCol.findOneAndUpdate(
@@ -115,6 +154,16 @@ public class PresetUp {
         return n == null ? 1L : n.longValue();
     }
 
+    /**
+     * Inserts a demo user document if none with the given email already
+     * exists, with a placeholder (non-hashed) password value.
+     *
+     * @param db the target MongoDB database
+     * @param id the sequential id to assign if a new document is inserted
+     * @param name the user's display name
+     * @param email the user's email, used to detect an existing user
+     * @return the existing user document if one was found, otherwise the newly inserted one
+     */
     private static Document upsertUser(MongoDatabase db, long id, String name, String email) {
         MongoCollection<Document> col = db.getCollection("users");
         Document existing = col.find(new Document("email", email)).first();
@@ -130,6 +179,16 @@ public class PresetUp {
         return doc;
     }
 
+    /**
+     * Inserts a demo kitchen document if none with the given name and owner
+     * already exists.
+     *
+     * @param db the target MongoDB database
+     * @param id the sequential id to assign if a new document is inserted
+     * @param name the kitchen's display name
+     * @param ownerId id of the user document that owns this kitchen
+     * @return the existing kitchen document if one was found, otherwise the newly inserted one
+     */
     private static Document upsertKitchen(MongoDatabase db, long id, String name, long ownerId) {
         MongoCollection<Document> col = db.getCollection("kitchen");
         Document existing = col.find(new Document("name", name).append("ownerId", ownerId)).first();
@@ -143,6 +202,16 @@ public class PresetUp {
         return doc;
     }
 
+    /**
+     * Inserts a demo equipment document if none with the given name already
+     * exists.
+     *
+     * @param db the target MongoDB database
+     * @param id the sequential id to assign if a new document is inserted
+     * @param name the equipment's display name, used to detect an existing document
+     * @param description a short description of the equipment
+     * @return the existing equipment document if one was found, otherwise the newly inserted one
+     */
     private static Document upsertEquipment(MongoDatabase db, long id, String name, String description) {
         MongoCollection<Document> col = db.getCollection("equipment");
         Document existing = col.find(new Document("name", name)).first();
@@ -156,6 +225,17 @@ public class PresetUp {
         return doc;
     }
 
+    /**
+     * Inserts a demo ingredient document if none with the given name already
+     * exists.
+     *
+     * @param db the target MongoDB database
+     * @param id the sequential id to assign if a new document is inserted
+     * @param name the ingredient's display name, used to detect an existing document
+     * @param description a short description of the ingredient
+     * @param unit the ingredient's default unit of measure
+     * @return the existing ingredient document if one was found, otherwise the newly inserted one
+     */
     private static Document upsertIngredient(MongoDatabase db, long id, String name, String description, String unit) {
         MongoCollection<Document> col = db.getCollection("ingredients");
         Document existing = col.find(new Document("name", name)).first();
@@ -170,6 +250,21 @@ public class PresetUp {
         return doc;
     }
 
+    /**
+     * Inserts an inventory row for the given user/item, or if a matching row
+     * already exists (same user, item type and item id), updates its
+     * quantity, unit and {@code lastUpdated} timestamp in place instead of
+     * inserting a duplicate.
+     *
+     * @param db the target MongoDB database
+     * @param id the sequential id to assign if a new document is inserted
+     * @param userId id of the user this inventory row belongs to
+     * @param itemType the kind of item being tracked (e.g. {@code "INGREDIENT"}, {@code "EQUIPMENT"})
+     * @param itemId id of the referenced ingredient or equipment document
+     * @param quantity the quantity on hand
+     * @param unit the unit the quantity is measured in
+     * @return the existing (now-updated) inventory document, or the newly inserted one
+     */
     private static Document upsertInventory(MongoDatabase db, long id, long userId, String itemType, long itemId, double quantity, String unit) {
         MongoCollection<Document> col = db.getCollection("inventory");
         Document existing = col.find(new Document("userId", userId).append("itemType", itemType).append("itemId", itemId)).first();
@@ -188,6 +283,17 @@ public class PresetUp {
         return doc;
     }
 
+    /**
+     * Inserts a kitchen-inventory link document (associating an inventory row
+     * with a kitchen) if one for the given kitchen and inventory id does not
+     * already exist.
+     *
+     * @param db the target MongoDB database
+     * @param id the sequential id to assign if a new document is inserted
+     * @param kitchenId id of the kitchen document
+     * @param inventoryId id of the inventory document to link to the kitchen
+     * @return the existing link document if one was found, otherwise the newly inserted one
+     */
     private static Document upsertKitchenInventory(MongoDatabase db, long id, long kitchenId, long inventoryId) {
         MongoCollection<Document> col = db.getCollection("kitchen_inventory");
         Document existing = col.find(new Document("kitchenId", kitchenId).append("inventoryId", inventoryId)).first();

@@ -10,6 +10,12 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+/**
+ * Default {@link IAIService} implementation that builds a chat request for
+ * the configured AI provider (OpenAI or Gemini, selected via the
+ * {@code ai.provider} property) and delegates the actual call to
+ * {@link AIClient}.
+ */
 @Service
 public class AIServiceImpl implements IAIService {
 
@@ -28,6 +34,13 @@ public class AIServiceImpl implements IAIService {
         this.provider = provider == null ? "gemini" : provider;
     }
 
+    /**
+     * Builds a chat request with a fixed system prompt and the configured
+     * provider's default model, then sends it via {@link AIClient}.
+     *
+     * @param prompt the free-form user prompt
+     * @return the AI provider's response
+     */
     @Override
     public AIResponse chat(String prompt) {
         String defaultModel = openAIProperties.getDefaultModel();

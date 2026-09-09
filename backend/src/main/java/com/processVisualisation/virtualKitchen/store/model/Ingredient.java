@@ -10,6 +10,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
+/**
+ * MongoDB document representing an ingredient in the store catalog, with
+ * a default {@link UnitType} used when quantities are not otherwise
+ * specified. Referenced by identifier from {@link Inventory} and
+ * {@link ItemCost} via {@link ItemType#INGREDIENT}.
+ */
 @Data
 @Document(collection = "ingredients")
 public class Ingredient {

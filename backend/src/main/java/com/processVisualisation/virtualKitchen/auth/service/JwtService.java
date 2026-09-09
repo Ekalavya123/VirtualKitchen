@@ -12,6 +12,15 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
 
+/**
+ * Issues and validates the signed JWT access tokens used to authenticate
+ * requests after login/signup/OTP verification. Tokens are HMAC-signed with a
+ * secret key configured via app.jwt.secret, encode the user id (as subject),
+ * email, and user type as claims, and expire after app.jwt.expiration-ms
+ * milliseconds from issuance. Tokens issued or parsed by this service are
+ * consumed by JwtAuthenticationFilter to populate the security context on
+ * incoming requests.
+ */
 @Service
 public class JwtService {
 
@@ -26,6 +35,15 @@ public class JwtService {
         this.expirationMs = expirationMs;
     }
 
+    /**
+     * Generates a signed JWT access token for the given user, valid for
+     * app.jwt.expiration-ms milliseconds from the moment it is issued.
+     *
+     * @param userId the identifier of the user the token authenticates, encoded as the token subject
+     * @param email the email address of the user, embedded as a claim
+     * @param userType the role/type of the user, embedded as a claim and later used to derive granted authorities
+     * @return the compact, signed JWT string
+     */
     public String generateToken(Long userId, String email, UserType userType) {
         Instant now = Instant.now();
 
@@ -39,6 +57,14 @@ public class JwtService {
                 .compact();
     }
 
+    /**
+     * Parses and verifies the signature and expiration of the given token,
+     * returning its claims.
+     *
+     * @param token the compact JWT string to parse
+     * @return the verified claims payload of the token
+     * @throws io.jsonwebtoken.JwtException if the token is malformed, has an invalid signature, or is expired
+     */
     public Claims parseClaims(String token) {
         return Jwts.parser()
                 .verifyWith(key)
@@ -47,10 +73,24 @@ public class JwtService {
                 .getPayload();
     }
 
+    /**
+     * Extracts the user identifier encoded as the subject of the given token.
+     *
+     * @param token the compact JWT string to parse
+     * @return the identifier of the user the token was issued for
+     * @throws io.jsonwebtoken.JwtException if the token is malformed, has an invalid signature, or is expired
+     */
     public Long extractUserId(String token) {
         return Long.valueOf(parseClaims(token).getSubject());
     }
 
+    /**
+     * Extracts the user type claim from the given token.
+     *
+     * @param token the compact JWT string to parse
+     * @return the type/role of the user the token was issued for
+     * @throws io.jsonwebtoken.JwtException if the token is malformed, has an invalid signature, or is expired
+     */
     public UserType extractUserType(String token) {
         return UserType.valueOf(parseClaims(token).get("userType", String.class));
     }

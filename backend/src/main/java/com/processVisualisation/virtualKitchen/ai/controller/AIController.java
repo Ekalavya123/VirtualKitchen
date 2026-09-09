@@ -15,6 +15,12 @@ import org.springframework.web.bind.annotation.RestController;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * REST controller exposing general-purpose AI chat endpoints under {@code /api/ai}.
+ * Delegates prompt handling to {@link IAIService} and persists a record of each
+ * interaction (including failures) via {@link IAIResponseService} for analytics
+ * and training purposes.
+ */
 @RestController
 @RequestMapping("/api/ai")
 public class AIController {
@@ -28,6 +34,15 @@ public class AIController {
         this.aiResponseService = aiResponseService;
     }
 
+    /**
+     * Handles a chat prompt by forwarding it to the configured AI service and
+     * returning the generated content. The full AI response (including token
+     * usage and raw payload) is persisted asynchronously to the response log;
+     * persistence failures are logged but do not fail the request.
+     *
+     * @param request the validated chat request containing the user prompt
+     * @return the chat response wrapping the AI-generated content
+     */
     @PostMapping("/chat")
     public AIChatResponseDTO chat(@Valid @RequestBody AIChatRequestDTO request) {
         AIResponse response = aiService.chat(request.getPrompt());

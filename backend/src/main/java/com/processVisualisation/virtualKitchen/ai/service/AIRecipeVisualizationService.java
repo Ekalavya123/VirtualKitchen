@@ -26,6 +26,16 @@ import org.springframework.util.StringUtils;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/**
+ * Generates AI-driven image/prompt visualization assets for a recipe flow's
+ * steps. For each {@code recipeStepNode}, resolves (finds, completes, or
+ * creates) a {@link VisualizationAsset} via {@link AIVisualizationPromptBuilder}
+ * and the AI/image-generation/storage clients, then attaches the result back
+ * onto the flow's node data. Exposes both a synchronous, whole-flow entry
+ * point and step-scoped operations ({@link #resolveVisualizationAsset},
+ * {@link #prepareStepContexts}, {@link #attachResultsAndSave}) designed to be
+ * driven concurrently by {@link VisualizationJobService}'s task pool.
+ */
 @Service
 public class AIRecipeVisualizationService {
 
@@ -59,6 +69,15 @@ public class AIRecipeVisualizationService {
         this.promptBuilder = promptBuilder;
     }
 
+    /**
+     * Synchronously generates (or reuses) visualization assets for every
+     * recipe step of the given flow, in execution order, and persists the
+     * updated flow with the assets attached.
+     *
+     * @param recipeId identifier of the recipe flow to visualize
+     * @return the visualization response with one result per step, or a
+     *         message-only response with an empty step list if the flow is not found
+     */
     public RecipeVisualizationResponseDTO generateVisualization(String recipeId) {
         Optional<Recipe> flowOpt = recipeRepository.findByFlowId(recipeId);
         if (flowOpt.isEmpty()) {
@@ -96,6 +115,12 @@ public class AIRecipeVisualizationService {
     /**
      * Generate (or reuse) the visualization asset for a single recipe step, so the caller can
      * request steps one at a time and reflect progress in the UI as each one completes.
+     *
+     * @param recipeId identifier of the recipe flow containing the step
+     * @param stepId identifier of the specific step node to visualize
+     * @return the visualization result for the requested step
+     * @throws RecipeFlowGenerationException if the recipe flow or the step id
+     *         cannot be found within it
      */
     public RecipeVisualizationStepResponseDTO generateVisualizationForStep(String recipeId, String stepId) {
         Recipe flow = recipeRepository.findByFlowId(recipeId)
@@ -155,6 +180,11 @@ public class AIRecipeVisualizationService {
      * Touches only the {@code VisualizationAsset} collection and the AI/image/storage clients —
      * never the shared {@link Recipe} flow document — so it is safe to run concurrently across
      * steps of the same recipe as a {@link com.processVisualisation.virtualKitchen.common.concurrent.Task}.
+     *
+     * @param data the step node's raw data map (used to derive the dedup/cache key)
+     * @param stepFields the current step's extracted fields used for prompt generation
+     * @param previousStepFields the preceding step's extracted fields, or {@code null} if none
+     * @return the resolved (existing or newly generated) visualization asset
      */
     public VisualizationAsset resolveVisualizationAsset(
             Map<String, Object> data,
@@ -184,6 +214,10 @@ public class AIRecipeVisualizationService {
      * re-reading the flow document itself. Each step's {@code previousStepFields} come from the
      * preceding node's already-loaded data — not from any other step's generation result — so the
      * returned steps have no execution-order dependency on each other and can run in parallel.
+     *
+     * @param recipeId identifier of the recipe flow to prepare
+     * @return the loaded flow along with the ordered, pre-computed per-step contexts
+     * @throws RecipeFlowGenerationException if the recipe flow cannot be found
      */
     public RecipeStepPreparation prepareStepContexts(String recipeId) {
         Recipe flow = recipeRepository.findByFlowId(recipeId)
@@ -210,6 +244,9 @@ public class AIRecipeVisualizationService {
      * occur if multiple concurrent tasks each read-mutated-saved the same flow document. Steps
      * missing from {@code assetsByStepId} (failed generations) are left unmutated and can be
      * retried later.
+     *
+     * @param flow the recipe flow whose nodes should receive their generated assets
+     * @param assetsByStepId map of step (node) id to its successfully generated asset
      */
     public void attachResultsAndSave(Recipe flow, Map<String, VisualizationAsset> assetsByStepId) {
         for (Recipe.NodeDocument node : flow.getNodes()) {
@@ -222,6 +259,11 @@ public class AIRecipeVisualizationService {
         recipeRepository.save(flow);
     }
 
+    /**
+     * A single recipe step's pre-loaded generation context: its flow node,
+     * raw data map, extracted step fields, and the preceding step's fields
+     * (for prompt continuity).
+     */
     public record StepContext(
             Recipe.NodeDocument node,
             Map<String, Object> data,
@@ -230,6 +272,10 @@ public class AIRecipeVisualizationService {
     ) {
     }
 
+    /**
+     * The result of {@link #prepareStepContexts}: the loaded recipe flow
+     * together with its ordered, ready-to-process step contexts.
+     */
     public record RecipeStepPreparation(Recipe flow, List<StepContext> steps) {
     }
 

@@ -16,21 +16,52 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * Configures Spring Security for the application: password hashing, CORS,
+ * CSRF, JWT-based request authentication, and which request paths require an
+ * authenticated user.
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
+    /**
+     * Creates this configuration.
+     *
+     * @param jwtAuthenticationFilter filter that resolves the authenticated
+     *                                user from the request's JWT before
+     *                                Spring's default authentication filter runs
+     */
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
+    /**
+     * Provides the password encoder used to hash and verify user passwords.
+     *
+     * @return a {@link BCryptPasswordEncoder} instance
+     */
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * Builds the application's {@link SecurityFilterChain}: enables CORS via
+     * {@link #corsConfigurationSource()}, disables CSRF, requires
+     * authentication on {@code /api/v1/auth/me} and on any request not
+     * explicitly permitted, permits unauthenticated access to
+     * {@code /swagger-ui/**}, {@code /v3/api-docs/**} and {@code /api/**},
+     * inserts {@link #jwtAuthenticationFilter} before
+     * {@link UsernamePasswordAuthenticationFilter} so the authenticated user
+     * is resolved from the JWT first, and enables HTTP Basic authentication.
+     *
+     * @param http the {@link HttpSecurity} builder to configure
+     * @return the configured {@link SecurityFilterChain}
+     * @throws Exception if the security chain fails to build
+     */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
@@ -56,6 +87,14 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /**
+     * Defines the CORS policy applied to every endpoint ({@code /**}):
+     * allows the local Vite dev frontend origins ({@code http://localhost:5173}
+     * and {@code http://127.0.0.1:5173}), the GET/POST/PUT/PATCH/DELETE/OPTIONS
+     * methods, any request header, and credentialed (cookie/auth-header) requests.
+     *
+     * @return the {@link CorsConfigurationSource} used by {@link #securityFilterChain}
+     */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();

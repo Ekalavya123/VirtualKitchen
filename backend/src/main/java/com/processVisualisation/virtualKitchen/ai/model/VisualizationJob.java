@@ -44,6 +44,11 @@ public class VisualizationJob {
 
     private Instant updatedAt;
 
+    /**
+     * Outcome of a single step's visualization generation within a
+     * {@link VisualizationJob}, including the produced asset/image on
+     * success or an error message on failure.
+     */
     @Data
     public static class StepResult {
         private String stepId;

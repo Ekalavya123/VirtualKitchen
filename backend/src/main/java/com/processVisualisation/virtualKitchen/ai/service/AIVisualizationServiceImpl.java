@@ -14,6 +14,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * Default {@link AIVisualizationService} implementation that derives a
+ * sequence of {@link VisualizationClip} placeholders from a recipe flow's
+ * {@code recipeStepNode} nodes, creating or reusing one clip per step and
+ * linking each to its predecessor for continuity.
+ */
 @Service
 public class AIVisualizationServiceImpl implements AIVisualizationService {
 
@@ -25,6 +31,15 @@ public class AIVisualizationServiceImpl implements AIVisualizationService {
         this.recipeRepository = recipeRepository;
     }
 
+    /**
+     * Builds (or updates) the visualization clips for a recipe flow's steps,
+     * creating a new clip per {@code recipeStepNode} node when none exists
+     * yet and preserving previously generated media/status fields otherwise.
+     *
+     * @param flowId identifier of the recipe flow to visualize
+     * @return the visualization response with the ordered clips and final clip,
+     *         or a message-only response if the flow or its template id is not found
+     */
     @Override
     public VisualizationResponseDTO generateVisualization(String flowId) {
         // Fetch flow document from database using flowId

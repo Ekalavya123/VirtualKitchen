@@ -8,6 +8,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
+/**
+ * MongoDB document recording a price-per-unit entry, in a given currency,
+ * for an {@link Ingredient} or piece of {@link Equipment} (discriminated
+ * by {@link ItemType}) that becomes effective from a given date. Multiple
+ * records per item form a cost history over time.
+ */
 @Data
 @Document(collection = "item_cost")
 public class ItemCost {

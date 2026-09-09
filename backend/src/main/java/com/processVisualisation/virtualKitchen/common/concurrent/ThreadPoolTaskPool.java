@@ -24,6 +24,16 @@ public class ThreadPoolTaskPool implements TaskPool {
     private final int nThreads;
     private final ExecutorService executor;
 
+    /**
+     * Creates a pool backed by a fixed-size {@link ExecutorService}, whose
+     * threads are named after {@code poolName} and marked as daemon threads
+     * so they never prevent JVM shutdown.
+     *
+     * @param nThreads number of worker threads to run tasks on; must be >= 1
+     * @param poolName prefix used to name worker threads (e.g. {@code "poolName-pool-1"}),
+     *                 useful for identifying threads in logs and thread dumps
+     * @throws IllegalArgumentException if {@code nThreads} is less than 1
+     */
     public ThreadPoolTaskPool(int nThreads, String poolName) {
         if (nThreads < 1) {
             throw new IllegalArgumentException("nThreads must be >= 1, got " + nThreads);
@@ -41,11 +51,26 @@ public class ThreadPoolTaskPool implements TaskPool {
         };
     }
 
+    /**
+     * {@inheritDoc}
+     * The task body runs asynchronously on this pool's executor; any
+     * exception it throws is caught by {@link #runSafely} and converted into
+     * a {@link TaskResult#failure} rather than failing the returned future.
+     */
     @Override
     public <R> CompletableFuture<TaskResult<R>> submit(NamedTask<R> task) {
         return CompletableFuture.supplyAsync(() -> runSafely(task), executor);
     }
 
+    /**
+     * {@inheritDoc}
+     * Every task is submitted to the executor up front; {@code onTaskComplete}
+     * runs on whichever worker thread finishes a given task, so it may be
+     * invoked concurrently and out of the order {@code tasks} were passed in.
+     * This method blocks the calling thread (via {@link CompletableFuture#join()})
+     * until every submitted task has completed before assembling and
+     * returning the aggregated {@link BatchResult}.
+     */
     @Override
     public <R> BatchResult<R> submitAll(List<NamedTask<R>> tasks, Consumer<TaskResult<R>> onTaskComplete) {
         List<CompletableFuture<TaskResult<R>>> futures = new ArrayList<>(tasks.size());
@@ -67,6 +92,16 @@ public class ThreadPoolTaskPool implements TaskPool {
         return new BatchResult<>(results);
     }
 
+    /**
+     * Executes {@code task} and converts any thrown {@link Throwable} into a
+     * failed {@link TaskResult} instead of letting it escape onto the worker
+     * thread; the failure is also logged at WARN level.
+     *
+     * @param <R> the type of result produced by the task
+     * @param task the task to run
+     * @return a successful result if the task completed normally, otherwise
+     *         a failed result wrapping the thrown exception
+     */
     private <R> TaskResult<R> runSafely(NamedTask<R> task) {
         try {
             return TaskResult.success(task.taskId(), task.task().execute());
@@ -76,11 +111,20 @@ public class ThreadPoolTaskPool implements TaskPool {
         }
     }
 
+    /**
+     * {@inheritDoc}
+     */
     @Override
     public int nThreads() {
         return nThreads;
     }
 
+    /**
+     * {@inheritDoc}
+     * Delegates to {@link ExecutorService#shutdown()}: previously submitted
+     * tasks continue running to completion, but the executor stops accepting
+     * new tasks.
+     */
     @Override
     public void shutdown() {
         executor.shutdown();

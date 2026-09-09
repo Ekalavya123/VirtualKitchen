@@ -13,6 +13,17 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
+/**
+ * Default implementation of OtpService. Generates six-digit numeric codes,
+ * stores only their hash (never the plaintext code) via a PasswordEncoder,
+ * and persists them through OtpRepository. Enforces three security controls
+ * configured via app.otp.* properties: an expiration window
+ * (app.otp.expiration-minutes) after which a code can no longer be verified,
+ * a maximum number of incorrect verification attempts per code
+ * (app.otp.max-attempts) before it is locked out, and a resend rate limit
+ * capping how many codes may be generated per email+purpose within a rolling
+ * window (app.otp.resend-window-minutes, app.otp.max-per-window).
+ */
 @Service
 public class OtpServiceImpl implements OtpService {
 
@@ -40,6 +51,16 @@ public class OtpServiceImpl implements OtpService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    /**
+     * Generates a new six-digit OTP for the given email and purpose, persists
+     * its hash with an expiry of app.otp.expiration-minutes minutes from now,
+     * and emails the plaintext code to the user. Enforces the resend rate
+     * limit before generating a new code.
+     *
+     * @param email the destination email address the OTP is generated for
+     * @param purpose the reason the OTP is being generated (email verification, login, or password reset)
+     * @throws AuthException if too many codes have already been requested for this email and purpose within the resend window
+     */
     @Override
     public void generateAndSendOtp(String email, OtpPurpose purpose) {
         long recentCount = otpRepository.countByEmailAndPurposeAndCreatedAtAfter(
@@ -64,6 +85,16 @@ public class OtpServiceImpl implements OtpService {
         emailService.sendOtpEmail(email, code, purpose);
     }
 
+    /**
+     * Validates the given OTP code and, if correct, marks it both verified
+     * and consumed in a single step. Used by flows (email verification, OTP
+     * login) that need no separate confirmation step after verification.
+     *
+     * @param email the email address the OTP was issued for
+     * @param code the plaintext OTP code submitted by the caller
+     * @param purpose the purpose the OTP must have been issued for
+     * @throws AuthException if no active OTP is found, it is already used, has expired, has exceeded its attempt limit, or the code does not match
+     */
     @Override
     public void verifyAndConsume(String email, String code, OtpPurpose purpose) {
         Otp otp = validateAndGetActiveOtp(email, code, purpose);
@@ -72,6 +103,17 @@ public class OtpServiceImpl implements OtpService {
         otpRepository.save(otp);
     }
 
+    /**
+     * Validates the given OTP code and, if correct, marks it verified without
+     * consuming it. Used to gate the password-reset flow: the code stays
+     * usable as proof of verification until consumeVerified is later called
+     * to finalize the reset.
+     *
+     * @param email the email address the OTP was issued for
+     * @param code the plaintext OTP code submitted by the caller
+     * @param purpose the purpose the OTP must have been issued for
+     * @throws AuthException if no active OTP is found, it is already used, has expired, has exceeded its attempt limit, or the code does not match
+     */
     @Override
     public void verifyOnly(String email, String code, OtpPurpose purpose) {
         Otp otp = validateAndGetActiveOtp(email, code, purpose);
@@ -79,6 +121,16 @@ public class OtpServiceImpl implements OtpService {
         otpRepository.save(otp);
     }
 
+    /**
+     * Confirms that the most recent OTP for the given email and purpose has
+     * already been verified (via verifyOnly) and not yet consumed, then marks
+     * it consumed. Used as the final step of the password-reset flow after
+     * verifyOnly has confirmed the code.
+     *
+     * @param email the email address the OTP was issued for
+     * @param purpose the purpose the OTP must have been issued for
+     * @throws AuthException if no verified, unconsumed OTP exists for this email and purpose, or it has since expired
+     */
     @Override
     public void consumeVerified(String email, OtpPurpose purpose) {
         Otp otp = otpRepository.findTopByEmailAndPurposeOrderByCreatedAtDesc(email, purpose)
@@ -96,6 +148,18 @@ public class OtpServiceImpl implements OtpService {
         otpRepository.save(otp);
     }
 
+    /**
+     * Fetches the most recent OTP for the given email and purpose, checks it
+     * is unconsumed/unverified, unexpired, and under its attempt limit,
+     * increments its attempt counter, and verifies the submitted code against
+     * the stored hash.
+     *
+     * @param email the email address the OTP was issued for
+     * @param code the plaintext OTP code submitted by the caller
+     * @param purpose the purpose the OTP must have been issued for
+     * @return the validated OTP entity
+     * @throws AuthException if no active OTP is found, it is already used, has expired, has exceeded its attempt limit, or the code does not match the stored hash
+     */
     private Otp validateAndGetActiveOtp(String email, String code, OtpPurpose purpose) {
         Optional<Otp> latest = otpRepository.findTopByEmailAndPurposeOrderByCreatedAtDesc(email, purpose);
 

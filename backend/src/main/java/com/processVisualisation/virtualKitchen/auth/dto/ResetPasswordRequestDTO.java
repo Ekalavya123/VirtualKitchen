@@ -5,6 +5,11 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * Inbound payload for completing the password-reset flow, carrying the
+ * target account email plus the new password and its confirmation. Submitted
+ * after the corresponding OTP has already been verified.
+ */
 @Data
 public class ResetPasswordRequestDTO {
 

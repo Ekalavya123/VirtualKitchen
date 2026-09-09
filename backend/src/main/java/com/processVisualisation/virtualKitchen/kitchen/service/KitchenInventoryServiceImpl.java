@@ -21,6 +21,17 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+ * Default implementation of {@link IKitchenInventoryService}.
+ * <p>
+ * Persists kitchen-to-inventory-item association records via
+ * {@link KitchenInventoryRepository}, assigning generated ids through
+ * {@link SequenceGeneratorService}. When listing a kitchen's associations,
+ * each record is enriched by joining against the underlying
+ * {@link Inventory} record (quantity, unit, last-updated timestamp, item
+ * type) and, depending on item type, the ingredient or equipment repository
+ * for the item's display name.
+ */
 @Service
 public class KitchenInventoryServiceImpl implements IKitchenInventoryService {
 
@@ -42,6 +53,13 @@ public class KitchenInventoryServiceImpl implements IKitchenInventoryService {
     @Autowired
     private IngredientRepository ingredientRepository;
 
+    /**
+     * Creates a new kitchen-inventory association with a generated id and
+     * persists it.
+     *
+     * @param dto the kitchen id and inventory id to associate
+     * @return the created association
+     */
     @Override
     public KitchenInventoryResponseDTO create(KitchenInventoryRequestDTO dto){
         KitchenInventory ki = mapper.toEntity(dto);
@@ -49,6 +67,17 @@ public class KitchenInventoryServiceImpl implements IKitchenInventoryService {
         return mapper.toDTO(repo.save(ki));
     }
 
+    /**
+     * Fetches all kitchen-inventory associations for the given kitchen and
+     * enriches each with details of the linked inventory record: quantity,
+     * unit, last-updated timestamp, item type, and (looked up from the
+     * ingredient or equipment repository based on item type) the item's
+     * display name. If the linked inventory record cannot be found, the
+     * enrichment fields are left unset on the returned DTO.
+     *
+     * @param kitchenId id of the kitchen
+     * @return the kitchen's inventory associations, enriched with item details
+     */
     @Override
     public List<KitchenInventoryResponseDTO> getByKitchen(Long kitchenId){
         return repo.findByKitchenId(kitchenId)
@@ -83,6 +112,11 @@ public class KitchenInventoryServiceImpl implements IKitchenInventoryService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Deletes the kitchen-inventory association with the given id.
+     *
+     * @param id id of the association to delete
+     */
     @Override
     public void delete(Long id){
         repo.deleteById(id);

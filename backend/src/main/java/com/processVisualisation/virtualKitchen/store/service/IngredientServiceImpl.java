@@ -14,6 +14,12 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Default {@link IIngredientService} implementation backed by MongoDB via
+ * {@link IngredientRepository}. Assigns identifiers using
+ * {@link SequenceGeneratorService} and converts between entities and DTOs
+ * using {@link IngredientMapper}.
+ */
 @Service
 public class IngredientServiceImpl implements IIngredientService {
 
@@ -26,6 +32,14 @@ public class IngredientServiceImpl implements IIngredientService {
     @Autowired
     private SequenceGeneratorService sequenceGeneratorService;
 
+    /**
+     * Creates a new ingredient catalog entry after checking that the name
+     * is not already in use, assigning it a generated sequence id.
+     *
+     * @param request the ingredient name, description and default unit
+     * @return the created ingredient
+     * @throws RuntimeException if an ingredient with the same name already exists
+     */
     @Override
     public IngredientResponseDTO createIngredient(IngredientRequestDTO request) {
 
@@ -40,6 +54,13 @@ public class IngredientServiceImpl implements IIngredientService {
         return ingredientMapper.toDTO(saved);
     }
 
+    /**
+     * Fetches a single ingredient by its identifier.
+     *
+     * @param id the ingredient identifier
+     * @return the matching ingredient
+     * @throws RuntimeException if no ingredient exists with the given id
+     */
     @Override
     public IngredientResponseDTO getIngredientById(Long id) {
         Ingredient ingredient = ingredientRepository.findById(id)
@@ -48,6 +69,11 @@ public class IngredientServiceImpl implements IIngredientService {
         return ingredientMapper.toDTO(ingredient);
     }
 
+    /**
+     * Fetches every ingredient in the catalog.
+     *
+     * @return the list of all ingredients
+     */
     @Override
     public List<IngredientResponseDTO> getAllIngredients() {
         return ingredientRepository.findAll()
@@ -56,6 +82,14 @@ public class IngredientServiceImpl implements IIngredientService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Updates an existing ingredient's name, description and default unit.
+     *
+     * @param id the identifier of the ingredient to update
+     * @param request the replacement values
+     * @return the updated ingredient
+     * @throws RuntimeException if no ingredient exists with the given id
+     */
     @Override
     public IngredientResponseDTO updateIngredient(Long id, IngredientUpdateDTO request) {
 
@@ -70,6 +104,12 @@ public class IngredientServiceImpl implements IIngredientService {
         return ingredientMapper.toDTO(updated);
     }
 
+    /**
+     * Deletes an ingredient from the catalog.
+     *
+     * @param id the identifier of the ingredient to delete
+     * @throws RuntimeException if no ingredient exists with the given id
+     */
     @Override
     public void deleteIngredient(Long id) {
 

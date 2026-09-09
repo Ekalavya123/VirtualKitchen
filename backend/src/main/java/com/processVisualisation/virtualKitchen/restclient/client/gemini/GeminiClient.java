@@ -28,6 +28,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * {@link AIClient} implementation that talks to Google's Gemini chat
+ * completion API. It is the default text-generation provider for the
+ * Virtual Kitchen application, used to produce process-visualization
+ * content from prompts. Active when the {@code ai.provider} property is
+ * unset or set to {@code gemini}, and is the primary {@link AIClient} bean.
+ */
 @ConditionalOnProperty(prefix = "ai", name = "provider", havingValue = "gemini", matchIfMissing = true)
 @Component
 @Primary
@@ -37,6 +44,12 @@ public class GeminiClient implements AIClient {
     private final GeminiProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * Creates a client bound to the Gemini REST client and configuration.
+     *
+     * @param restClient the pre-configured REST client used to call the Gemini API
+     * @param properties the configured Gemini API key, endpoints, and default model
+     */
     public GeminiClient(
             @Qualifier("geminiRestClient") RestClient restClient,
             GeminiProperties properties
@@ -45,6 +58,19 @@ public class GeminiClient implements AIClient {
         this.properties = properties;
     }
 
+    /**
+     * Sends a chat request to the Gemini API and returns the parsed
+     * response. Validates configuration and the request, builds the Gemini
+     * request payload, logs request/response outcomes, and maps HTTP and
+     * connectivity failures to the appropriate AI client exception subtype.
+     *
+     * @param request the prompt, model, and generation parameters to send
+     * @return the parsed Gemini response, including content and usage metadata
+     * @throws AICommunicationException if Gemini is not configured correctly, the request is invalid, the endpoint URI is invalid, or the API call fails with a non-authentication HTTP error
+     * @throws AIAuthenticationException if Gemini rejects the request due to invalid or missing credentials
+     * @throws AITimeoutException if the request times out or the connection fails
+     * @throws AIInvalidResponseException if Gemini returns an empty response or a response without message content
+     */
     @Override
     public AIResponse chat(AIRequest request) {
         validateConfiguration();

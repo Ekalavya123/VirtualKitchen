@@ -61,6 +61,10 @@ public class VisualizationJobService {
      * Validates the recipe and creates a {@code QUEUED} job synchronously (so a missing recipe
      * fails fast, before any job exists), then hands the actual generation off to the
      * orchestrator pool and returns immediately.
+     *
+     * @param recipeId identifier of the recipe flow to visualize
+     * @return the newly created job in {@code QUEUED} status
+     * @throws RecipeFlowGenerationException if the recipe flow cannot be found
      */
     public VisualizationJobResponseDTO startJob(String recipeId) {
         AIRecipeVisualizationService.RecipeStepPreparation preparation =
@@ -84,6 +88,13 @@ public class VisualizationJobService {
         return toDto(job);
     }
 
+    /**
+     * Retrieves the current status and per-step results of a visualization job.
+     *
+     * @param jobId identifier of the job to look up
+     * @return the current job status as a DTO
+     * @throws RecipeFlowGenerationException if no job exists with the given id
+     */
     public VisualizationJobResponseDTO getJobStatus(String jobId) {
         VisualizationJob job = visualizationJobRepository.findById(jobId)
                 .orElseThrow(() -> new RecipeFlowGenerationException("Visualization job not found: " + jobId));

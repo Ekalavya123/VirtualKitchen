@@ -5,6 +5,11 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * Inbound payload for creating a new user account via the general user
+ * management endpoint (UserController), carrying the account name, email
+ * address, and plaintext password to be hashed before storage.
+ */
 @Data
 public class UserRequestDTO {
 

@@ -9,6 +9,13 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
+/**
+ * MongoDB document representing a reusable recipe definition ("process template")
+ * that can be executed multiple times as a {@link RecipeExecution}. Owns an
+ * ordered set of steps via {@link RecipeTemplateStep} and a {@link Visibility}
+ * controlling who can see it. {@code SEQUENCE_NAME} names the counter used to
+ * generate its id.
+ */
 @Data
 @Document(collection = "process_template")
 public class RecipeTemplate {

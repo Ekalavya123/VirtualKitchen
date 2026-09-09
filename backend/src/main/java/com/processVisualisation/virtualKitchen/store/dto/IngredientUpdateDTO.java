@@ -5,6 +5,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
+/**
+ * Validated request payload for updating an existing ingredient's name,
+ * description and default {@link UnitType}.
+ */
 @Data
 public class IngredientUpdateDTO {
 

@@ -13,6 +13,12 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Default {@link IProcessIngredientUsageService} implementation. Persists ingredient usage
+ * records via {@link RecipeIngredientUsageRepository}, assigning each new record a
+ * sequence-generated id before saving, and maps between entities and DTOs via
+ * {@link ProcessIngredientUsageMapper}.
+ */
 @Service
 public class RecipeIngredientUsageServiceImpl implements IProcessIngredientUsageService {
 
@@ -25,6 +31,12 @@ public class RecipeIngredientUsageServiceImpl implements IProcessIngredientUsage
     @Autowired
     private SequenceGeneratorService seq;
 
+    /**
+     * Creates and persists a new ingredient usage record, assigning it a new sequence-generated id.
+     *
+     * @param dto the ingredient usage details to persist
+     * @return the created ingredient usage record
+     */
     @Override
     public RecipeIngredientUsageResponseDTO create(RecipeIngredientUsageRequestDTO dto){
         RecipeIngredientUsage p = mapper.toEntity(dto);
@@ -32,6 +44,12 @@ public class RecipeIngredientUsageServiceImpl implements IProcessIngredientUsage
         return mapper.toDTO(repo.save(p));
     }
 
+    /**
+     * Retrieves all ingredient usage records for a given process execution.
+     *
+     * @param processExecutionId the id of the process execution to filter by
+     * @return the ingredient usage records for that execution
+     */
     @Override
     public List<RecipeIngredientUsageResponseDTO> getByProcess(Long processExecutionId){
         return repo.findByProcessExecutionId(processExecutionId)

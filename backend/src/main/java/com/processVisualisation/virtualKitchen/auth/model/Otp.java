@@ -8,6 +8,14 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
+/**
+ * Persistent entity representing a single one-time passcode (OTP) issued for
+ * a specific email address and purpose, stored in the "otps" MongoDB
+ * collection. Stores only the hashed code (never the plaintext value),
+ * together with its expiry, verification/consumption state, and the number
+ * of failed verification attempts made against it. Populated and read by
+ * OtpRepository, and managed through its full lifecycle by OtpService.
+ */
 @Data
 @Document(collection = "otps")
 public class Otp {

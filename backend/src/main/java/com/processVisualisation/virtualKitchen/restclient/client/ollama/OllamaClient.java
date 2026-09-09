@@ -26,6 +26,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * {@link AIClient} implementation that talks to a locally or self-hosted
+ * Ollama server's chat completion API. Used by the Virtual Kitchen
+ * application as a text-generation provider when running models locally.
+ * Active when the {@code ai.provider} property is set to {@code ollama}.
+ */
 @Component
 @ConditionalOnProperty(
         prefix = "ai",
@@ -38,6 +44,12 @@ public class OllamaClient implements AIClient {
     private final OllamaProperties properties;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * Creates a client bound to the Ollama REST client and configuration.
+     *
+     * @param restClient the pre-configured REST client used to call the Ollama API
+     * @param properties the configured Ollama base URL, chat endpoint, and default model
+     */
     public OllamaClient(
             @Qualifier("ollamaRestClient") RestClient restClient,
             OllamaProperties properties) {
@@ -46,6 +58,18 @@ public class OllamaClient implements AIClient {
         this.properties = properties;
     }
 
+    /**
+     * Sends a chat request to the Ollama API and returns the parsed
+     * response. Validates configuration and the request, builds the Ollama
+     * request payload, logs request/response outcomes, and maps HTTP and
+     * connectivity failures to the appropriate AI client exception subtype.
+     *
+     * @param request the prompt, model, and generation parameters to send
+     * @return the parsed Ollama response, including content and usage metadata
+     * @throws AICommunicationException if Ollama is not configured correctly, the request is invalid, or the API call fails with an HTTP error
+     * @throws AITimeoutException if the request times out or the connection fails
+     * @throws AIInvalidResponseException if Ollama returns an empty response, a response without message content, or unparsable JSON
+     */
     @Override
     public AIResponse chat(AIRequest request) {
 

@@ -9,6 +9,11 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
+/**
+ * MongoDB document representing a single AI-generated visualization asset
+ * (an image and/or video, with the prompts used to produce them) stored in
+ * the {@code visualization_asset} collection.
+ */
 @Data
 @Document(collection = "visualization_asset")
 public class VisualizationAsset {

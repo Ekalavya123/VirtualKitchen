@@ -10,6 +10,11 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
 
+/**
+ * MongoDB document representing a single visualization clip (an ordered
+ * image/video segment belonging to a process template's recipe flow) stored
+ * in the {@code visualization_clip} collection.
+ */
 @Data
 @Document(collection = "visualization_clip")
 public class VisualizationClip {

@@ -15,6 +15,12 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * REST controller exposing CRUD endpoints for the ingredient catalog under
+ * {@code /api/v1/ingredients}. Delegates persistence and business logic to
+ * {@link IIngredientService} and wraps every response in a standard
+ * {@link ApiResponse} envelope.
+ */
 @RestController
 @RequestMapping("/api/v1/ingredients")
 public class IngredientController {
@@ -22,6 +28,13 @@ public class IngredientController {
     @Autowired
     private IIngredientService ingredientService;
 
+    /**
+     * Creates a new ingredient catalog entry.
+     *
+     * @param request the validated ingredient name, description and default unit
+     * @return a 200 response wrapping the created ingredient
+     * @throws RuntimeException if an ingredient with the same name already exists
+     */
     @PostMapping
     public ResponseEntity<ApiResponse<IngredientResponseDTO>> create(
             @Valid @RequestBody IngredientRequestDTO request) {
@@ -32,6 +45,13 @@ public class IngredientController {
         );
     }
 
+    /**
+     * Fetches a single ingredient by its identifier.
+     *
+     * @param id the ingredient identifier
+     * @return a 200 response wrapping the matching ingredient
+     * @throws RuntimeException if no ingredient exists with the given id
+     */
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<IngredientResponseDTO>> getById(@PathVariable Long id) {
 
@@ -41,6 +61,11 @@ public class IngredientController {
         );
     }
 
+    /**
+     * Fetches every ingredient in the catalog.
+     *
+     * @return a 200 response wrapping the list of all ingredients
+     */
     @GetMapping
     public ResponseEntity<ApiResponse<List<IngredientResponseDTO>>> getAll() {
 
@@ -50,6 +75,14 @@ public class IngredientController {
         );
     }
 
+    /**
+     * Updates an existing ingredient's name, description and default unit.
+     *
+     * @param id the identifier of the ingredient to update
+     * @param request the validated replacement values
+     * @return a 200 response wrapping the updated ingredient
+     * @throws RuntimeException if no ingredient exists with the given id
+     */
     @PutMapping("/{id}")
     public ResponseEntity<ApiResponse<IngredientResponseDTO>> update(
             @PathVariable Long id,
@@ -61,6 +94,13 @@ public class IngredientController {
         );
     }
 
+    /**
+     * Deletes an ingredient from the catalog.
+     *
+     * @param id the identifier of the ingredient to delete
+     * @return a 200 response with no data payload confirming deletion
+     * @throws RuntimeException if no ingredient exists with the given id
+     */
     @DeleteMapping("/{id}")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Long id) {
 
