@@ -382,15 +382,24 @@ export const normalizeStepNodeData = (value: unknown): RecipeStepNodeData => {
 
   const step = pruneStepFieldsByActionSchema(mergedStep)
   const rawVisualization = asRecord(raw.visualization)
-  const visualizationAssetId = toStringValue(rawVisualization.assetId)
-  const visualization: StepVisualizationData | undefined = raw.visualization
-    ? {
-        assetId: visualizationAssetId ? Number(visualizationAssetId) : undefined,
-        imagePrompt: toStringValue(rawVisualization.imagePrompt) || undefined,
-        imageUrl: toStringValue(rawVisualization.imageUrl) || undefined,
-        status: visualizationAssetId ? 'generated' : 'not_generated',
-      }
-    : undefined
+  // The backend also writes these as flat fields directly on the node data
+  // (see AIRecipeVisualizationService#attachAssetToNode) instead of nesting them
+  // under `visualization`, so fall back to the flat shape when reading a saved flow.
+  const visualizationAssetId =
+    toStringValue(rawVisualization.assetId) || toStringValue(raw.visualizationAssetId)
+  const visualizationImagePrompt =
+    toStringValue(rawVisualization.imagePrompt) || toStringValue(raw.imagePrompt)
+  const visualizationImageUrl =
+    toStringValue(rawVisualization.imageUrl) || toStringValue(raw.imageUrl)
+  const visualization: StepVisualizationData | undefined =
+    raw.visualization || visualizationAssetId || visualizationImageUrl
+      ? {
+          assetId: visualizationAssetId ? Number(visualizationAssetId) : undefined,
+          imagePrompt: visualizationImagePrompt || undefined,
+          imageUrl: visualizationImageUrl || undefined,
+          status: visualizationAssetId ? 'generated' : 'not_generated',
+        }
+      : undefined
 
   return {
     title: getStepNodeTitle(step.action),

@@ -12,6 +12,7 @@ type FlowEditorTopBarProps = {
   onGenerateVisuals: () => void
   isGeneratingVisuals?: boolean
   generateVisualsStatus?: { type: 'success' | 'error'; text: string } | null
+  generateVisualsProgress?: { completed: number; total: number } | null
   onVisualize: () => void
   onBack?: () => void
   nodeZoomPercent: number
@@ -29,6 +30,7 @@ export default function FlowEditorTopBar({
   onGenerateVisuals,
   isGeneratingVisuals = false,
   generateVisualsStatus = null,
+  generateVisualsProgress = null,
   onVisualize,
   onBack,
   nodeZoomPercent,
@@ -106,7 +108,25 @@ export default function FlowEditorTopBar({
             {generateVisualsStatus.type === 'success' ? '✅' : '⚠️'} {generateVisualsStatus.text}
           </span>
         )}
-        <button onClick={onGenerateVisuals} disabled={isGeneratingVisuals} style={btnStyle({ background: '#fdf4ff', borderColor: '#e9d5ff', color: '#a21caf', opacity: isGeneratingVisuals ? 0.7 : 1 })}>{isGeneratingVisuals ? '⏳ Generating…' : '🎨 Generate Visuals'}</button>
+        {isGeneratingVisuals && generateVisualsProgress && generateVisualsProgress.total > 0 && (() => {
+          const percent = Math.round((generateVisualsProgress.completed / generateVisualsProgress.total) * 100)
+          return (
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              title={`Generated ${generateVisualsProgress.completed} of ${generateVisualsProgress.total} steps`}
+            >
+              <div style={{ width: 72, height: 6, borderRadius: 999, background: '#f3e8ff', overflow: 'hidden' }}>
+                <div style={{ width: `${percent}%`, height: '100%', background: '#a21caf', transition: 'width 200ms ease' }} />
+              </div>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#a21caf', minWidth: 32 }}>{percent}%</span>
+            </div>
+          )
+        })()}
+        <button onClick={onGenerateVisuals} disabled={isGeneratingVisuals} style={btnStyle({ background: '#fdf4ff', borderColor: '#e9d5ff', color: '#a21caf', opacity: isGeneratingVisuals ? 0.7 : 1 })}>
+          {isGeneratingVisuals
+            ? `⏳ Generating… ${generateVisualsProgress ? `${generateVisualsProgress.completed}/${generateVisualsProgress.total}` : ''}`
+            : '🎨 Generate Visuals'}
+        </button>
         <button onClick={onVisualize} style={btnStyle({ background: '#eff6ff', borderColor: '#93c5fd', color: '#2563eb' })}>🎬 Visualize</button>
         <button onClick={onExport} style={btnStyle({ background: '#f0fdf4', borderColor: '#86efac', color: '#16a34a' })}>📤 Export</button>
         <button onClick={onSave} style={btnStyle({ background: '#fef3c7', borderColor: '#fde68a', color: '#92400e' })}>💾 Save</button>

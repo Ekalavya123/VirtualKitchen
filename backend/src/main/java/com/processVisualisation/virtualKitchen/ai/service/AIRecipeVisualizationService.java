@@ -16,6 +16,7 @@ import com.processVisualisation.virtualKitchen.recipe.repository.RecipeRepositor
 import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationAssetRepository;
 import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.common.utils.VisualizationKeyBuilder;
+import com.processVisualisation.virtualKitchen.common.exception.RecipeFlowGenerationException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,30 +79,7 @@ public class AIRecipeVisualizationService {
             Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
             Map<String, Object> stepFields = extractStepFields(data);
 
-            String visualizationKey = VisualizationKeyBuilder.buildFromNodeData(data);
-            Map<String, Object> previousStepFieldsForLambda = previousStepFields;
-            Optional<VisualizationAsset> existingAsset = AIVisualizationAssetRepository.findByVisualizationKey(visualizationKey);
-            VisualizationAsset asset;
-            if (existingAsset.isPresent()) {
-                asset = existingAsset.get();
-                if (asset.getImagePrompt() == null || asset.getImagePrompt().isEmpty()) {
-                    asset = generatePrompt(visualizationKey, stepFields, previousStepFieldsForLambda);
-                }
-                if (asset.getImageUrl() == null || asset.getImageUrl().isEmpty()) {
-                    asset = generateImage(asset);
-                }
-            } else {
-                asset = createAsset(visualizationKey, stepFields, previousStepFieldsForLambda);
-            }
-
-            attachAssetToNode(node, data, asset);
-
-            results.add(RecipeVisualizationStepResponseDTO.builder()
-                    .stepId(node.getId())
-                    .visualizationAssetId(asset.getId())
-                    .imagePrompt(asset.getImagePrompt())
-                    .imageUrl(asset.getImageUrl())
-                    .build());
+            results.add(processStep(node, data, stepFields, previousStepFields));
 
             previousStepFields = stepFields;
         }
@@ -113,6 +91,146 @@ public class AIRecipeVisualizationService {
                 .message("Visualization generated")
                 .steps(results)
                 .build();
+    }
+
+    /**
+     * Generate (or reuse) the visualization asset for a single recipe step, so the caller can
+     * request steps one at a time and reflect progress in the UI as each one completes.
+     */
+    public RecipeVisualizationStepResponseDTO generateVisualizationForStep(String recipeId, String stepId) {
+        Recipe flow = recipeRepository.findByFlowId(recipeId)
+                .orElseThrow(() -> new RecipeFlowGenerationException("Recipe flow not found for recipeId: " + recipeId));
+
+        List<Recipe.NodeDocument> orderedSteps = orderRecipeStepNodes(flow);
+
+        int stepIndex = -1;
+        for (int i = 0; i < orderedSteps.size(); i++) {
+            if (orderedSteps.get(i).getId().equals(stepId)) {
+                stepIndex = i;
+                break;
+            }
+        }
+        if (stepIndex == -1) {
+            throw new RecipeFlowGenerationException("Step not found in recipe flow: " + stepId);
+        }
+
+        Recipe.NodeDocument node = orderedSteps.get(stepIndex);
+        Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
+        Map<String, Object> stepFields = extractStepFields(data);
+
+        Map<String, Object> previousStepFields = null;
+        if (stepIndex > 0) {
+            Recipe.NodeDocument previousNode = orderedSteps.get(stepIndex - 1);
+            Map<String, Object> previousData = previousNode.getData() != null ? previousNode.getData() : new LinkedHashMap<>();
+            previousStepFields = extractStepFields(previousData);
+        }
+
+        RecipeVisualizationStepResponseDTO result = processStep(node, data, stepFields, previousStepFields);
+
+        recipeRepository.save(flow);
+
+        return result;
+    }
+
+    private RecipeVisualizationStepResponseDTO processStep(
+            Recipe.NodeDocument node,
+            Map<String, Object> data,
+            Map<String, Object> stepFields,
+            Map<String, Object> previousStepFields
+    ) {
+        VisualizationAsset asset = resolveVisualizationAsset(data, stepFields, previousStepFields);
+
+        attachAssetToNode(node, data, asset);
+
+        return RecipeVisualizationStepResponseDTO.builder()
+                .stepId(node.getId())
+                .visualizationAssetId(asset.getId())
+                .imagePrompt(asset.getImagePrompt())
+                .imageUrl(asset.getImageUrl())
+                .build();
+    }
+
+    /**
+     * Resolves (finding, reusing, or generating) the {@link VisualizationAsset} for one step.
+     * Touches only the {@code VisualizationAsset} collection and the AI/image/storage clients —
+     * never the shared {@link Recipe} flow document — so it is safe to run concurrently across
+     * steps of the same recipe as a {@link com.processVisualisation.virtualKitchen.common.concurrent.Task}.
+     */
+    public VisualizationAsset resolveVisualizationAsset(
+            Map<String, Object> data,
+            Map<String, Object> stepFields,
+            Map<String, Object> previousStepFields
+    ) {
+        String visualizationKey = VisualizationKeyBuilder.buildFromNodeData(data);
+        Optional<VisualizationAsset> existingAsset = AIVisualizationAssetRepository.findByVisualizationKey(visualizationKey);
+        VisualizationAsset asset;
+        if (existingAsset.isPresent()) {
+            asset = existingAsset.get();
+            if (asset.getImagePrompt() == null || asset.getImagePrompt().isEmpty()) {
+                asset = generatePrompt(visualizationKey, stepFields, previousStepFields);
+            }
+            if (asset.getImageUrl() == null || asset.getImageUrl().isEmpty()) {
+                asset = generateImage(asset);
+            }
+        } else {
+            asset = createAsset(visualizationKey, stepFields, previousStepFields);
+        }
+        return asset;
+    }
+
+    /**
+     * Loads the recipe flow and its ordered step contexts once, up front, so a caller (the async
+     * job pipeline) can fan the per-step work out across a {@code TaskPool} without every task
+     * re-reading the flow document itself. Each step's {@code previousStepFields} come from the
+     * preceding node's already-loaded data — not from any other step's generation result — so the
+     * returned steps have no execution-order dependency on each other and can run in parallel.
+     */
+    public RecipeStepPreparation prepareStepContexts(String recipeId) {
+        Recipe flow = recipeRepository.findByFlowId(recipeId)
+                .orElseThrow(() -> new RecipeFlowGenerationException("Recipe flow not found for recipeId: " + recipeId));
+
+        List<Recipe.NodeDocument> orderedSteps = orderRecipeStepNodes(flow);
+        List<StepContext> contexts = new ArrayList<>();
+        Map<String, Object> previousStepFields = null;
+
+        for (Recipe.NodeDocument node : orderedSteps) {
+            Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
+            Map<String, Object> stepFields = extractStepFields(data);
+            contexts.add(new StepContext(node, data, stepFields, previousStepFields));
+            previousStepFields = stepFields;
+        }
+
+        return new RecipeStepPreparation(flow, contexts);
+    }
+
+    /**
+     * Attaches each successfully generated asset to its node and saves the flow exactly once.
+     * This is the ONLY place that mutates/saves the shared flow document for the async pipeline —
+     * called after every parallel step task has finished, to avoid the lost-update race that would
+     * occur if multiple concurrent tasks each read-mutated-saved the same flow document. Steps
+     * missing from {@code assetsByStepId} (failed generations) are left unmutated and can be
+     * retried later.
+     */
+    public void attachResultsAndSave(Recipe flow, Map<String, VisualizationAsset> assetsByStepId) {
+        for (Recipe.NodeDocument node : flow.getNodes()) {
+            VisualizationAsset asset = assetsByStepId.get(node.getId());
+            if (asset != null) {
+                Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
+                attachAssetToNode(node, data, asset);
+            }
+        }
+        recipeRepository.save(flow);
+    }
+
+    public record StepContext(
+            Recipe.NodeDocument node,
+            Map<String, Object> data,
+            Map<String, Object> stepFields,
+            Map<String, Object> previousStepFields
+    ) {
+    }
+
+    public record RecipeStepPreparation(Recipe flow, List<StepContext> steps) {
     }
 
     private VisualizationAsset generatePrompt(String visualizationKey, Map<String, Object> currentStep, Map<String, Object> previousStep) {
@@ -219,27 +337,28 @@ public class AIRecipeVisualizationService {
     }
 
     /**
-     * Orders recipeStepNode nodes by following the flow's edges (topological order)
-     * instead of relying on array position, so previous-step continuity is accurate.
+     * Orders recipeStepNode nodes by following the whole flow graph's edges (topological order
+     * across ALL node types, not just step-to-step edges) instead of relying on array position,
+     * so previous-step continuity is accurate. Restricting the graph to step-to-step edges only
+     * breaks as soon as two steps are separated by a condition/parallel node: with no direct edge
+     * between them both get indegree 0 and the order silently falls back to array position.
      */
     private List<Recipe.NodeDocument> orderRecipeStepNodes(Recipe flow) {
-        List<Recipe.NodeDocument> recipeStepNodes = flow.getNodes().stream()
-                .filter(node -> RECIPE_STEP_NODE_TYPE.equals(node.getType()))
-                .collect(Collectors.toList());
+        List<Recipe.NodeDocument> allNodes = flow.getNodes() != null ? flow.getNodes() : new ArrayList<>();
 
-        Set<String> stepIds = recipeStepNodes.stream()
+        Set<String> allIds = allNodes.stream()
                 .map(Recipe.NodeDocument::getId)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         Map<String, List<String>> adjacency = new HashMap<>();
         Map<String, Integer> indegree = new HashMap<>();
-        stepIds.forEach(id -> indegree.put(id, 0));
+        allIds.forEach(id -> indegree.put(id, 0));
 
         if (flow.getEdges() != null) {
             for (Recipe.EdgeDocument edge : flow.getEdges()) {
                 String source = edge.getSource();
                 String target = edge.getTarget();
-                if (stepIds.contains(source) && stepIds.contains(target)) {
+                if (allIds.contains(source) && allIds.contains(target)) {
                     adjacency.computeIfAbsent(source, k -> new ArrayList<>()).add(target);
                     indegree.merge(target, 1, Integer::sum);
                 }
@@ -247,37 +366,41 @@ public class AIRecipeVisualizationService {
         }
 
         Deque<String> queue = new ArrayDeque<>();
-        stepIds.forEach(id -> {
+        allIds.forEach(id -> {
             if (indegree.get(id) == 0) {
                 queue.add(id);
             }
         });
 
         List<String> orderedIds = new ArrayList<>();
+        Set<String> visited = new HashSet<>();
         while (!queue.isEmpty()) {
             String id = queue.poll();
+            if (!visited.add(id)) {
+                continue;
+            }
             orderedIds.add(id);
             for (String next : adjacency.getOrDefault(id, List.of())) {
-                indegree.merge(next, -1, Integer::sum);
-                if (indegree.get(next) == 0) {
+                int nextIndegree = indegree.merge(next, -1, Integer::sum);
+                if (nextIndegree <= 0 && !visited.contains(next)) {
                     queue.add(next);
                 }
             }
         }
 
-        for (String id : stepIds) {
-            if (!orderedIds.contains(id)) {
+        for (String id : allIds) {
+            if (!visited.contains(id)) {
                 orderedIds.add(id);
             }
         }
 
-        Map<String, Recipe.NodeDocument> nodeById = recipeStepNodes.stream()
+        Map<String, Recipe.NodeDocument> nodeById = allNodes.stream()
                 .collect(Collectors.toMap(Recipe.NodeDocument::getId, node -> node, (a, b) -> a));
 
         List<Recipe.NodeDocument> ordered = new ArrayList<>();
         for (String id : orderedIds) {
             Recipe.NodeDocument node = nodeById.get(id);
-            if (node != null) {
+            if (node != null && RECIPE_STEP_NODE_TYPE.equals(node.getType())) {
                 ordered.add(node);
             }
         }

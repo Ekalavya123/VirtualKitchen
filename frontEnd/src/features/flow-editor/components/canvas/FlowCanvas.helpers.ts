@@ -29,6 +29,57 @@ import {
 
 export type EdgeKind = 'step' | 'yes' | 'no' | 'parallel'
 
+// Orders recipeStep nodes by following the whole graph's edges (through condition/parallel nodes
+// too, not just direct step-to-step edges) instead of array position, matching backend ordering.
+// A topological sort over step-to-step edges only breaks as soon as two steps are separated by a
+// condition or parallel node — with no direct edge between them, both end up with indegree 0 and
+// the result silently falls back to array order instead of flow order.
+export const orderRecipeStepNodes = (nodes: Node[], edges: Edge[]): Node[] => {
+  const allIds = new Set(nodes.map((node) => String(node.id)))
+  const adjacency = new Map<string, string[]>()
+  const indegree = new Map<string, number>()
+  allIds.forEach((id) => indegree.set(id, 0))
+
+  edges.forEach((edge) => {
+    const source = String(edge.source)
+    const target = String(edge.target)
+    if (!allIds.has(source) || !allIds.has(target)) return
+    adjacency.set(source, [...(adjacency.get(source) ?? []), target])
+    indegree.set(target, (indegree.get(target) ?? 0) + 1)
+  })
+
+  const queue: string[] = []
+  nodes.forEach((node) => {
+    const id = String(node.id)
+    if ((indegree.get(id) ?? 0) === 0) queue.push(id)
+  })
+
+  const orderedIds: string[] = []
+  const visited = new Set<string>()
+  while (queue.length > 0) {
+    const id = queue.shift() as string
+    if (visited.has(id)) continue
+    visited.add(id)
+    orderedIds.push(id)
+    for (const next of adjacency.get(id) ?? []) {
+      const nextIndegree = (indegree.get(next) ?? 0) - 1
+      indegree.set(next, nextIndegree)
+      if (nextIndegree <= 0 && !visited.has(next)) queue.push(next)
+    }
+  }
+
+  nodes.forEach((node) => {
+    const id = String(node.id)
+    if (!visited.has(id)) orderedIds.push(id)
+  })
+
+  const nodeById = new Map(nodes.map((node) => [String(node.id), node]))
+
+  return orderedIds
+    .map((id) => nodeById.get(id))
+    .filter((node): node is Node => !!node && isRecipeStepNode(node))
+}
+
 const EDGE_COLORS: Record<EdgeKind, string> = {
   step: '#94a3b8',
   yes: '#16a34a',

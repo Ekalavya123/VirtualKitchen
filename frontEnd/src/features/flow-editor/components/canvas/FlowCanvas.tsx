@@ -37,6 +37,7 @@ import {
   normalizeFlowEdges,
   normalizeFlowNode,
   serializeFlowData,
+  orderRecipeStepNodes,
   NODE_BASE_SIZE,
 } from './FlowCanvas.helpers.ts'
 import RecipeVisualizationSlideshow, { type SlideshowStep } from './RecipeVisualizationSlideshow'
@@ -141,6 +142,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const [copied, setCopied] = useState(false)
   const [generatingVisuals, setGeneratingVisuals] = useState(false)
   const [generateVisualsStatus, setGenerateVisualsStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [visualsProgress, setVisualsProgress] = useState<{ completed: number; total: number } | null>(null)
   const [showSlideshow, setShowSlideshow] = useState(false)
   const [generatingFlow, setGeneratingFlow] = useState(false)
   const [nodeZoomPercent, setNodeZoomPercent] = useState(100)
@@ -657,87 +659,70 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     persistDraft()
   }, [persistDraft])
 
+  const applyStepVisualization = useCallback((stepResult: { stepId: string; visualizationAssetId: number; imagePrompt?: string; imageUrl?: string | null }) => {
+    setNodes((nds) => nds.map((node) => {
+      if (String(node.id) !== stepResult.stepId || !isRecipeStepNode(node)) return node
+
+      const normalized = normalizeStepNodeData(node.data)
+      return {
+        ...node,
+        data: {
+          ...normalized,
+          visualization: {
+            assetId: stepResult.visualizationAssetId,
+            imagePrompt: stepResult.imagePrompt,
+            imageUrl: stepResult.imageUrl ?? undefined,
+            status: 'generated',
+          },
+        },
+      }
+    }))
+  }, [setNodes])
+
+  // Generates visuals one step at a time (sequentially, so each step's save doesn't race with
+  // the next) and reflects each result in the UI as soon as it comes back, instead of waiting
+  // for the whole recipe to finish.
   const generateVisuals = useCallback(async () => {
+    const stepNodes = orderRecipeStepNodes(nodes, edges)
+    if (stepNodes.length === 0) {
+      setGenerateVisualsStatus({ type: 'error', text: 'No recipe steps to visualize' })
+      return
+    }
+
     setGeneratingVisuals(true)
     setGenerateVisualsStatus(null)
+    setVisualsProgress({ completed: 0, total: stepNodes.length })
 
-    try {
-      const result = await RecipeVisualizationApi.generate(recipe.id)
-      const stepById = new Map(result.steps.map((step) => [step.stepId, step]))
+    let failedCount = 0
 
-      setNodes((nds) => nds.map((node) => {
-        const stepResult = stepById.get(String(node.id))
-        if (!isRecipeStepNode(node) || !stepResult) return node
-
-        const normalized = normalizeStepNodeData(node.data)
-        return {
-          ...node,
-          data: {
-            ...normalized,
-            visualization: {
-              assetId: stepResult.visualizationAssetId,
-              imagePrompt: stepResult.imagePrompt,
-              imageUrl: stepResult.imageUrl ?? undefined,
-              status: 'generated',
-            },
-          },
-        }
-      }))
-
-      setGenerateVisualsStatus({ type: 'success', text: result.message || 'Visualization assets generated' })
-    } catch (error) {
-      console.error(error)
-      setGenerateVisualsStatus({ type: 'error', text: 'Unable to generate visuals right now' })
-    } finally {
-      setGeneratingVisuals(false)
+    for (let i = 0; i < stepNodes.length; i++) {
+      const stepNode = stepNodes[i]
+      try {
+        const stepResult = await RecipeVisualizationApi.generateStep(recipe.id, String(stepNode.id))
+        applyStepVisualization(stepResult)
+      } catch (error) {
+        console.error(`Unable to generate visualization for step ${stepNode.id}`, error)
+        failedCount += 1
+      } finally {
+        setVisualsProgress({ completed: i + 1, total: stepNodes.length })
+      }
     }
-  }, [recipe.id, setNodes])
+
+    setGenerateVisualsStatus(
+      failedCount === 0
+        ? { type: 'success', text: `Generated visuals for all ${stepNodes.length} steps` }
+        : { type: 'error', text: `Generated ${stepNodes.length - failedCount}/${stepNodes.length} steps — ${failedCount} failed` }
+    )
+    setGeneratingVisuals(false)
+    setVisualsProgress(null)
+  }, [recipe.id, nodes, edges, applyStepVisualization])
 
   const generateVisualizationForNode = useCallback(() => {
     void generateVisuals()
   }, [generateVisuals])
 
-  // Orders recipeStep nodes by following edges instead of array position, matching backend ordering.
   const getOrderedStepSlides = useCallback((): SlideshowStep[] => {
-    const stepNodes = nodes.filter(isRecipeStepNode)
-    const stepIds = new Set(stepNodes.map((node) => String(node.id)))
-    const adjacency = new Map<string, string[]>()
-    const indegree = new Map<string, number>()
-    stepIds.forEach((id) => indegree.set(id, 0))
-
-    edges.forEach((edge) => {
-      const source = String(edge.source)
-      const target = String(edge.target)
-      if (!stepIds.has(source) || !stepIds.has(target)) return
-      adjacency.set(source, [...(adjacency.get(source) ?? []), target])
-      indegree.set(target, (indegree.get(target) ?? 0) + 1)
-    })
-
-    const queue: string[] = []
-    indegree.forEach((value, id) => {
-      if (value === 0) queue.push(id)
-    })
-
-    const orderedIds: string[] = []
-    while (queue.length > 0) {
-      const id = queue.shift() as string
-      orderedIds.push(id)
-      for (const next of adjacency.get(id) ?? []) {
-        const nextIndegree = (indegree.get(next) ?? 0) - 1
-        indegree.set(next, nextIndegree)
-        if (nextIndegree === 0) queue.push(next)
-      }
-    }
-
-    stepIds.forEach((id) => {
-      if (!orderedIds.includes(id)) orderedIds.push(id)
-    })
-
-    const nodeById = new Map(stepNodes.map((node) => [String(node.id), node]))
-
-    return orderedIds
-      .map((id) => nodeById.get(id))
-      .filter((node): node is Node => !!node)
+    return orderRecipeStepNodes(nodes, edges)
       .map((node, index) => {
         const normalized = normalizeStepNodeData(node.data)
         return {
@@ -881,6 +866,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
           onGenerateVisuals={generateVisuals}
           isGeneratingVisuals={generatingVisuals}
           generateVisualsStatus={generateVisualsStatus}
+          generateVisualsProgress={visualsProgress}
           onVisualize={() => setShowSlideshow(true)}
           onBack={onBack}
           nodeZoomPercent={nodeZoomPercent}
