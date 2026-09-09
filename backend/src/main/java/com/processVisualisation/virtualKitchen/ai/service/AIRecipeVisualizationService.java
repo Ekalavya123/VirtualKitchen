@@ -138,6 +138,29 @@ public class AIRecipeVisualizationService {
             Map<String, Object> stepFields,
             Map<String, Object> previousStepFields
     ) {
+        VisualizationAsset asset = resolveVisualizationAsset(data, stepFields, previousStepFields);
+
+        attachAssetToNode(node, data, asset);
+
+        return RecipeVisualizationStepResponseDTO.builder()
+                .stepId(node.getId())
+                .visualizationAssetId(asset.getId())
+                .imagePrompt(asset.getImagePrompt())
+                .imageUrl(asset.getImageUrl())
+                .build();
+    }
+
+    /**
+     * Resolves (finding, reusing, or generating) the {@link VisualizationAsset} for one step.
+     * Touches only the {@code VisualizationAsset} collection and the AI/image/storage clients —
+     * never the shared {@link Recipe} flow document — so it is safe to run concurrently across
+     * steps of the same recipe as a {@link com.processVisualisation.virtualKitchen.common.concurrent.Task}.
+     */
+    public VisualizationAsset resolveVisualizationAsset(
+            Map<String, Object> data,
+            Map<String, Object> stepFields,
+            Map<String, Object> previousStepFields
+    ) {
         String visualizationKey = VisualizationKeyBuilder.buildFromNodeData(data);
         Optional<VisualizationAsset> existingAsset = AIVisualizationAssetRepository.findByVisualizationKey(visualizationKey);
         VisualizationAsset asset;
@@ -152,15 +175,62 @@ public class AIRecipeVisualizationService {
         } else {
             asset = createAsset(visualizationKey, stepFields, previousStepFields);
         }
+        return asset;
+    }
 
-        attachAssetToNode(node, data, asset);
+    /**
+     * Loads the recipe flow and its ordered step contexts once, up front, so a caller (the async
+     * job pipeline) can fan the per-step work out across a {@code TaskPool} without every task
+     * re-reading the flow document itself. Each step's {@code previousStepFields} come from the
+     * preceding node's already-loaded data — not from any other step's generation result — so the
+     * returned steps have no execution-order dependency on each other and can run in parallel.
+     */
+    public RecipeStepPreparation prepareStepContexts(String recipeId) {
+        Recipe flow = recipeRepository.findByFlowId(recipeId)
+                .orElseThrow(() -> new RecipeFlowGenerationException("Recipe flow not found for recipeId: " + recipeId));
 
-        return RecipeVisualizationStepResponseDTO.builder()
-                .stepId(node.getId())
-                .visualizationAssetId(asset.getId())
-                .imagePrompt(asset.getImagePrompt())
-                .imageUrl(asset.getImageUrl())
-                .build();
+        List<Recipe.NodeDocument> orderedSteps = orderRecipeStepNodes(flow);
+        List<StepContext> contexts = new ArrayList<>();
+        Map<String, Object> previousStepFields = null;
+
+        for (Recipe.NodeDocument node : orderedSteps) {
+            Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
+            Map<String, Object> stepFields = extractStepFields(data);
+            contexts.add(new StepContext(node, data, stepFields, previousStepFields));
+            previousStepFields = stepFields;
+        }
+
+        return new RecipeStepPreparation(flow, contexts);
+    }
+
+    /**
+     * Attaches each successfully generated asset to its node and saves the flow exactly once.
+     * This is the ONLY place that mutates/saves the shared flow document for the async pipeline —
+     * called after every parallel step task has finished, to avoid the lost-update race that would
+     * occur if multiple concurrent tasks each read-mutated-saved the same flow document. Steps
+     * missing from {@code assetsByStepId} (failed generations) are left unmutated and can be
+     * retried later.
+     */
+    public void attachResultsAndSave(Recipe flow, Map<String, VisualizationAsset> assetsByStepId) {
+        for (Recipe.NodeDocument node : flow.getNodes()) {
+            VisualizationAsset asset = assetsByStepId.get(node.getId());
+            if (asset != null) {
+                Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
+                attachAssetToNode(node, data, asset);
+            }
+        }
+        recipeRepository.save(flow);
+    }
+
+    public record StepContext(
+            Recipe.NodeDocument node,
+            Map<String, Object> data,
+            Map<String, Object> stepFields,
+            Map<String, Object> previousStepFields
+    ) {
+    }
+
+    public record RecipeStepPreparation(Recipe flow, List<StepContext> steps) {
     }
 
     private VisualizationAsset generatePrompt(String visualizationKey, Map<String, Object> currentStep, Map<String, Object> previousStep) {
