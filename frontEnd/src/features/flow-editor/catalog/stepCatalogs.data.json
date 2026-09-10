@@ -1,0 +1,79 @@
+{
+  "actions": [
+    { "id": "add", "displayName": "Add", "icon": "AD", "category": "Ingredient Operations", "fields": ["ingredientId", "quantity", "unitId", "notes"] },
+    { "id": "remove", "displayName": "Remove", "icon": "RM", "category": "Ingredient Operations", "fields": ["ingredientId", "quantity", "unitId", "notes"] },
+    { "id": "pour", "displayName": "Pour", "icon": "PO", "category": "Ingredient Operations", "fields": ["ingredientId", "quantity", "unitId", "notes"] },
+    { "id": "season", "displayName": "Season", "icon": "SN", "category": "Ingredient Operations", "fields": ["ingredientId", "quantity", "unitId", "notes"] },
+
+    { "id": "cut", "displayName": "Cut", "icon": "CT", "category": "Preparation Operations", "amountLabel": "Quantity", "fields": ["ingredientId", "quantity", "unitId", "preparationStyleId", "notes"] },
+    { "id": "chop", "displayName": "Chop", "icon": "CH", "category": "Preparation Operations", "amountLabel": "Quantity", "fields": ["ingredientId", "quantity", "unitId", "preparationStyleId", "notes"] },
+    { "id": "slice", "displayName": "Slice", "icon": "SL", "category": "Preparation Operations", "amountLabel": "Quantity", "fields": ["ingredientId", "quantity", "unitId", "preparationStyleId", "notes"] },
+    { "id": "dice", "displayName": "Dice", "icon": "DC", "category": "Preparation Operations", "amountLabel": "Quantity", "fields": ["ingredientId", "quantity", "unitId", "preparationStyleId", "notes"] },
+
+    { "id": "heat", "displayName": "Heat", "icon": "HT", "category": "Cooking Operations", "fields": ["flameLevelId", "temperature", "duration", "notes"] },
+    { "id": "boil", "displayName": "Boil", "icon": "BL", "category": "Cooking Operations", "fields": ["ingredientId", "quantity", "unitId", "flameLevelId", "duration", "repeatInterval", "notes"] },
+    { "id": "fry", "displayName": "Fry", "icon": "FR", "category": "Cooking Operations", "fields": ["ingredientId", "quantity", "unitId", "flameLevelId", "temperature", "duration", "repeatInterval", "notes"] },
+    { "id": "bake", "displayName": "Bake", "icon": "BK", "category": "Cooking Operations", "fields": ["ingredientId", "quantity", "unitId", "temperature", "duration", "notes"] },
+
+    { "id": "stir", "displayName": "Stir", "icon": "ST", "category": "Mixing Operations", "fields": ["ingredientId", "quantity", "unitId", "duration", "repeatInterval", "notes"] },
+    { "id": "mix", "displayName": "Mix", "icon": "MX", "category": "Mixing Operations", "fields": ["duration", "repeatInterval", "notes"] },
+    { "id": "whisk", "displayName": "Whisk", "icon": "WK", "category": "Mixing Operations", "fields": ["ingredientId", "quantity", "unitId", "duration", "repeatInterval", "notes"] },
+
+    { "id": "wait", "displayName": "Wait", "icon": "WT", "category": "Waiting Operations", "fields": ["duration", "notes"] },
+    { "id": "rest", "displayName": "Rest", "icon": "RE", "category": "Waiting Operations", "fields": ["duration", "notes"] },
+
+    { "id": "serve", "displayName": "Serve", "icon": "SV", "category": "Finish Operations", "fields": ["notes"] },
+    { "id": "garnish", "displayName": "Garnish", "icon": "GN", "category": "Finish Operations", "fields": ["ingredientId", "quantity", "unitId", "notes"] },
+
+    { "id": "custom", "displayName": "Custom Action", "icon": "CU", "category": "Custom", "fields": ["ingredientId", "quantity", "unitId", "preparationStyleId", "temperature", "flameLevelId", "duration", "repeatInterval", "notes"] }
+  ],
+  "ingredients": [
+    { "id": "water", "name": "Water", "category": "Liquid", "icon": "WT", "defaultUnit": "ml" },
+    { "id": "oil", "name": "Oil", "category": "Liquid", "icon": "OL", "defaultUnit": "tbsp" },
+    { "id": "salt", "name": "Salt", "category": "Pantry", "icon": "SA", "defaultUnit": "tsp" },
+    { "id": "sugar", "name": "Sugar", "category": "Pantry", "icon": "SG", "defaultUnit": "tsp" },
+    { "id": "rice", "name": "Rice", "category": "Pantry", "icon": "RC", "defaultUnit": "cup" },
+    { "id": "onion", "name": "Onion", "category": "Produce", "icon": "ON", "defaultUnit": "piece" },
+    { "id": "tomato", "name": "Tomato", "category": "Produce", "icon": "TM", "defaultUnit": "piece" },
+    { "id": "garlic", "name": "Garlic", "category": "Produce", "icon": "GC", "defaultUnit": "piece" },
+    { "id": "ginger", "name": "Ginger", "category": "Produce", "icon": "GI", "defaultUnit": "piece" },
+    { "id": "chili", "name": "Chili", "category": "Produce", "icon": "CH", "defaultUnit": "piece" },
+    { "id": "potato", "name": "Potato", "category": "Produce", "icon": "PT", "defaultUnit": "piece" },
+    { "id": "carrot", "name": "Carrot", "category": "Produce", "icon": "CR", "defaultUnit": "piece" },
+    { "id": "capsicum", "name": "Capsicum", "category": "Produce", "icon": "CP", "defaultUnit": "piece" },
+    { "id": "egg", "name": "Egg", "category": "Protein", "icon": "EG", "defaultUnit": "piece" },
+    { "id": "milk", "name": "Milk", "category": "Dairy", "icon": "MK", "defaultUnit": "ml" },
+    { "id": "butter", "name": "Butter", "category": "Dairy", "icon": "BT", "defaultUnit": "tbsp" },
+    { "id": "chicken", "name": "Chicken", "category": "Protein", "icon": "CK", "defaultUnit": "g" },
+    { "id": "paneer", "name": "Paneer", "category": "Protein", "icon": "PN", "defaultUnit": "g" },
+    { "id": "custom", "name": "Custom Ingredient", "category": "Other", "icon": "CU", "defaultUnit": "custom" }
+  ],
+  "units": [
+    { "id": "ml", "label": "Milliliter (ml)", "shortLabel": "ml", "category": "Volume" },
+    { "id": "l", "label": "Liter (L)", "shortLabel": "L", "category": "Volume" },
+    { "id": "cup", "label": "Cup", "shortLabel": "cup", "category": "Volume" },
+    { "id": "g", "label": "Gram (g)", "shortLabel": "g", "category": "Weight" },
+    { "id": "kg", "label": "Kilogram (kg)", "shortLabel": "kg", "category": "Weight" },
+    { "id": "piece", "label": "Piece", "shortLabel": "piece", "category": "Count" },
+    { "id": "tsp", "label": "Teaspoon (tsp)", "shortLabel": "tsp", "category": "Spoon" },
+    { "id": "tbsp", "label": "Tablespoon (tbsp)", "shortLabel": "tbsp", "category": "Spoon" },
+    { "id": "pinch", "label": "Pinch", "shortLabel": "pinch", "category": "Other" },
+    { "id": "custom", "label": "Custom Unit", "shortLabel": "custom", "category": "Other" }
+  ],
+  "preparationStyles": [
+    { "id": "fine", "label": "Fine" },
+    { "id": "medium", "label": "Medium" },
+    { "id": "large", "label": "Large" },
+    { "id": "thin-slice", "label": "Thin Slice" },
+    { "id": "thick-slice", "label": "Thick Slice" },
+    { "id": "julienne", "label": "Julienne" },
+    { "id": "rough-chop", "label": "Rough Chop" },
+    { "id": "custom", "label": "Custom Style" }
+  ],
+  "flameLevels": [
+    { "id": "low", "label": "Low" },
+    { "id": "medium", "label": "Medium" },
+    { "id": "high", "label": "High" },
+    { "id": "custom", "label": "Custom Level" }
+  ]
+}

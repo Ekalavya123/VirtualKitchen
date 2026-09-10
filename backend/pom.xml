@@ -167,8 +167,18 @@
 					<include>**/*.properties</include>
 					<include>**/*.yml</include>
 					<include>**/*.yaml</include>
+					<include>**/*.json</include>
 				</includes>
 				<filtering>true</filtering>
+			</resource>
+			<!-- Shares the frontend's step-property catalog (actions/ingredients/units/etc.) as the
+			     single source of truth for the AI prompt vocabulary in AIRecipeFlowPromptBuilder,
+			     instead of hand-duplicating it in Java where it can silently drift out of sync. -->
+			<resource>
+				<directory>${project.basedir}/../frontEnd/src/features/flow-editor/catalog</directory>
+				<includes>
+					<include>stepCatalogs.data.json</include>
+				</includes>
 			</resource>
 		</resources>
 	</build>

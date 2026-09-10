@@ -13,20 +13,11 @@ import java.util.List;
 @Component
 public class AIRecipeFlowPromptBuilder {
 
-    private static final String ACTION_IDS =
-            "add|remove|pour|season|cut|chop|slice|dice|heat|boil|fry|bake|stir|mix|whisk|wait|rest|serve|garnish";
+    private final StepVocabularyProvider stepVocabularyProvider;
 
-    private static final String INGREDIENT_IDS =
-            "water|oil|salt|sugar|rice|onion|tomato|garlic|ginger|chili|potato|carrot|capsicum|egg|milk|butter|chicken|custom";
-
-    private static final String UNIT_IDS =
-            "ml|l|cup|g|kg|piece|tsp|tbsp|pinch|custom";
-
-    private static final String PREPARATION_STYLE_IDS =
-            "fine|medium|large|thin-slice|thick-slice|julienne|rough-chop|custom";
-
-    private static final String FLAME_LEVEL_IDS =
-            "low|medium|high|custom";
+    public AIRecipeFlowPromptBuilder(StepVocabularyProvider stepVocabularyProvider) {
+        this.stepVocabularyProvider = stepVocabularyProvider;
+    }
 
 
     /**
@@ -194,11 +185,11 @@ public class AIRecipeFlowPromptBuilder {
                 - Do not include position, width, height, handles, source, target, React Flow properties, or other UI fields.
                 - Return ONLY JSON.
                 """.formatted(
-                ACTION_IDS,
-                INGREDIENT_IDS,
-                UNIT_IDS,
-                PREPARATION_STYLE_IDS,
-                FLAME_LEVEL_IDS
+                stepVocabularyProvider.actionIds(),
+                stepVocabularyProvider.ingredientIds(),
+                stepVocabularyProvider.unitIds(),
+                stepVocabularyProvider.preparationStyleIds(),
+                stepVocabularyProvider.flameLevelIds()
         );
     }
 }

@@ -1,3 +1,12 @@
+import stepCatalogsData from './stepCatalogs.data.json'
+import {
+  buildAliasLookup,
+  getCatalogDisplayName,
+  resolveCatalogId,
+  resolveCatalogInput,
+  type CatalogInputResolution,
+} from './catalogSelectionUtils'
+
 export const ACTION_CATEGORY_ORDER = [
   'Ingredient Operations',
   'Preparation Operations',
@@ -5,57 +14,77 @@ export const ACTION_CATEGORY_ORDER = [
   'Mixing Operations',
   'Waiting Operations',
   'Finish Operations',
+  'Custom',
 ] as const
 
 export type ActionCategory = (typeof ACTION_CATEGORY_ORDER)[number]
 
-export const STEP_ACTION_CATALOG = [
-  { id: 'add', displayName: 'Add', icon: 'AD', category: 'Ingredient Operations' },
-  { id: 'remove', displayName: 'Remove', icon: 'RM', category: 'Ingredient Operations' },
-  { id: 'pour', displayName: 'Pour', icon: 'PO', category: 'Ingredient Operations' },
-  { id: 'season', displayName: 'Season', icon: 'SN', category: 'Ingredient Operations' },
+// The precise set of ids is data-driven (see stepCatalogs.data.json), but kept as an explicit
+// literal union here so the rest of the app still gets autocomplete/exhaustiveness checking.
+export type StepActionId =
+  | 'add' | 'remove' | 'pour' | 'season'
+  | 'cut' | 'chop' | 'slice' | 'dice'
+  | 'heat' | 'boil' | 'fry' | 'bake'
+  | 'stir' | 'mix' | 'whisk'
+  | 'wait' | 'rest'
+  | 'serve' | 'garnish'
+  | 'custom'
 
-  { id: 'cut', displayName: 'Cut', icon: 'CT', category: 'Preparation Operations' },
-  { id: 'chop', displayName: 'Chop', icon: 'CH', category: 'Preparation Operations' },
-  { id: 'slice', displayName: 'Slice', icon: 'SL', category: 'Preparation Operations' },
-  { id: 'dice', displayName: 'Dice', icon: 'DC', category: 'Preparation Operations' },
-
-  { id: 'heat', displayName: 'Heat', icon: 'HT', category: 'Cooking Operations' },
-  { id: 'boil', displayName: 'Boil', icon: 'BL', category: 'Cooking Operations' },
-  { id: 'fry', displayName: 'Fry', icon: 'FR', category: 'Cooking Operations' },
-  { id: 'bake', displayName: 'Bake', icon: 'BK', category: 'Cooking Operations' },
-
-  { id: 'stir', displayName: 'Stir', icon: 'ST', category: 'Mixing Operations' },
-  { id: 'mix', displayName: 'Mix', icon: 'MX', category: 'Mixing Operations' },
-  { id: 'whisk', displayName: 'Whisk', icon: 'WK', category: 'Mixing Operations' },
-
-  { id: 'wait', displayName: 'Wait', icon: 'WT', category: 'Waiting Operations' },
-  { id: 'rest', displayName: 'Rest', icon: 'RE', category: 'Waiting Operations' },
-
-  { id: 'serve', displayName: 'Serve', icon: 'SV', category: 'Finish Operations' },
-  { id: 'garnish', displayName: 'Garnish', icon: 'GN', category: 'Finish Operations' },
-] as const
-
-export type StepActionId = (typeof STEP_ACTION_CATALOG)[number]['id']
+export type StepSchemaFieldKey =
+  | 'ingredientId'
+  | 'quantity'
+  | 'unitId'
+  | 'preparationStyleId'
+  | 'temperature'
+  | 'flameLevelId'
+  | 'duration'
+  | 'repeatInterval'
+  | 'notes'
 
 export type StepActionDefinition = {
   id: StepActionId
   displayName: string
   icon: string
   category: ActionCategory
+  fields: readonly StepSchemaFieldKey[]
+  amountLabel: string
+  unitLabel: string
 }
+
+const DEFAULT_AMOUNT_LABEL = 'Amount'
+const DEFAULT_UNIT_LABEL = 'Unit'
+
+type RawActionEntry = {
+  id: string
+  displayName: string
+  icon: string
+  category: string
+  fields: string[]
+  amountLabel?: string
+  unitLabel?: string
+}
+
+export const STEP_ACTION_CATALOG: readonly StepActionDefinition[] = (
+  stepCatalogsData.actions as RawActionEntry[]
+).map((entry) => ({
+  id: entry.id as StepActionId,
+  displayName: entry.displayName,
+  icon: entry.icon,
+  category: entry.category as ActionCategory,
+  fields: entry.fields as StepSchemaFieldKey[],
+  amountLabel: entry.amountLabel ?? DEFAULT_AMOUNT_LABEL,
+  unitLabel: entry.unitLabel ?? DEFAULT_UNIT_LABEL,
+}))
+
+export const CUSTOM_ACTION_ID: StepActionId = 'custom'
 
 const catalogById = new Map<StepActionId, StepActionDefinition>(
   STEP_ACTION_CATALOG.map((entry) => [entry.id, entry])
 )
 
-const normalizeText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
-
-const actionAliasLookup = new Map<string, StepActionId>()
-for (const action of STEP_ACTION_CATALOG) {
-  actionAliasLookup.set(normalizeText(action.id), action.id)
-  actionAliasLookup.set(normalizeText(action.displayName), action.id)
-}
+const actionAliasLookup = buildAliasLookup(
+  STEP_ACTION_CATALOG.map((action) => ({ id: action.id, aliases: [action.id, action.displayName] }))
+)
 
 export const ACTIONS_BY_CATEGORY: Readonly<Record<ActionCategory, readonly StepActionDefinition[]>> =
   ACTION_CATEGORY_ORDER.reduce((accumulator, category) => {
@@ -69,14 +98,25 @@ export const isStepActionId = (value: unknown): value is StepActionId =>
 export const getStepActionById = (id: StepActionId): StepActionDefinition =>
   catalogById.get(id) as StepActionDefinition
 
-export const resolveStepActionId = (value: unknown): StepActionId | '' => {
-  if (typeof value !== 'string') return ''
-  const normalized = normalizeText(value)
-  if (!normalized) return ''
+export const resolveStepActionId = (value: unknown): StepActionId | '' =>
+  resolveCatalogId(actionAliasLookup, value)
 
-  return actionAliasLookup.get(normalized) ?? ''
-}
+/**
+ * Resolves free-form action text (e.g. from AI generation or a legacy saved flow) against the
+ * catalog. Unrecognized text is preserved as a custom action name instead of being dropped.
+ */
+export const resolveActionInput = (value: string): CatalogInputResolution<StepActionId> =>
+  resolveCatalogInput(actionAliasLookup, CUSTOM_ACTION_ID, value)
 
-export const getActionDisplayName = (id: StepActionId | '') => (id ? getStepActionById(id).displayName : 'Select Action')
+export const getActionDisplayName = (id: StepActionId | '', customActionName = '') =>
+  id
+    ? getCatalogDisplayName(
+        CUSTOM_ACTION_ID,
+        id,
+        customActionName,
+        (actionId) => getStepActionById(actionId).displayName,
+        'Custom Action'
+      )
+    : 'Select Action'
 
 export const getActionIcon = (id: StepActionId | '') => (id ? getStepActionById(id).icon : 'ST')

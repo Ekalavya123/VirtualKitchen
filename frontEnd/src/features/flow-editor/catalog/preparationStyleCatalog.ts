@@ -1,20 +1,31 @@
-export const PREPARATION_STYLE_CATALOG = [
-  { id: 'fine', label: 'Fine' },
-  { id: 'medium', label: 'Medium' },
-  { id: 'large', label: 'Large' },
-  { id: 'thin-slice', label: 'Thin Slice' },
-  { id: 'thick-slice', label: 'Thick Slice' },
-  { id: 'julienne', label: 'Julienne' },
-  { id: 'rough-chop', label: 'Rough Chop' },
-  { id: 'custom', label: 'Custom Style' },
-] as const
+import stepCatalogsData from './stepCatalogs.data.json'
+import {
+  buildAliasLookup,
+  getCatalogDisplayName,
+  resolveCatalogId,
+} from './catalogSelectionUtils'
 
-export type PreparationStyleId = (typeof PREPARATION_STYLE_CATALOG)[number]['id']
+// The precise set of ids is data-driven (see stepCatalogs.data.json), but kept as an explicit
+// literal union here so the rest of the app still gets autocomplete/exhaustiveness checking.
+export type PreparationStyleId =
+  | 'fine' | 'medium' | 'large' | 'thin-slice' | 'thick-slice' | 'julienne' | 'rough-chop' | 'custom'
 
 export type PreparationStyleDefinition = {
   id: PreparationStyleId
   label: string
 }
+
+type RawPreparationStyleEntry = {
+  id: string
+  label: string
+}
+
+export const PREPARATION_STYLE_CATALOG: readonly PreparationStyleDefinition[] = (
+  stepCatalogsData.preparationStyles as RawPreparationStyleEntry[]
+).map((entry) => ({
+  id: entry.id as PreparationStyleId,
+  label: entry.label,
+}))
 
 export const CUSTOM_PREPARATION_STYLE_ID: PreparationStyleId = 'custom'
 
@@ -22,26 +33,15 @@ const styleById = new Map<PreparationStyleId, PreparationStyleDefinition>(
   PREPARATION_STYLE_CATALOG.map((style) => [style.id, style])
 )
 
-const normalizeText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
+const styleAliasLookup = buildAliasLookup(
+  PREPARATION_STYLE_CATALOG.map((style) => ({ id: style.id, aliases: [style.id, style.label] }))
+)
 
-const styleAliasLookup = new Map<string, PreparationStyleId>()
-for (const style of PREPARATION_STYLE_CATALOG) {
-  styleAliasLookup.set(normalizeText(style.id), style.id)
-  styleAliasLookup.set(normalizeText(style.label), style.id)
-}
-
-export const resolvePreparationStyleId = (value: unknown): PreparationStyleId | '' => {
-  if (typeof value !== 'string') return ''
-  const normalized = normalizeText(value)
-  if (!normalized) return ''
-  return styleAliasLookup.get(normalized) ?? ''
-}
+export const resolvePreparationStyleId = (value: unknown): PreparationStyleId | '' =>
+  resolveCatalogId(styleAliasLookup, value)
 
 export const getPreparationStyleById = (id: PreparationStyleId): PreparationStyleDefinition =>
   styleById.get(id) as PreparationStyleDefinition
 
-export const getPreparationStyleDisplayName = (styleId: PreparationStyleId | '', customStyle = '') => {
-  if (!styleId) return ''
-  if (styleId === CUSTOM_PREPARATION_STYLE_ID) return customStyle.trim()
-  return getPreparationStyleById(styleId).label
-}
+export const getPreparationStyleDisplayName = (styleId: PreparationStyleId | '', customStyle = '') =>
+  getCatalogDisplayName(CUSTOM_PREPARATION_STYLE_ID, styleId, customStyle, (id) => getPreparationStyleById(id).label, '')

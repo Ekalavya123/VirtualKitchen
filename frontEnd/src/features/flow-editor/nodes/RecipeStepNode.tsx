@@ -27,6 +27,7 @@ const CATEGORY_THEMES: Record<ActionCategory, CategoryTheme> = {
   'Mixing Operations': { emoji: '🥣', accent: '#0d9488', accentStrong: '#0f766e', soft: '#f0fdfa', border: '#99f6e4' },
   'Waiting Operations': { emoji: '⏳', accent: '#64748b', accentStrong: '#475569', soft: '#f1f5f9', border: '#e2e8f0' },
   'Finish Operations': { emoji: '🍽️', accent: '#16a34a', accentStrong: '#15803d', soft: '#f0fdf4', border: '#bbf7d0' },
+  'Custom': { emoji: '✨', accent: '#94a3b8', accentStrong: '#64748b', soft: '#f8fafc', border: '#e2e8f0' },
 }
 
 const DEFAULT_THEME: CategoryTheme = { emoji: '🍳', accent: '#94a3b8', accentStrong: '#64748b', soft: '#f8fafc', border: '#e2e8f0' }

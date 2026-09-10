@@ -473,7 +473,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
         const normalized = normalizeStepNodeData(node.data)
         const finalized = {
           ...normalized,
-          title: getStepNodeTitle(normalized.step.action),
+          title: getStepNodeTitle(normalized.step.action, normalized.step.customActionName),
           icon: getStepNodeIcon(normalized.step.action),
         }
         return {

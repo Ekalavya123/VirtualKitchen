@@ -3,6 +3,7 @@ import '../../styles/flow-editor.css'
 import {
   ACTIONS_BY_CATEGORY,
   ACTION_CATEGORY_ORDER,
+  CUSTOM_ACTION_ID,
   getActionDisplayName,
 } from '../../catalog/actionCatalog'
 import {
@@ -330,11 +331,28 @@ export default function PropertiesPanel({ node, updateNodeField, onDeleteNode, o
               <label className="flow-properties-label">Action *</label>
               <SearchableSelect
                 value={stepData?.action ?? ''}
-                onChange={(nextValue) => updateNodeField(node.id, 'step.action', nextValue)}
+                onChange={(nextValue) => {
+                  updateNodeField(node.id, 'step.action', nextValue)
+                  if (nextValue !== CUSTOM_ACTION_ID) {
+                    updateNodeField(node.id, 'step.customActionName', '')
+                  }
+                }}
                 options={actionOptions}
                 placeholder="Select Action"
               />
             </div>
+
+            {stepData?.action === CUSTOM_ACTION_ID && (
+              <div className="flow-properties-field">
+                <label className="flow-properties-label">Custom Action Name</label>
+                <input
+                  className="flow-properties-input"
+                  value={stepData.customActionName}
+                  onChange={e => updateNodeField(node.id, 'step.customActionName', e.target.value)}
+                  placeholder="Enter action name"
+                />
+              </div>
+            )}
 
             {actionSchema && stepData && (
               <>

@@ -1,4 +1,11 @@
+import stepCatalogsData from './stepCatalogs.data.json'
 import { resolveUnitId } from './unitCatalog'
+import {
+  buildAliasLookup,
+  getCatalogDisplayName,
+  resolveCatalogId,
+  resolveCatalogInput,
+} from './catalogSelectionUtils'
 
 export const INGREDIENT_CATEGORY_ORDER = [
   'Liquid',
@@ -11,29 +18,13 @@ export const INGREDIENT_CATEGORY_ORDER = [
 
 export type IngredientCategory = (typeof INGREDIENT_CATEGORY_ORDER)[number]
 
-export const INGREDIENT_CATALOG = [
-  { id: 'water', name: 'Water', category: 'Liquid', icon: 'WT', defaultUnit: 'ml' },
-  { id: 'oil', name: 'Oil', category: 'Liquid', icon: 'OL', defaultUnit: 'tbsp' },
-  { id: 'salt', name: 'Salt', category: 'Pantry', icon: 'SA', defaultUnit: 'tsp' },
-  { id: 'sugar', name: 'Sugar', category: 'Pantry', icon: 'SG', defaultUnit: 'tsp' },
-  { id: 'rice', name: 'Rice', category: 'Pantry', icon: 'RC', defaultUnit: 'cup' },
-  { id: 'onion', name: 'Onion', category: 'Produce', icon: 'ON', defaultUnit: 'piece' },
-  { id: 'tomato', name: 'Tomato', category: 'Produce', icon: 'TM', defaultUnit: 'piece' },
-  { id: 'garlic', name: 'Garlic', category: 'Produce', icon: 'GC', defaultUnit: 'piece' },
-  { id: 'ginger', name: 'Ginger', category: 'Produce', icon: 'GI', defaultUnit: 'piece' },
-  { id: 'chili', name: 'Chili', category: 'Produce', icon: 'CH', defaultUnit: 'piece' },
-  { id: 'potato', name: 'Potato', category: 'Produce', icon: 'PT', defaultUnit: 'piece' },
-  { id: 'carrot', name: 'Carrot', category: 'Produce', icon: 'CR', defaultUnit: 'piece' },
-  { id: 'capsicum', name: 'Capsicum', category: 'Produce', icon: 'CP', defaultUnit: 'piece' },
-  { id: 'egg', name: 'Egg', category: 'Protein', icon: 'EG', defaultUnit: 'piece' },
-  { id: 'milk', name: 'Milk', category: 'Dairy', icon: 'MK', defaultUnit: 'ml' },
-  { id: 'butter', name: 'Butter', category: 'Dairy', icon: 'BT', defaultUnit: 'tbsp' },
-  { id: 'chicken', name: 'Chicken', category: 'Protein', icon: 'CK', defaultUnit: 'g' },
-  { id: 'paneer', name: 'Paneer', category: 'Protein', icon: 'PN', defaultUnit: 'g' },
-  { id: 'custom', name: 'Custom Ingredient', category: 'Other', icon: 'CU', defaultUnit: 'custom' },
-] as const
-
-export type IngredientId = (typeof INGREDIENT_CATALOG)[number]['id']
+// The precise set of ids is data-driven (see stepCatalogs.data.json), but kept as an explicit
+// literal union here so the rest of the app still gets autocomplete/exhaustiveness checking.
+export type IngredientId =
+  | 'water' | 'oil' | 'salt' | 'sugar' | 'rice'
+  | 'onion' | 'tomato' | 'garlic' | 'ginger' | 'chili' | 'potato' | 'carrot' | 'capsicum'
+  | 'egg' | 'milk' | 'butter' | 'chicken' | 'paneer'
+  | 'custom'
 
 export type IngredientDefinition = {
   id: IngredientId
@@ -43,17 +34,33 @@ export type IngredientDefinition = {
   defaultUnit: string
 }
 
+type RawIngredientEntry = {
+  id: string
+  name: string
+  category: string
+  icon: string
+  defaultUnit: string
+}
+
+export const INGREDIENT_CATALOG: readonly IngredientDefinition[] = (
+  stepCatalogsData.ingredients as RawIngredientEntry[]
+).map((entry) => ({
+  id: entry.id as IngredientId,
+  name: entry.name,
+  category: entry.category as IngredientCategory,
+  icon: entry.icon,
+  defaultUnit: entry.defaultUnit,
+}))
+
+export const CUSTOM_INGREDIENT_ID: IngredientId = 'custom'
+
 const ingredientById = new Map<IngredientId, IngredientDefinition>(
   INGREDIENT_CATALOG.map((ingredient) => [ingredient.id, ingredient])
 )
 
-const normalizeText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
-
-const nameLookup = new Map<string, IngredientId>()
-for (const ingredient of INGREDIENT_CATALOG) {
-  nameLookup.set(normalizeText(ingredient.id), ingredient.id)
-  nameLookup.set(normalizeText(ingredient.name), ingredient.id)
-}
+const ingredientAliasLookup = buildAliasLookup(
+  INGREDIENT_CATALOG.map((ingredient) => ({ id: ingredient.id, aliases: [ingredient.id, ingredient.name] }))
+)
 
 export const INGREDIENTS_BY_CATEGORY: Readonly<Record<IngredientCategory, readonly IngredientDefinition[]>> =
   INGREDIENT_CATEGORY_ORDER.reduce((accumulator, category) => {
@@ -61,46 +68,28 @@ export const INGREDIENTS_BY_CATEGORY: Readonly<Record<IngredientCategory, readon
     return accumulator
   }, {} as Record<IngredientCategory, readonly IngredientDefinition[]>)
 
-export const CUSTOM_INGREDIENT_ID: IngredientId = 'custom'
-
 export const isIngredientId = (value: unknown): value is IngredientId =>
   typeof value === 'string' && ingredientById.has(value as IngredientId)
 
 export const getIngredientById = (id: IngredientId): IngredientDefinition =>
   ingredientById.get(id) as IngredientDefinition
 
-export const resolveIngredientId = (value: unknown): IngredientId | '' => {
-  if (typeof value !== 'string') return ''
-  const normalized = normalizeText(value)
-  if (!normalized) return ''
-  return nameLookup.get(normalized) ?? ''
-}
+export const resolveIngredientId = (value: unknown): IngredientId | '' =>
+  resolveCatalogId(ingredientAliasLookup, value)
 
 export const resolveIngredientInput = (value: string): { ingredientId: IngredientId | ''; customIngredientName: string } => {
-  const normalized = normalizeText(value)
-  if (!normalized) {
-    return { ingredientId: '', customIngredientName: '' }
-  }
-
-  const match = nameLookup.get(normalized)
-  if (match) {
-    if (match === CUSTOM_INGREDIENT_ID) {
-      return { ingredientId: CUSTOM_INGREDIENT_ID, customIngredientName: '' }
-    }
-    return { ingredientId: match, customIngredientName: '' }
-  }
-
-  return {
-    ingredientId: CUSTOM_INGREDIENT_ID,
-    customIngredientName: value.trim(),
-  }
+  const resolved = resolveCatalogInput(ingredientAliasLookup, CUSTOM_INGREDIENT_ID, value)
+  return { ingredientId: resolved.id, customIngredientName: resolved.customValue }
 }
 
-export const getIngredientDisplayName = (ingredientId: IngredientId | '', customIngredientName = '') => {
-  if (!ingredientId) return ''
-  if (ingredientId === CUSTOM_INGREDIENT_ID) return customIngredientName.trim() || 'Custom Ingredient'
-  return getIngredientById(ingredientId).name
-}
+export const getIngredientDisplayName = (ingredientId: IngredientId | '', customIngredientName = '') =>
+  getCatalogDisplayName(
+    CUSTOM_INGREDIENT_ID,
+    ingredientId,
+    customIngredientName,
+    (id) => getIngredientById(id).name,
+    'Custom Ingredient'
+  )
 
 export const getIngredientDefaultUnit = (ingredientId: IngredientId | '') => {
   if (!ingredientId || ingredientId === CUSTOM_INGREDIENT_ID) return ''
