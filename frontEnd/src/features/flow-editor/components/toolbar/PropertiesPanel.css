@@ -4,7 +4,7 @@
 .flow-properties-panel {
   width: 100%;
   height: 100%;
-  background: white;
+  background: var(--flow-surface);
   display: flex;
   flex-direction: column;
   font-family: 'DM Sans', system-ui, sans-serif;
@@ -16,7 +16,7 @@
 .flow-properties-empty {
   width: 100%;
   height: 100%;
-  background: #f8fafc;
+  background: var(--flow-surface-muted);
   padding: 20px;
   font-family: 'DM Sans', system-ui, sans-serif;
   box-sizing: border-box;
@@ -25,16 +25,16 @@
 .flow-properties-title {
   font-size: 14px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--flow-text);
   margin: 0 0 14px 0;
 }
 
 .flow-properties-empty-box {
-  border: 1.5px dashed #cbd5e1;
+  border: 1.5px dashed var(--flow-border-strong);
   border-radius: 10px;
   padding: 28px 16px;
   text-align: center;
-  color: #94a3b8;
+  color: var(--flow-text-subtle);
   font-size: 12px;
 }
 
@@ -46,7 +46,7 @@
 /* Header with node info */
 .flow-properties-header {
   padding: 14px 16px 10px;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid var(--flow-border);
   flex-shrink: 0;
 }
 
@@ -69,7 +69,7 @@
 .flow-properties-header-title {
   font-size: 13px;
   font-weight: 700;
-  color: #1e293b;
+  color: var(--flow-text);
 }
 
 .flow-properties-type-badge {
@@ -92,7 +92,7 @@
 .flow-properties-section-header {
   font-size: 10px;
   font-weight: 700;
-  color: #94a3b8;
+  color: var(--flow-text-subtle);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   margin: 16px 0 10px 0;
@@ -107,7 +107,7 @@
   display: block;
   font-size: 11px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--flow-text-muted);
   margin-bottom: 5px;
   letter-spacing: -0.01em;
 }
@@ -118,10 +118,10 @@
   width: 100%;
   padding: 7px 10px;
   border-radius: 7px;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--flow-border);
   font-size: 13px;
-  color: #1e293b;
-  background: white;
+  color: var(--flow-text);
+  background: var(--flow-surface);
   outline: none;
   box-sizing: border-box;
   font-family: inherit;
@@ -130,7 +130,7 @@
 
 .flow-properties-input:focus,
 .flow-properties-textarea:focus {
-  border-color: #6366f1;
+  border-color: var(--flow-accent);
 }
 
 .flow-properties-textarea {
@@ -142,29 +142,29 @@
   width: 100%;
   padding: 7px 10px;
   border-radius: 7px;
-  border: 1.5px solid #e2e8f0;
-  background: #f8fafc;
+  border: 1.5px solid var(--flow-border);
+  background: var(--flow-surface-muted);
   cursor: default;
   box-sizing: border-box;
   font-size: 13px;
-  color: #64748b;
+  color: var(--flow-text-muted);
 }
 
 /* Condition-specific input colors */
 .flow-properties-yes-input {
-  border-color: #86efac;
+  border-color: var(--flow-success-border);
 }
 
 .flow-properties-yes-input:focus {
-  border-color: #16a34a;
+  border-color: var(--flow-success);
 }
 
 .flow-properties-no-input {
-  border-color: #fca5a5;
+  border-color: var(--flow-danger-border);
 }
 
 .flow-properties-no-input:focus {
-  border-color: #dc2626;
+  border-color: var(--flow-danger);
 }
 
 /* Action buttons */
@@ -173,7 +173,7 @@
   gap: 8px;
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1.5px solid #f1f5f9;
+  border-top: 1.5px solid var(--flow-border);
 }
 
 .flow-properties-action-btn {
@@ -181,7 +181,7 @@
   padding: 8px 12px;
   border-radius: 6px;
   border: 1.5px solid;
-  background: white;
+  background: var(--flow-surface);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
@@ -195,21 +195,21 @@
 }
 
 .flow-properties-delete-btn {
-  border-color: #fecaca;
-  color: #dc2626;
-  background: #fef2f2;
+  border-color: var(--flow-danger-border);
+  color: var(--flow-danger);
+  background: var(--flow-danger-soft);
 }
 
 .flow-properties-delete-btn:hover {
-  background: #fee2e2;
+  background: var(--flow-danger-hover);
 }
 
 .flow-properties-duplicate-btn {
-  border-color: #c7d2fe;
-  color: #4f46e5;
-  background: #eef2ff;
+  border-color: var(--flow-accent-soft-border);
+  color: var(--flow-accent-strong);
+  background: var(--flow-accent-soft);
 }
 
 .flow-properties-duplicate-btn:hover {
-  background: #e0e7ff;
+  background: var(--flow-accent-soft-strong);
 }

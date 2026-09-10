@@ -149,11 +149,11 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
         minWidth: minimumWidth,
         maxWidth: 520,
         minHeight: computedMinHeight,
-        background: 'white',
+        background: 'var(--flow-surface)',
         borderRadius: 14,
-        borderTop: `1.5px solid ${selected ? theme.accent : '#e5e7eb'}`,
-        borderRight: `1.5px solid ${selected ? theme.accent : '#e5e7eb'}`,
-        borderBottom: `1.5px solid ${selected ? theme.accent : '#e5e7eb'}`,
+        borderTop: `1.5px solid ${selected ? theme.accent : 'var(--flow-border)'}`,
+        borderRight: `1.5px solid ${selected ? theme.accent : 'var(--flow-border)'}`,
+        borderBottom: `1.5px solid ${selected ? theme.accent : 'var(--flow-border)'}`,
         borderLeft: `5px solid ${theme.accent}`,
         boxShadow: selected
           ? `0 0 0 3px ${theme.accent}26, 0 8px 20px rgba(15, 23, 42, 0.12)`
@@ -233,7 +233,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
             style={{
               fontWeight: 700,
               fontSize: titleFontSize,
-              color: '#1e293b',
+              color: 'var(--flow-text)',
               letterSpacing: '-0.01em',
               lineHeight: 1.2,
               overflow: 'hidden',
@@ -243,7 +243,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
           >
             {normalized.title || 'Select Action'}
           </div>
-          <div style={{ fontSize: stepLabelFontSize, color: '#94a3b8', fontWeight: 600, marginTop: 1 }}>
+          <div style={{ fontSize: stepLabelFontSize, color: 'var(--flow-text-subtle)', fontWeight: 600, marginTop: 1 }}>
             {data.stepNumber !== undefined ? `Step ${data.stepNumber}` : 'Recipe Step'}
           </div>
         </div>
@@ -254,9 +254,9 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
             fontWeight: 700,
             padding: '2px 7px',
             borderRadius: 999,
-            background: isGenerated ? '#f0fdf4' : '#f8fafc',
-            color: isGenerated ? '#16a34a' : '#94a3b8',
-            border: `1px solid ${isGenerated ? '#86efac' : '#e2e8f0'}`,
+            background: isGenerated ? 'var(--flow-success-soft)' : 'var(--flow-surface-muted)',
+            color: isGenerated ? 'var(--flow-success)' : 'var(--flow-text-subtle)',
+            border: `1px solid ${isGenerated ? 'var(--flow-success-border)' : 'var(--flow-border)'}`,
             flexShrink: 0,
             whiteSpace: 'nowrap',
           }}
@@ -274,7 +274,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
             borderRadius: 10,
             overflow: 'hidden',
             border: `1px solid ${theme.border}`,
-            background: imageUrl ? '#0f172a' : `linear-gradient(135deg, ${theme.soft}, #ffffff)`,
+            background: imageUrl ? '#0f172a' : `linear-gradient(135deg, ${theme.soft}, var(--flow-surface))`,
             flexShrink: 0,
             position: 'relative',
           }}
@@ -311,7 +311,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
           {(ingredientName || quantityLabel) && (
             <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', gap: 6 }}>
               {ingredientName && (
-                <span style={{ fontSize: ingredientFontSize, fontWeight: 700, color: '#0f172a' }}>
+                <span style={{ fontSize: ingredientFontSize, fontWeight: 700, color: 'var(--flow-text)' }}>
                   {ingredientName}
                 </span>
               )}
@@ -331,7 +331,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
                 </span>
               )}
               {preparationStyle && (
-                <span style={{ fontSize: pillFontSize, color: '#64748b', fontWeight: 600 }}>
+                <span style={{ fontSize: pillFontSize, color: 'var(--flow-text-muted)', fontWeight: 600 }}>
                   {FIELD_ICONS.preparationStyleId} {preparationStyle}
                 </span>
               )}
@@ -352,9 +352,9 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
                     fontWeight: 700,
                     padding: '3px 8px',
                     borderRadius: 999,
-                    background: '#f8fafc',
-                    color: '#475569',
-                    border: '1px solid #e2e8f0',
+                    background: 'var(--flow-surface-muted)',
+                    color: 'var(--flow-text-muted)',
+                    border: '1px solid var(--flow-border)',
                   }}
                 >
                   <span aria-hidden>{FIELD_ICONS[row.key] ?? '•'}</span>
@@ -366,12 +366,12 @@ export default function RecipeStepNode({ selected, style: nodeStyle, data, width
 
           {/* Notes */}
           {notes && (
-            <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: Math.round(6 * scale) }}>
+            <div style={{ borderTop: '1px dashed var(--flow-border)', paddingTop: Math.round(6 * scale) }}>
               <div
                 ref={notesRef}
                 style={{
                   fontSize: notesFontSize,
-                  color: '#64748b',
+                  color: 'var(--flow-text-muted)',
                   lineHeight: 1.45,
                   overflow: 'hidden',
                   whiteSpace: 'pre-wrap',

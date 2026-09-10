@@ -1,0 +1,84 @@
+/* Shared color tokens for the pre-login marketing surfaces (HomePage, Auth modal). */
+:root {
+  --home-bg: #fbfaf7;
+  --home-surface: #ffffff;
+  --home-surface-muted: #f1ece4;
+  --home-border: #e8e3da;
+  --home-border-strong: #d0c7ba;
+  --home-text: #171717;
+  --home-text-muted: #716c64;
+  --home-text-faint: #9a9287;
+  --home-ink: #171717;
+  --home-ink-contrast: #ffffff;
+  --home-accent: #efbf58;
+  --home-accent-strong: #8c5c24;
+  --home-accent-secondary: #79a88b;
+  --home-panel-bg: #202020;
+  --home-panel-border: #353535;
+  --home-stage-bg: #292929;
+  --home-stage-border: #3c3c3c;
+  --home-video-bg: #302b24;
+  --home-video-border: #71634e;
+  --home-video-icon-bg: #eee8de;
+  --home-footer-bg: #111111;
+  --home-danger-bg: #fdecec;
+  --home-danger-border: #f0b4b4;
+  --home-danger-text: #b23b3b;
+  --home-success-bg: #eafbf0;
+  --home-success-border: #bfe3c8;
+  --home-success-text: #22693a;
+  --home-shadow-soft: 0 8px 25px rgba(0, 0, 0, 0.05);
+  --home-shadow-card: 0 30px 80px rgba(55, 44, 27, 0.09);
+  --home-overlay: rgba(23, 23, 23, 0.5);
+  --home-nav-bg: rgba(251, 250, 247, 0.94);
+
+  /* RGB triplets (no rgb() wrapper) for translucent overlays: rgba(var(--home-*-rgb), alpha) */
+  --home-surface-rgb: 255, 255, 255;
+  --home-accent-rgb: 239, 191, 88;
+  --home-accent-secondary-rgb: 121, 168, 139;
+
+  /* Fixed dark accent bands (.dark/.cta sections, footer, pipeline) - intentionally
+     stay dark in both themes, so these are not redefined under [data-theme='dark']. */
+  --home-inverse-bg: #171717;
+  --home-inverse-surface: #202020;
+  --home-inverse-surface-alt: #292929;
+  --home-inverse-border: #353535;
+  --home-inverse-border-alt: #3c3c3c;
+  --home-inverse-text: #ffffff;
+  --home-inverse-text-muted: #aaa398;
+  --home-inverse-text-faint: #aaa49b;
+  --home-inverse-video-bg: #302b24;
+  --home-inverse-video-border: #71634e;
+  --home-inverse-video-icon-bg: #eee8de;
+  --home-inverse-footer-bg: #111111;
+}
+
+:root[data-theme='dark'] {
+  --home-bg: #17140f;
+  --home-surface: #211d17;
+  --home-surface-muted: #2a251d;
+  --home-border: #373126;
+  --home-border-strong: #4a4235;
+  --home-text: #f1ece4;
+  --home-text-muted: #b4ab9d;
+  --home-text-faint: #8c8375;
+  --home-ink: #f1ece4;
+  --home-ink-contrast: #171717;
+  --home-accent: #f0c96e;
+  --home-accent-strong: #d99a4e;
+  --home-accent-secondary: #8fc2a4;
+  --home-danger-bg: rgba(248, 113, 113, 0.12);
+  --home-danger-border: rgba(248, 113, 113, 0.4);
+  --home-danger-text: #f87171;
+  --home-success-bg: rgba(74, 222, 128, 0.12);
+  --home-success-border: rgba(74, 222, 128, 0.4);
+  --home-success-text: #4ade80;
+  --home-shadow-soft: 0 8px 25px rgba(0, 0, 0, 0.3);
+  --home-shadow-card: 0 30px 80px rgba(0, 0, 0, 0.45);
+  --home-overlay: rgba(0, 0, 0, 0.6);
+  --home-nav-bg: rgba(23, 20, 15, 0.9);
+
+  --home-surface-rgb: 33, 29, 23;
+  --home-accent-rgb: 240, 201, 110;
+  --home-accent-secondary-rgb: 143, 194, 164;
+}

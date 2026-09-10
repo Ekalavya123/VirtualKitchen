@@ -29,7 +29,7 @@ export default function Sidebar({ onAddNode, nodes, edges, selectedNodeId, onSel
       <div className="flex-shrink-0 border-b border-[var(--flow-border)] px-3.5 py-4">
         <div className="flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[linear-gradient(135deg,var(--flow-accent),#8b5cf6)] text-base text-white">👨‍🍳</div>
+            <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-[linear-gradient(135deg,var(--flow-accent),var(--flow-accent-secondary))] text-base text-white">👨‍🍳</div>
             <div className="flex flex-col">
               <div className="text-[0.75rem] font-semibold text-[var(--flow-text)]">Recipe Builder</div>
               <div className="text-[0.65rem] text-[var(--flow-text-muted)]">Create delicious recipes</div>
@@ -87,22 +87,22 @@ export default function Sidebar({ onAddNode, nodes, edges, selectedNodeId, onSel
 
       <div className="flex-shrink-0 border-b border-[var(--flow-border)] px-2.5 py-2.5">
         <div className="flow-editor-section-heading mb-2 px-1">Flow Overview</div>
-        <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-100 bg-slate-50 p-2 text-[0.72rem] text-slate-600">
-          <div className="rounded-lg bg-white px-2 py-2">
-            <div className="text-[0.62rem] uppercase tracking-[0.16em] text-slate-400">Steps</div>
-            <div className="mt-1 text-base font-semibold text-slate-800">{flowMeta?.stepCount ?? stepNodes.length}</div>
+        <div className="grid grid-cols-2 gap-2 rounded-xl border border-[var(--flow-border)] bg-[var(--flow-surface-muted)] p-2 text-[0.72rem] text-[var(--flow-text-muted)]">
+          <div className="rounded-lg bg-[var(--flow-surface)] px-2 py-2">
+            <div className="text-[0.62rem] uppercase tracking-[0.16em] text-[var(--flow-text-subtle)]">Steps</div>
+            <div className="mt-1 text-base font-semibold text-[var(--flow-text)]">{flowMeta?.stepCount ?? stepNodes.length}</div>
           </div>
-          <div className="rounded-lg bg-white px-2 py-2">
-            <div className="text-[0.62rem] uppercase tracking-[0.16em] text-slate-400">Conditions</div>
-            <div className="mt-1 text-base font-semibold text-slate-800">{flowMeta?.conditionCount ?? conditionNodes.length}</div>
+          <div className="rounded-lg bg-[var(--flow-surface)] px-2 py-2">
+            <div className="text-[0.62rem] uppercase tracking-[0.16em] text-[var(--flow-text-subtle)]">Conditions</div>
+            <div className="mt-1 text-base font-semibold text-[var(--flow-text)]">{flowMeta?.conditionCount ?? conditionNodes.length}</div>
           </div>
-          <div className="col-span-2 rounded-lg bg-white px-2 py-2">
-            <div className="text-[0.62rem] uppercase tracking-[0.16em] text-slate-400">Parallel</div>
-            <div className="mt-1 text-base font-semibold text-slate-800">{flowMeta?.parallelCount ?? parallelNodes.length}</div>
+          <div className="col-span-2 rounded-lg bg-[var(--flow-surface)] px-2 py-2">
+            <div className="text-[0.62rem] uppercase tracking-[0.16em] text-[var(--flow-text-subtle)]">Parallel</div>
+            <div className="mt-1 text-base font-semibold text-[var(--flow-text)]">{flowMeta?.parallelCount ?? parallelNodes.length}</div>
           </div>
-          <div className="col-span-2 rounded-lg bg-white px-2 py-2">
-            <div className="text-[0.62rem] uppercase tracking-[0.16em] text-slate-400">Connections</div>
-            <div className="mt-1 text-base font-semibold text-slate-800">{edges.length}</div>
+          <div className="col-span-2 rounded-lg bg-[var(--flow-surface)] px-2 py-2">
+            <div className="text-[0.62rem] uppercase tracking-[0.16em] text-[var(--flow-text-subtle)]">Connections</div>
+            <div className="mt-1 text-base font-semibold text-[var(--flow-text)]">{edges.length}</div>
           </div>
         </div>
       </div>
@@ -117,7 +117,7 @@ export default function Sidebar({ onAddNode, nodes, edges, selectedNodeId, onSel
               <button
                 key={node.id}
                 type="button"
-                className={`cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-[0.7rem] font-semibold transition-all ${isSelected ? 'border border-indigo-200 bg-indigo-50 text-slate-900' : 'bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-900'}`}
+                className={`cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap rounded-lg px-2.5 py-2 text-left text-[0.7rem] font-semibold transition-all ${isSelected ? 'border border-[var(--flow-accent-soft-border)] bg-[var(--flow-accent-soft)] text-[var(--flow-text)]' : 'bg-[var(--flow-surface-muted)] text-[var(--flow-text-muted)] hover:bg-[var(--flow-border)] hover:text-[var(--flow-text)]'}`}
                 title={String(label)}
                 onClick={() => onSelectNode?.(isSelected ? null : String(node.id))}
               >

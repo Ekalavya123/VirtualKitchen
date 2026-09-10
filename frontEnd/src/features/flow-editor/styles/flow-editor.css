@@ -13,6 +13,10 @@
   --flow-success-soft: #f0fdf4;
   --flow-warning: #d97706;
   --flow-warning-soft: #fffbeb;
+  --flow-warning-border: #fde68a;
+  --flow-magic: #a21caf;
+  --flow-magic-soft: #fdf4ff;
+  --flow-magic-border: #e9d5ff;
   --flow-danger: #dc2626;
   --flow-danger-soft: #fef2f2;
   --flow-shadow-panel: 0 20px 60px rgba(15, 23, 42, 0.08);
@@ -25,6 +29,78 @@
   /* Canvas draw surface: distinct from both the app chrome (--flow-bg) and white node cards. */
   --flow-canvas-bg: #eef1f7;
   --flow-canvas-dots: #d7deea;
+
+  --flow-accent-secondary: #8b5cf6;
+  --flow-text-subtle: #94a3b8;
+  --flow-info: #2563eb;
+  --flow-info-soft: #eff6ff;
+  --flow-info-border: #bfdbfe;
+  --flow-success-border: #86efac;
+  --flow-success-strong: #0f8f40;
+  --flow-danger-border: #fca5a5;
+  --flow-danger-hover: #fee2e2;
+  --flow-accent-soft-strong: #e0e7ff;
+  --flow-accent-soft-border: #c7d2fe;
+  --flow-overlay: rgba(15, 23, 42, 0.5);
+  --flow-skeleton: #eef2f7;
+  /* RGB triplets (no rgb() wrapper) so translucent overlays can theme via rgba(var(--flow-*-rgb), alpha) */
+  --flow-surface-rgb: 255, 255, 255;
+  --flow-accent-rgb: 99, 102, 241;
+  --flow-accent-strong-rgb: 79, 70, 229;
+  --flow-text-muted-rgb: 148, 163, 184;
+}
+
+:root[data-theme='dark'] {
+  --flow-bg: #0f1115;
+  --flow-surface: #171a21;
+  --flow-surface-muted: #1d212b;
+  --flow-border: #2a2f3a;
+  --flow-border-strong: #3a4150;
+  --flow-text: #e2e8f0;
+  --flow-text-muted: #94a3b8;
+  --flow-text-subtle: #6b7688;
+  --flow-accent: #818cf8;
+  --flow-accent-soft: rgba(129, 140, 248, 0.16);
+  --flow-accent-soft-strong: rgba(129, 140, 248, 0.28);
+  --flow-accent-soft-border: rgba(129, 140, 248, 0.4);
+  --flow-accent-strong: #a5b4fc;
+  --flow-accent-secondary: #a78bfa;
+  --flow-success: #4ade80;
+  --flow-success-soft: rgba(74, 222, 128, 0.14);
+  --flow-success-border: rgba(74, 222, 128, 0.4);
+  --flow-warning: #fbbf24;
+  --flow-warning-soft: rgba(251, 191, 36, 0.14);
+  --flow-warning-border: rgba(251, 191, 36, 0.4);
+  --flow-magic: #e879f9;
+  --flow-magic-soft: rgba(232, 121, 249, 0.14);
+  --flow-magic-border: rgba(232, 121, 249, 0.4);
+  --flow-danger: #f87171;
+  --flow-danger-soft: rgba(248, 113, 113, 0.14);
+  --flow-danger-border: rgba(248, 113, 113, 0.4);
+  --flow-danger-hover: rgba(248, 113, 113, 0.22);
+  --flow-info: #60a5fa;
+  --flow-info-soft: rgba(96, 165, 250, 0.14);
+  --flow-info-border: rgba(96, 165, 250, 0.4);
+  --flow-shadow-panel: 0 20px 60px rgba(0, 0, 0, 0.45);
+  --flow-shadow-card: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --flow-canvas-bg: #0b0d11;
+  --flow-canvas-dots: #262b35;
+  --flow-overlay: rgba(0, 0, 0, 0.6);
+  --flow-skeleton: #232732;
+  --flow-surface-rgb: 23, 26, 33;
+  --flow-accent-rgb: 129, 140, 248;
+  --flow-accent-strong-rgb: 165, 180, 252;
+  --flow-text-muted-rgb: 148, 163, 184;
+
+  /* Re-theme React Flow's own chrome (Controls panel, MiniMap) for dark mode. */
+  --xy-background-color: var(--flow-canvas-bg);
+  --xy-controls-button-background-color: var(--flow-surface);
+  --xy-controls-button-background-color-hover: var(--flow-surface-muted);
+  --xy-controls-button-color: var(--flow-text-muted);
+  --xy-controls-button-color-hover: var(--flow-text);
+  --xy-controls-button-border-color: var(--flow-border);
+  --xy-minimap-background-color: var(--flow-surface);
+  --xy-minimap-mask-background-color: rgba(0, 0, 0, 0.55);
 }
 
 .flow-editor-shell {

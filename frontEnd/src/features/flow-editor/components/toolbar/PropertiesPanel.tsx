@@ -512,8 +512,11 @@ export default function PropertiesPanel({ node, updateNodeField, onDeleteNode, o
                 placeholder="Optional details"
               />
             </div>
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[0.7rem] text-slate-500">
-              <strong className="text-amber-700">Tip:</strong> Drag from the 🟢 green handle for <em>Yes</em>,
+            <div
+              className="mb-3 rounded-lg px-2.5 py-2 text-[0.7rem]"
+              style={{ border: '1px solid var(--flow-warning-border)', background: 'var(--flow-warning-soft)', color: 'var(--flow-text-muted)' }}
+            >
+              <strong style={{ color: 'var(--flow-warning)' }}>Tip:</strong> Drag from the 🟢 green handle for <em>Yes</em>,
               🔴 red handle for <em>No</em>. Connect to any step or section.
             </div>
           </>
@@ -529,8 +532,8 @@ export default function PropertiesPanel({ node, updateNodeField, onDeleteNode, o
                   className="flow-properties-type-badge"
                   style={
                     visualization?.status === 'generated'
-                      ? { background: '#f0fdf4', border: '1px solid #86efac', color: '#16a34a' }
-                      : { background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b' }
+                      ? { background: 'var(--flow-success-soft)', border: '1px solid var(--flow-success-border)', color: 'var(--flow-success)' }
+                      : { background: 'var(--flow-surface-muted)', border: '1px solid var(--flow-border)', color: 'var(--flow-text-muted)' }
                   }
                 >
                   {visualization?.status === 'generated' ? '🖼️ Generated' : '⚪ Not generated'}
@@ -557,10 +560,10 @@ export default function PropertiesPanel({ node, updateNodeField, onDeleteNode, o
                 <img
                   src={visualization.imageUrl}
                   alt="Step visualization"
-                  style={{ marginTop: 8, width: '100%', borderRadius: 8, border: '1px solid #e2e8f0' }}
+                  style={{ marginTop: 8, width: '100%', borderRadius: 8, border: '1px solid var(--flow-border)' }}
                 />
               ) : visualization?.status === 'generated' ? (
-                <div style={{ marginTop: 8, fontSize: 11, color: '#94a3b8' }}>
+                <div style={{ marginTop: 8, fontSize: 11, color: 'var(--flow-text-subtle)' }}>
                   Image not rendered yet — prompt is ready.
                 </div>
               ) : null}
@@ -569,7 +572,7 @@ export default function PropertiesPanel({ node, updateNodeField, onDeleteNode, o
         )}
 
         {/* Actions */}
-        <div className="my-2 h-px bg-slate-100" />
+        <div className="my-2 h-px" style={{ background: 'var(--flow-border)' }} />
         <div className="flow-editor-section-heading">Actions</div>
 
         <div className="flow-properties-actions">

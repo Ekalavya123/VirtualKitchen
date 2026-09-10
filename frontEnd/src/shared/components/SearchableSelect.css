@@ -12,10 +12,10 @@
   width: 100%;
   padding: 7px 10px;
   border-radius: 7px;
-  border: 1.5px solid #e2e8f0;
+  border: 1.5px solid var(--flow-border);
   font-size: 13px;
-  color: #1e293b;
-  background: white;
+  color: var(--flow-text);
+  background: var(--flow-surface);
   outline: none;
   box-sizing: border-box;
   font-family: inherit;
@@ -24,7 +24,7 @@
 }
 
 .searchable-select-trigger:hover {
-  border-color: #cbd5e1;
+  border-color: var(--flow-border-strong);
 }
 
 .searchable-select-trigger-label {
@@ -37,7 +37,7 @@
 .searchable-select-chevron {
   flex-shrink: 0;
   font-size: 9px;
-  color: #94a3b8;
+  color: var(--flow-text-subtle);
 }
 
 .searchable-select-dropdown {
@@ -46,10 +46,10 @@
   top: calc(100% + 4px);
   left: 0;
   right: 0;
-  background: white;
-  border: 1.5px solid #e2e8f0;
+  background: var(--flow-surface);
+  border: 1.5px solid var(--flow-border);
   border-radius: 8px;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+  box-shadow: var(--flow-shadow-panel);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -60,12 +60,14 @@
   width: 100%;
   padding: 8px 10px;
   border: none;
-  border-bottom: 1.5px solid #f1f5f9;
+  border-bottom: 1.5px solid var(--flow-border);
   font-size: 12.5px;
   outline: none;
   box-sizing: border-box;
   font-family: inherit;
   flex-shrink: 0;
+  background: var(--flow-surface);
+  color: var(--flow-text);
 }
 
 .searchable-select-options {
@@ -76,7 +78,7 @@
 .searchable-select-group-label {
   font-size: 10px;
   font-weight: 700;
-  color: #94a3b8;
+  color: var(--flow-text-subtle);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 6px 8px 2px;
@@ -92,19 +94,19 @@
   background: transparent;
   border-radius: 6px;
   font-size: 12.5px;
-  color: #1e293b;
+  color: var(--flow-text);
   text-align: left;
   cursor: pointer;
   font-family: inherit;
 }
 
 .searchable-select-option:hover {
-  background: #f1f5f9;
+  background: var(--flow-border);
 }
 
 .searchable-select-option--selected {
-  background: #eef2ff;
-  color: #4338ca;
+  background: var(--flow-accent-soft);
+  color: var(--flow-accent-strong);
   font-weight: 600;
 }
 
@@ -116,5 +118,5 @@
   padding: 14px 10px;
   text-align: center;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--flow-text-subtle);
 }

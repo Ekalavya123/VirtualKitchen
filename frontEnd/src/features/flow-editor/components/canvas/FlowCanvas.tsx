@@ -1036,18 +1036,18 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
                 connectionRadius={28}
                 defaultEdgeOptions={{
                   type: 'smoothstep',
-                  style: { stroke: '#94a3b8', strokeWidth: 1.5 },
-                  markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8', width: 16, height: 16 },
+                  style: { stroke: 'var(--flow-text-subtle)', strokeWidth: 1.5 },
+                  markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--flow-text-subtle)', width: 16, height: 16 },
                 }}
               >
                 <Background variant={BackgroundVariant.Dots} color="var(--flow-canvas-dots)" gap={20} size={1} />
-                <Controls style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
+                <Controls style={{ borderRadius: 10, border: '1px solid var(--flow-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
                 <MiniMap
-                  style={{ borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+                  style={{ borderRadius: 12, border: '1px solid var(--flow-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
                   nodeColor={n => {
                     if (isConditionNode(n)) return '#fde68a'
                     if (isParallelNode(n)) return '#ddd6fe'
-                    return '#e2e8f0'
+                    return 'var(--flow-border)'
                   }}
                 />
               </ReactFlow>
@@ -1136,32 +1136,32 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
           <div className="flow-canvas-export-modal" onClick={e => e.stopPropagation()}>
             {/* Modal header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '14px 18px', borderBottom: '1px solid #e2e8f0' }}>
+              padding: '14px 18px', borderBottom: '1px solid var(--flow-border)' }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>📤 Export Flow Graph</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--flow-text)' }}>📤 Export Flow Graph</div>
+                <div style={{ fontSize: 11, color: 'var(--flow-text-subtle)', marginTop: 2 }}>
                   {nodes.length} nodes · {edges.length} edges — use for visualization development
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 7 }}>
                 <button onClick={downloadJson} style={{ padding: '6px 12px', borderRadius: 7,
-                  border: '1px solid #86efac', background: '#f0fdf4', color: '#16a34a',
+                  border: '1px solid var(--flow-success-border)', background: 'var(--flow-success-soft)', color: 'var(--flow-success)',
                   fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   ⬇ Download .json
                 </button>
                 <button onClick={copyJson} style={{ padding: '6px 12px', borderRadius: 7,
-                  border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb',
+                  border: '1px solid var(--flow-info-border)', background: 'var(--flow-info-soft)', color: 'var(--flow-info)',
                   fontSize: 12, fontWeight: 600, cursor: 'pointer', minWidth: 70 }}>
                   {copied ? '✅ Copied!' : '📋 Copy'}
                 </button>
                 <button onClick={() => setExportJson(null)} style={{ width: 30, height: 30,
-                  borderRadius: 7, border: '1px solid #e2e8f0', background: 'white',
-                  color: '#94a3b8', cursor: 'pointer', fontSize: 15 }}>✕</button>
+                  borderRadius: 7, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)',
+                  color: 'var(--flow-text-subtle)', cursor: 'pointer', fontSize: 15 }}>✕</button>
               </div>
             </div>
             {/* JSON body */}
             <pre style={{ flex: 1, overflow: 'auto', margin: 0, padding: '14px 18px',
-              fontSize: 11, lineHeight: 1.65, color: '#1e293b', background: '#f8fafc',
+              fontSize: 11, lineHeight: 1.65, color: 'var(--flow-text)', background: 'var(--flow-surface-muted)',
               fontFamily: "'Fira Code', 'Cascadia Code', monospace" }}>
               {exportJson}
             </pre>
