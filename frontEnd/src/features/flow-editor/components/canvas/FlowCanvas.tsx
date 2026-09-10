@@ -149,6 +149,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const [builderWidth, setBuilderWidth] = useState(380)
   const [builderCollapsed, setBuilderCollapsed] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(210)
   const [propsCollapsed, setPropsCollapsed] = useState(false)
   const [propsWidth, setPropsWidth] = useState(260)
   const nodeZoomPercentRef = useRef(100)
@@ -880,7 +881,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
         <div
           ref={sidebarRef}
           className={`flow-sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
-          style={{ width: sidebarCollapsed ? 48 : 210, minWidth: sidebarCollapsed ? 48 : 160 }}
+          style={{ width: sidebarCollapsed ? 48 : sidebarWidth, minWidth: sidebarCollapsed ? 48 : 160 }}
         >
           {sidebarCollapsed ? (
             <div className="sidebar-collapse-tab" role="button" aria-label="Open sidebar" onClick={() => setSidebarCollapsed(false)}>
@@ -901,6 +902,39 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
             </>
           )}
         </div>
+
+        {/* Resizer between sidebar and canvas */}
+        {!sidebarCollapsed && (
+          <div
+            className="flow-inline-resizer"
+            onMouseDown={(event) => {
+              const startX = event.clientX
+              const startWidth = sidebarRef.current?.offsetWidth ?? sidebarWidth
+              const minWidth = 160
+              const maxWidth = 420
+
+              const onMove = (moveEvent: MouseEvent) => {
+                const delta = moveEvent.clientX - startX
+                let nextWidth = startWidth + delta
+                if (nextWidth < minWidth) nextWidth = minWidth
+                if (nextWidth > maxWidth) nextWidth = maxWidth
+                setSidebarWidth(nextWidth)
+              }
+
+              const onUp = () => {
+                document.removeEventListener('mousemove', onMove)
+                document.removeEventListener('mouseup', onUp)
+              }
+
+              document.addEventListener('mousemove', onMove)
+              document.addEventListener('mouseup', onUp)
+              event.preventDefault()
+            }}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+          />
+        )}
 
         {/* Main canvas area */}
         <div className="flow-canvas-main">
@@ -997,7 +1031,10 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
 
         {/* Resizer between main canvas and properties */}
         <div
-          className="flow-resizer"
+          className="flow-inline-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize properties panel"
           onMouseDown={(e) => {
             const startX = e.clientX
             const startWidth = propsRef.current?.offsetWidth ?? 260
@@ -1005,8 +1042,9 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
             const maxW = 520
 
             const onMove = (ev: MouseEvent) => {
+              // Panel is on the right: dragging left (clientX decreases) should grow it.
               const delta = startX - ev.clientX
-              let next = startWidth - delta
+              let next = startWidth + delta
               if (next < minW) next = minW
               if (next > maxW) next = maxW
               setPropsWidth(next)

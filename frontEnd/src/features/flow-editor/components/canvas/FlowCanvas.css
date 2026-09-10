@@ -1,16 +1,15 @@
-/* FlowCanvas main container: breaks out of #root's centered/max-width shell
-   (see index.css) so the editor spans the true browser viewport edge-to-edge,
-   with no left/right gutters or top/bottom slack. Uses the "full-bleed"
-   left:50%/margin-left:-50vw technique instead of position: fixed, since fixed
-   previously caused the topbar to disappear behind other page chrome. */
+/* FlowCanvas main container: fills its parent (.kitchen-content) edge-to-edge.
+   .kitchen-body strips its own padding for this route (see KitchenPage.css)
+   so there's no gap under the navbar and no viewport-relative sizing here -
+   that previously made this container taller than the space actually granted
+   by the flex layout, forcing an outer scroll that dragged the "sticky"
+   topbar along with it. */
 .flow-canvas-container {
   position: relative;
-  left: 50%;
-  width: 100vw;
-  margin-left: -50vw;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  height: 100vh;
   overflow: hidden; /* prevent page-level horizontal/vertical scroll */
   background: #f8fafc;
   font-family: 'DM Sans', system-ui, sans-serif;
@@ -148,8 +147,6 @@
 .flow-properties-wrapper.collapsed .flow-properties-panel {
   display: none;
 }
-
-/* Resizer between main and properties panel is handled by the FlowCanvas drag divider. */
 
 /* Default panel sizing + the single visual separator for each panel.
    (Sidebar.css/PropertiesPanel.css previously also drew their own border and

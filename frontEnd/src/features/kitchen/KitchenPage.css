@@ -15,8 +15,17 @@
   padding: 32px;
 }
 
+/* The flow/recipe editor manages its own full-bleed layout and scrolling
+   (see FlowCanvas.css) - the shared padding would push it below the navbar
+   and force this container to grow past the space it's actually given. */
+.kitchen-body:has(.flow-canvas-container) {
+  padding: 0;
+  overflow: hidden;
+}
+
 .kitchen-content {
   flex: 1;
+  min-height: 0;
 }
 
 .kitchen-footer {
