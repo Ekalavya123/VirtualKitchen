@@ -4,8 +4,8 @@
   background:
     linear-gradient(
       135deg,
-      #f8fafc 0%,
-      #eef2ff 100%
+      var(--flow-bg) 0%,
+      var(--flow-accent-soft) 100%
     );
 }
 
@@ -143,7 +143,7 @@
 }
 
 .shop-search-input::placeholder {
-  color: #94a3b8;
+  color: var(--flow-text-subtle);
 }
 
 .shop-search-input:focus {
@@ -273,7 +273,7 @@
     linear-gradient(
       135deg,
       var(--flow-accent-soft),
-      #f8fafc
+      var(--flow-bg)
     );
   font-size: 42px;
 }
@@ -331,7 +331,7 @@
     linear-gradient(
       135deg,
       var(--flow-accent),
-      #8b5cf6
+      var(--flow-accent-secondary)
     );
   color: white;
   font-size: 12px;
@@ -378,7 +378,7 @@
 }
 
 .shop-error {
-  border-color: #fecaca;
+  border-color: var(--flow-danger-border);
   background: var(--flow-danger-soft);
   color: var(--flow-danger);
 }
@@ -479,7 +479,7 @@
 }
 
 .cart-drawer-close:hover {
-  background: #eef2f7;
+  background: var(--flow-skeleton);
   color: var(--flow-text);
 }
 
@@ -505,7 +505,7 @@
   padding: 13px;
   border: 1px solid var(--flow-border);
   border-radius: var(--flow-radius-md);
-  background: #fff;
+  background: var(--flow-surface);
 }
 
 .cart-item-top {
@@ -566,7 +566,7 @@
   border: 1px solid var(--flow-border);
   border-radius: 7px;
   outline: none;
-  background: white;
+  background: var(--flow-surface);
   color: var(--flow-text);
   font-size: 12px;
 }
@@ -639,7 +639,7 @@
   padding: 9px 14px;
   border: 1px solid var(--flow-border);
   border-radius: var(--flow-radius-md);
-  background: white;
+  background: var(--flow-surface);
   color: var(--flow-text);
   font-size: 12px;
   font-weight: 700;
@@ -654,7 +654,7 @@
 .cart-drawer-footer {
   padding: 16px 20px 20px;
   border-top: 1px solid var(--flow-border);
-  background: white;
+  background: var(--flow-surface);
 }
 
 .cart-summary-row {
@@ -680,8 +680,8 @@
   background:
     linear-gradient(
       135deg,
-      #16a34a,
-      #0f8f40
+      var(--flow-success),
+      var(--flow-success-strong)
     );
   color: white;
   font-size: 13px;
@@ -737,13 +737,13 @@
 }
 
 .checkout-success {
-  border: 1px solid #bbf7d0;
+  border: 1px solid var(--flow-success-border);
   background: var(--flow-success-soft);
-  color: #15803d;
+  color: var(--flow-success);
 }
 
 .checkout-error {
-  border: 1px solid #fecaca;
+  border: 1px solid var(--flow-danger-border);
   background: var(--flow-danger-soft);
   color: var(--flow-danger);
 }

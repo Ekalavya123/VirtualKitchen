@@ -42,7 +42,7 @@
     linear-gradient(
       135deg,
       var(--flow-accent-soft),
-      #f8fafc
+      var(--flow-bg)
     );
 
   font-size: 20px;
@@ -155,7 +155,38 @@
   position: relative;
 
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+.theme-toggle {
+  display: flex;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid transparent;
+  border-radius: var(--flow-radius-md);
+
+  background: transparent;
+
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--flow-border);
+  background: var(--flow-surface-muted);
+  transform: translateY(-1px);
 }
 
 .profile-trigger {
@@ -199,7 +230,7 @@
     linear-gradient(
       135deg,
       var(--flow-accent),
-      #8b5cf6
+      var(--flow-accent-secondary)
     );
 
   color: white;
@@ -319,7 +350,7 @@
     linear-gradient(
       135deg,
       var(--flow-accent),
-      #8b5cf6
+      var(--flow-accent-secondary)
     );
 
   color: white;

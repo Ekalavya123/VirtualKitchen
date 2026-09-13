@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import type { User } from '../../types/User'
 import logoIcon from '../../assets/kitchen/blackShadowChef.png'
 import recipesIcon from '../../assets/kitchen/recipeIcon.png'
+import { useTheme } from '../../shared/theme/ThemeProvider'
 import './KitchenNavbar.css'
 
 interface Kitchen {
@@ -137,6 +138,7 @@ export default function KitchenNavbar({
   const [profileOpen, setProfileOpen] =
     useState(false)
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
 
   const profileRef = useRef<HTMLDivElement>(null)
 
@@ -253,6 +255,16 @@ export default function KitchenNavbar({
         className="navbar-profile"
         ref={profileRef}
       >
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          {theme === 'dark' ? '☀️' : '🌙'}
+        </button>
+
         <button
           className={`profile-trigger ${
             profileOpen ? 'open' : ''

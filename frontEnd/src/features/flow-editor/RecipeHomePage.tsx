@@ -228,7 +228,7 @@ function CreateRecipeModal({
 
         <div className="recipe-modal-body">
           <label className="block">
-            <div className="mb-1.5 text-xs font-bold text-slate-700">
+            <div className="mb-1.5 text-xs font-bold text-[var(--flow-text)]">
               Recipe name
             </div>
 
@@ -248,9 +248,9 @@ function CreateRecipeModal({
           </label>
 
           <label className="mt-4 block">
-            <div className="mb-1.5 text-xs font-bold text-slate-700">
+            <div className="mb-1.5 text-xs font-bold text-[var(--flow-text)]">
               Description
-              <span className="ml-1 font-normal text-slate-400">
+              <span className="ml-1 font-normal text-[var(--flow-text-subtle)]">
                 optional
               </span>
             </div>
@@ -777,7 +777,7 @@ export default function RecipeHomePage({
   }
 
   return (
-    <div className="flow-editor-shell min-h-screen bg-[linear-gradient(135deg,#f8fafc_0%,#eef2ff_100%)] px-4 py-5 sm:px-6 sm:py-7">
+    <div className="flow-editor-shell min-h-screen bg-[linear-gradient(135deg,var(--flow-bg)_0%,var(--flow-accent-soft)_100%)] px-4 py-5 sm:px-6 sm:py-7">
       <div className="mx-auto max-w-7xl">
         {/* Header */}
         <header className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

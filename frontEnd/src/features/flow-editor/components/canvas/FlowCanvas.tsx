@@ -25,6 +25,7 @@ import {
   type NodeChange,
   MarkerType,
   BackgroundVariant,
+  PanOnScrollMode,
 } from '@xyflow/react'
 
 import '@xyflow/react/dist/style.css'
@@ -149,6 +150,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const [builderWidth, setBuilderWidth] = useState(380)
   const [builderCollapsed, setBuilderCollapsed] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(210)
   const [propsCollapsed, setPropsCollapsed] = useState(false)
   const [propsWidth, setPropsWidth] = useState(260)
   const nodeZoomPercentRef = useRef(100)
@@ -473,7 +475,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
         const normalized = normalizeStepNodeData(node.data)
         const finalized = {
           ...normalized,
-          title: getStepNodeTitle(normalized.step.action),
+          title: getStepNodeTitle(normalized.step.action, normalized.step.customActionName),
           icon: getStepNodeIcon(normalized.step.action),
         }
         return {
@@ -778,6 +780,19 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const propsRef = useRef<HTMLDivElement | null>(null)
   const recipeBuilderRef = useRef<HTMLDivElement | null>(null)
   const reactFlowWrapperRef = useRef<HTMLDivElement | null>(null)
+  const flowBodyRef = useRef<HTMLDivElement | null>(null)
+
+  // The canvas is whatever space is left between the side panels - it must
+  // never be resized away to nothing, so every panel resizer caps itself
+  // against how much room the *other* panels + this floor are currently
+  // taking, on top of its own static max.
+  const MIN_CANVAS_WIDTH = 280
+
+  const getMaxPanelWidth = useCallback((staticMax: number, otherPanelsWidth: number, gaps: number) => {
+    const containerWidth = flowBodyRef.current?.offsetWidth ?? window.innerWidth
+    const dynamicMax = containerWidth - otherPanelsWidth - gaps - MIN_CANVAS_WIDTH
+    return Math.min(staticMax, dynamicMax)
+  }, [])
 
   const applyCurrentNodeZoom = useCallback((nextNodes: Node[]) => {
     const zoomFactor = nodeZoomPercentRef.current / 100
@@ -875,12 +890,12 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
       </div>
 
       {/* Everything below the toolbar is the editor workspace */}
-      <div className="flow-canvas-body">
+      <div className="flow-canvas-body" ref={flowBodyRef}>
         {/* Sidebar */}
         <div
           ref={sidebarRef}
           className={`flow-sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
-          style={{ width: sidebarCollapsed ? 48 : 210, minWidth: sidebarCollapsed ? 48 : 160 }}
+          style={{ width: sidebarCollapsed ? 48 : sidebarWidth, minWidth: sidebarCollapsed ? 48 : 160 }}
         >
           {sidebarCollapsed ? (
             <div className="sidebar-collapse-tab" role="button" aria-label="Open sidebar" onClick={() => setSidebarCollapsed(false)}>
@@ -901,6 +916,43 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
             </>
           )}
         </div>
+
+        {/* Resizer between sidebar and canvas */}
+        {!sidebarCollapsed && (
+          <div
+            className="flow-inline-resizer"
+            onMouseDown={(event) => {
+              const startX = event.clientX
+              const startWidth = sidebarRef.current?.offsetWidth ?? sidebarWidth
+              const minWidth = 160
+              const maxWidth = 420
+
+              const onMove = (moveEvent: MouseEvent) => {
+                const delta = moveEvent.clientX - startX
+                let nextWidth = startWidth + delta
+                const builderSpace = builderCollapsed ? 48 : builderWidth
+                const propsSpace = propsCollapsed ? 48 : propsWidth
+                const gaps = (builderCollapsed ? 0 : 10) + 10 /* props resizer */ + 10 /* this resizer */
+                const effectiveMax = getMaxPanelWidth(maxWidth, builderSpace + propsSpace, gaps)
+                if (nextWidth < minWidth) nextWidth = minWidth
+                if (nextWidth > effectiveMax) nextWidth = Math.max(minWidth, effectiveMax)
+                setSidebarWidth(nextWidth)
+              }
+
+              const onUp = () => {
+                document.removeEventListener('mousemove', onMove)
+                document.removeEventListener('mouseup', onUp)
+              }
+
+              document.addEventListener('mousemove', onMove)
+              document.addEventListener('mouseup', onUp)
+              event.preventDefault()
+            }}
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+          />
+        )}
 
         {/* Main canvas area */}
         <div className="flow-canvas-main">
@@ -931,8 +983,13 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
                     const delta = moveEvent.clientX - startX
                     let nextWidth = startWidth + delta
 
+                    const sidebarSpace = sidebarCollapsed ? 48 : sidebarWidth
+                    const propsSpace = propsCollapsed ? 48 : propsWidth
+                    const gaps = (sidebarCollapsed ? 0 : 10) + 10 /* props resizer */ + 10 /* this resizer */
+                    const effectiveMax = getMaxPanelWidth(maxWidth, sidebarSpace + propsSpace, gaps)
+
                     if (nextWidth < minWidth) nextWidth = minWidth
-                    if (nextWidth > maxWidth) nextWidth = maxWidth
+                    if (nextWidth > effectiveMax) nextWidth = Math.max(minWidth, effectiveMax)
 
                     setBuilderWidth(nextWidth)
                   }
@@ -968,6 +1025,10 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
                 onConnect={onConnect}
                 isValidConnection={isValidConnection}
                 onMoveEnd={(_, viewport) => handleViewportChange(viewport)}
+                panOnScroll
+                panOnScrollMode={PanOnScrollMode.Free}
+                zoomOnScroll={false}
+                zoomOnPinch
                 nodesDraggable
                 nodesConnectable
                 elementsSelectable
@@ -975,18 +1036,18 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
                 connectionRadius={28}
                 defaultEdgeOptions={{
                   type: 'smoothstep',
-                  style: { stroke: '#94a3b8', strokeWidth: 1.5 },
-                  markerEnd: { type: MarkerType.ArrowClosed, color: '#94a3b8', width: 16, height: 16 },
+                  style: { stroke: 'var(--flow-text-subtle)', strokeWidth: 1.5 },
+                  markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--flow-text-subtle)', width: 16, height: 16 },
                 }}
               >
                 <Background variant={BackgroundVariant.Dots} color="var(--flow-canvas-dots)" gap={20} size={1} />
-                <Controls style={{ borderRadius: 10, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
+                <Controls style={{ borderRadius: 10, border: '1px solid var(--flow-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
                 <MiniMap
-                  style={{ borderRadius: 12, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
+                  style={{ borderRadius: 12, border: '1px solid var(--flow-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}
                   nodeColor={n => {
                     if (isConditionNode(n)) return '#fde68a'
                     if (isParallelNode(n)) return '#ddd6fe'
-                    return '#e2e8f0'
+                    return 'var(--flow-border)'
                   }}
                 />
               </ReactFlow>
@@ -997,7 +1058,10 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
 
         {/* Resizer between main canvas and properties */}
         <div
-          className="flow-resizer"
+          className="flow-inline-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize properties panel"
           onMouseDown={(e) => {
             const startX = e.clientX
             const startWidth = propsRef.current?.offsetWidth ?? 260
@@ -1005,10 +1069,15 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
             const maxW = 520
 
             const onMove = (ev: MouseEvent) => {
+              // Panel is on the right: dragging left (clientX decreases) should grow it.
               const delta = startX - ev.clientX
-              let next = startWidth - delta
+              let next = startWidth + delta
+              const sidebarSpace = sidebarCollapsed ? 48 : sidebarWidth
+              const builderSpace = builderCollapsed ? 48 : builderWidth
+              const gaps = (sidebarCollapsed ? 0 : 10) + (builderCollapsed ? 0 : 10) + 10 /* this resizer */
+              const effectiveMax = getMaxPanelWidth(maxW, sidebarSpace + builderSpace, gaps)
               if (next < minW) next = minW
-              if (next > maxW) next = maxW
+              if (next > effectiveMax) next = Math.max(minW, effectiveMax)
               setPropsWidth(next)
             }
 
@@ -1067,32 +1136,32 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
           <div className="flow-canvas-export-modal" onClick={e => e.stopPropagation()}>
             {/* Modal header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '14px 18px', borderBottom: '1px solid #e2e8f0' }}>
+              padding: '14px 18px', borderBottom: '1px solid var(--flow-border)' }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>📤 Export Flow Graph</div>
-                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--flow-text)' }}>📤 Export Flow Graph</div>
+                <div style={{ fontSize: 11, color: 'var(--flow-text-subtle)', marginTop: 2 }}>
                   {nodes.length} nodes · {edges.length} edges — use for visualization development
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 7 }}>
                 <button onClick={downloadJson} style={{ padding: '6px 12px', borderRadius: 7,
-                  border: '1px solid #86efac', background: '#f0fdf4', color: '#16a34a',
+                  border: '1px solid var(--flow-success-border)', background: 'var(--flow-success-soft)', color: 'var(--flow-success)',
                   fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                   ⬇ Download .json
                 </button>
                 <button onClick={copyJson} style={{ padding: '6px 12px', borderRadius: 7,
-                  border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb',
+                  border: '1px solid var(--flow-info-border)', background: 'var(--flow-info-soft)', color: 'var(--flow-info)',
                   fontSize: 12, fontWeight: 600, cursor: 'pointer', minWidth: 70 }}>
                   {copied ? '✅ Copied!' : '📋 Copy'}
                 </button>
                 <button onClick={() => setExportJson(null)} style={{ width: 30, height: 30,
-                  borderRadius: 7, border: '1px solid #e2e8f0', background: 'white',
-                  color: '#94a3b8', cursor: 'pointer', fontSize: 15 }}>✕</button>
+                  borderRadius: 7, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)',
+                  color: 'var(--flow-text-subtle)', cursor: 'pointer', fontSize: 15 }}>✕</button>
               </div>
             </div>
             {/* JSON body */}
             <pre style={{ flex: 1, overflow: 'auto', margin: 0, padding: '14px 18px',
-              fontSize: 11, lineHeight: 1.65, color: '#1e293b', background: '#f8fafc',
+              fontSize: 11, lineHeight: 1.65, color: 'var(--flow-text)', background: 'var(--flow-surface-muted)',
               fontFamily: "'Fira Code', 'Cascadia Code', monospace" }}>
               {exportJson}
             </pre>

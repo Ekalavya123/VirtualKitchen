@@ -2,6 +2,7 @@ import {
   getActionDisplayName,
   getActionIcon,
   getStepActionById,
+  resolveActionInput,
   resolveStepActionId,
   type StepActionId,
 } from '../features/flow-editor/catalog/actionCatalog'
@@ -43,6 +44,7 @@ export type StepAction = StepActionId
 
 export type StepNodeStructuredFields = {
   action: StepAction | ''
+  customActionName: string
   ingredientId: IngredientId | ''
   customIngredientName: string
   quantity: string
@@ -216,12 +218,14 @@ const normalizeDurationUnitOption = (value: unknown): DurationUnitOption | '' =>
 const normalizeRepeatIntervalUnitOption = (value: unknown): RepeatIntervalUnitOption | '' =>
   normalizeDurationUnitOption(value)
 
-export const getStepNodeTitle = (action: StepAction | '') => getActionDisplayName(action)
+export const getStepNodeTitle = (action: StepAction | '', customActionName = '') =>
+  getActionDisplayName(action, customActionName)
 
 export const getStepNodeIcon = (action: StepAction | '') => getActionIcon(action)
 
 export const createDefaultStepFields = (): StepNodeStructuredFields => ({
   action: '',
+  customActionName: '',
   ingredientId: '',
   customIngredientName: '',
   quantity: '',
@@ -274,7 +278,11 @@ export const normalizeStepNodeData = (value: unknown): RecipeStepNodeData => {
   const legacyDescription = toStringValue(raw.description)
 
   const rawStep = asRecord(raw.step)
-  const action = normalizeAction(rawStep.action ?? legacyTitle)
+  const rawActionText = toStringValue(rawStep.action ?? legacyTitle)
+  const rawCustomActionName = toStringValue(rawStep.customActionName)
+  const resolvedAction = resolveActionInput(rawActionText)
+  const action: StepAction | '' = resolvedAction.id
+  const customActionName = rawCustomActionName || resolvedAction.customValue
   const rawIngredientId = resolveIngredientId(rawStep.ingredientId)
   const rawIngredientName = toStringValue(rawStep.ingredient)
   const rawCustomIngredientName = toStringValue(rawStep.customIngredientName)
@@ -357,6 +365,7 @@ export const normalizeStepNodeData = (value: unknown): RecipeStepNodeData => {
 
   const mergedStep: StepNodeStructuredFields = {
     action,
+    customActionName,
     ingredientId,
     customIngredientName,
     quantity: toStringValue(rawStep.quantity),
@@ -402,7 +411,7 @@ export const normalizeStepNodeData = (value: unknown): RecipeStepNodeData => {
       : undefined
 
   return {
-    title: getStepNodeTitle(step.action),
+    title: getStepNodeTitle(step.action, step.customActionName),
     icon: getStepNodeIcon(step.action),
     step,
     stepNumber: typeof raw.stepNumber === 'number' ? raw.stepNumber : undefined,

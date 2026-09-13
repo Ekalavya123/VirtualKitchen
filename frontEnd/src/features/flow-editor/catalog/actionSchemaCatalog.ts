@@ -2,19 +2,11 @@ import {
   getStepActionById,
   type ActionCategory,
   type StepActionId,
+  type StepSchemaFieldKey,
 } from './actionCatalog'
 import type { StepNodeStructuredFields } from '../../../types/recipeFlow'
 
-export type StepSchemaFieldKey =
-  | 'ingredientId'
-  | 'quantity'
-  | 'unitId'
-  | 'preparationStyleId'
-  | 'temperature'
-  | 'flameLevelId'
-  | 'duration'
-  | 'repeatInterval'
-  | 'notes'
+export type { StepSchemaFieldKey }
 
 export type StepSchemaFieldConfig = {
   key: StepSchemaFieldKey
@@ -28,82 +20,23 @@ export type StepActionSchema = {
   fields: readonly StepSchemaFieldConfig[]
 }
 
-const CATEGORY_SCHEMAS: Record<ActionCategory, StepActionSchema> = {
-  'Ingredient Operations': {
-    category: 'Ingredient Operations',
-    amountLabel: 'Amount',
-    unitLabel: 'Unit',
-    fields: [
-      { key: 'ingredientId', label: 'Ingredient' },
-      { key: 'quantity', label: 'Amount' },
-      { key: 'unitId', label: 'Unit' },
-      { key: 'notes', label: 'Notes' },
-    ],
-  },
-  'Preparation Operations': {
-    category: 'Preparation Operations',
-    amountLabel: 'Quantity',
-    unitLabel: 'Unit',
-    fields: [
-      { key: 'ingredientId', label: 'Ingredient' },
-      { key: 'quantity', label: 'Quantity' },
-      { key: 'unitId', label: 'Unit' },
-      { key: 'preparationStyleId', label: 'Preparation Style' },
-      { key: 'notes', label: 'Notes' },
-    ],
-  },
-  'Cooking Operations': {
-    category: 'Cooking Operations',
-    amountLabel: 'Amount',
-    unitLabel: 'Unit',
-    fields: [
-      { key: 'ingredientId', label: 'Ingredient' },
-      { key: 'quantity', label: 'Amount' },
-      { key: 'unitId', label: 'Unit' },
-      { key: 'flameLevelId', label: 'Flame Level' },
-      { key: 'temperature', label: 'Temperature' },
-      { key: 'duration', label: 'Duration' },
-      { key: 'repeatInterval', label: 'Repeat Interval' },
-      { key: 'notes', label: 'Notes' },
-    ],
-  },
-  'Mixing Operations': {
-    category: 'Mixing Operations',
-    amountLabel: 'Amount',
-    unitLabel: 'Unit',
-    fields: [
-      { key: 'ingredientId', label: 'Ingredient' },
-      { key: 'quantity', label: 'Amount' },
-      { key: 'unitId', label: 'Unit' },
-      { key: 'duration', label: 'Duration' },
-      { key: 'repeatInterval', label: 'Repeat Interval' },
-      { key: 'notes', label: 'Notes' },
-    ],
-  },
-  'Waiting Operations': {
-    category: 'Waiting Operations',
-    amountLabel: 'Amount',
-    unitLabel: 'Unit',
-    fields: [
-      { key: 'duration', label: 'Duration' },
-      { key: 'notes', label: 'Notes' },
-    ],
-  },
-  'Finish Operations': {
-    category: 'Finish Operations',
-    amountLabel: 'Amount',
-    unitLabel: 'Unit',
-    fields: [
-      { key: 'ingredientId', label: 'Ingredient' },
-      { key: 'quantity', label: 'Amount' },
-      { key: 'unitId', label: 'Unit' },
-      { key: 'notes', label: 'Notes' },
-    ],
-  },
+// Static labels for fields whose label doesn't vary per-action. `quantity`/`unitId` use the
+// action's own amountLabel/unitLabel instead (see getStepActionSchema below).
+const STATIC_FIELD_LABELS: Partial<Record<StepSchemaFieldKey, string>> = {
+  ingredientId: 'Ingredient',
+  preparationStyleId: 'Preparation Style',
+  temperature: 'Temperature',
+  flameLevelId: 'Flame Level',
+  duration: 'Duration',
+  repeatInterval: 'Repeat Interval',
+  notes: 'Notes',
 }
+
+const DEFAULT_ACTION_ID: StepActionId = 'add'
 
 const COMMON_RESET_STEP_FIELDS: StepNodeStructuredFields = {
   action: '',
+  customActionName: '',
   ingredientId: '',
   customIngredientName: '',
   quantity: '',
@@ -200,9 +133,21 @@ const SCHEMA_FIELD_KEYS: readonly StepSchemaFieldKey[] = [
 ]
 
 export const getStepActionSchema = (action: StepActionId | ''): StepActionSchema => {
-  if (!action) return CATEGORY_SCHEMAS['Ingredient Operations']
-  const definition = getStepActionById(action)
-  return CATEGORY_SCHEMAS[definition.category]
+  const definition = getStepActionById(action || DEFAULT_ACTION_ID)
+  const fields: StepSchemaFieldConfig[] = definition.fields.map((key) => ({
+    key,
+    label:
+      key === 'quantity' ? definition.amountLabel
+      : key === 'unitId' ? definition.unitLabel
+      : STATIC_FIELD_LABELS[key] ?? key,
+  }))
+
+  return {
+    category: definition.category,
+    amountLabel: definition.amountLabel,
+    unitLabel: definition.unitLabel,
+    fields,
+  }
 }
 
 export const isStepFieldEnabled = (action: StepActionId | '', field: StepSchemaFieldKey) =>

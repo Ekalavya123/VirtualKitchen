@@ -51,9 +51,9 @@ export default function ParallelStartNode({ selected, style: nodeStyle, width: n
         minWidth: 170,
         maxWidth: 320,
         minHeight: computedMinHeight,
-        background: '#ffffff',
+        background: 'var(--flow-surface)',
         borderRadius: 12,
-        border: `1.5px solid ${selected ? '#7c3aed' : '#ddd6fe'}`,
+        border: `1.5px solid ${selected ? '#7c3aed' : 'rgba(124, 58, 237, 0.35)'}`,
         boxShadow: selected
           ? '0 0 0 3px rgba(124, 58, 237, 0.18), 0 6px 18px rgba(124, 58, 237, 0.14)'
           : '0 2px 10px rgba(15, 23, 42, 0.08)',
@@ -107,11 +107,11 @@ export default function ParallelStartNode({ selected, style: nodeStyle, width: n
       <div style={{ fontSize: headerFontSize, fontWeight: 700, color: '#6d28d9', textTransform: 'uppercase', letterSpacing: '0.04em', width: '100%' }}>
         Parallel Start
       </div>
-      <div style={{ fontSize: labelFontSize, fontWeight: 700, color: '#312e81', lineHeight: 1.25, width: '100%', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+      <div style={{ fontSize: labelFontSize, fontWeight: 700, color: 'var(--flow-text)', lineHeight: 1.25, width: '100%', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
         {normalized.parallel.label}
       </div>
       {normalized.parallel.notes && (
-        <div style={{ fontSize: notesFontSize, color: '#6b7280', lineHeight: 1.25, width: '100%', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
+        <div style={{ fontSize: notesFontSize, color: 'var(--flow-text-muted)', lineHeight: 1.25, width: '100%', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>
           {normalized.parallel.notes}
         </div>
       )}

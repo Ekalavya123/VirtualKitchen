@@ -1,41 +1,43 @@
-export const FLAME_LEVEL_CATALOG = [
-  { id: 'low', label: 'Low' },
-  { id: 'medium', label: 'Medium' },
-  { id: 'high', label: 'High' },
-  { id: 'custom', label: 'Custom Level' },
-] as const
+import stepCatalogsData from './stepCatalogs.data.json'
+import {
+  buildAliasLookup,
+  getCatalogDisplayName,
+  resolveCatalogId,
+} from './catalogSelectionUtils'
 
-export type FlameLevelId = (typeof FLAME_LEVEL_CATALOG)[number]['id']
+// The precise set of ids is data-driven (see stepCatalogs.data.json), but kept as an explicit
+// literal union here so the rest of the app still gets autocomplete/exhaustiveness checking.
+export type FlameLevelId = 'low' | 'medium' | 'high' | 'custom'
 
 export type FlameLevelDefinition = {
   id: FlameLevelId
   label: string
 }
 
+type RawFlameLevelEntry = {
+  id: string
+  label: string
+}
+
+export const FLAME_LEVEL_CATALOG: readonly FlameLevelDefinition[] = (
+  stepCatalogsData.flameLevels as RawFlameLevelEntry[]
+).map((entry) => ({
+  id: entry.id as FlameLevelId,
+  label: entry.label,
+}))
+
 export const CUSTOM_FLAME_LEVEL_ID: FlameLevelId = 'custom'
 
 const flameById = new Map<FlameLevelId, FlameLevelDefinition>(FLAME_LEVEL_CATALOG.map((level) => [level.id, level]))
 
-const normalizeText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
+const flameAliasLookup = buildAliasLookup(
+  FLAME_LEVEL_CATALOG.map((level) => ({ id: level.id, aliases: [level.id, level.label] }))
+)
 
-const flameAliasLookup = new Map<string, FlameLevelId>()
-for (const level of FLAME_LEVEL_CATALOG) {
-  flameAliasLookup.set(normalizeText(level.id), level.id)
-  flameAliasLookup.set(normalizeText(level.label), level.id)
-}
-
-export const resolveFlameLevelId = (value: unknown): FlameLevelId | '' => {
-  if (typeof value !== 'string') return ''
-  const normalized = normalizeText(value)
-  if (!normalized) return ''
-  return flameAliasLookup.get(normalized) ?? ''
-}
+export const resolveFlameLevelId = (value: unknown): FlameLevelId | '' => resolveCatalogId(flameAliasLookup, value)
 
 export const getFlameLevelById = (id: FlameLevelId): FlameLevelDefinition =>
   flameById.get(id) as FlameLevelDefinition
 
-export const getFlameLevelDisplayName = (levelId: FlameLevelId | '', customLevel = '') => {
-  if (!levelId) return ''
-  if (levelId === CUSTOM_FLAME_LEVEL_ID) return customLevel.trim()
-  return getFlameLevelById(levelId).label
-}
+export const getFlameLevelDisplayName = (levelId: FlameLevelId | '', customLevel = '') =>
+  getCatalogDisplayName(CUSTOM_FLAME_LEVEL_ID, levelId, customLevel, (id) => getFlameLevelById(id).label, '')

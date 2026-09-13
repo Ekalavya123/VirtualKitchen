@@ -37,20 +37,20 @@ export default function FlowEditorTopBar({
   onNodeZoomChange,
 }: FlowEditorTopBarProps) {
   const btnStyle = (extra: React.CSSProperties = {}): React.CSSProperties => ({
-    padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0',
-    background: 'white', color: '#475569', fontSize: 12, fontWeight: 600,
+    padding: '8px 12px', borderRadius: 8, border: '1px solid var(--flow-border)',
+    background: 'var(--flow-surface)', color: 'var(--flow-text-muted)', fontSize: 12, fontWeight: 600,
     cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
     ...extra,
   })
 
   const zoomStepStyle: React.CSSProperties = {
     padding: '4px 9px', borderRadius: 6, border: 'none',
-    background: 'transparent', color: '#475569', fontSize: 13, fontWeight: 700,
+    background: 'transparent', color: 'var(--flow-text-muted)', fontSize: 13, fontWeight: 700,
     cursor: 'pointer', lineHeight: 1,
   }
 
   return (
-    <div className="flex h-[3.75rem] flex-shrink-0 items-center justify-between border-b border-[var(--flow-border)] bg-white px-4">
+    <div className="flex h-[3.75rem] flex-shrink-0 items-center justify-between border-b border-[var(--flow-border)] bg-[var(--flow-surface)] px-4">
       <div className="flex items-center gap-2.5">
         {onBack && (
           <button onClick={onBack} style={{ ...btnStyle(), padding: '8px 10px' }} title="Back">
@@ -65,42 +65,42 @@ export default function FlowEditorTopBar({
 
       <div className="flex items-center gap-2">
         <div
-          className="flex items-center gap-1 rounded-lg border border-[var(--flow-border)] bg-white px-1 py-1"
+          className="flex items-center gap-1 rounded-lg border border-[var(--flow-border)] bg-[var(--flow-surface)] px-1 py-1"
           title="Uniform node size — zooms every node on the canvas together"
         >
           <button
             onClick={() => onNodeZoomChange(nodeZoomPercent - 10)}
             disabled={nodeZoomPercent <= 50}
-            style={{ ...zoomStepStyle, color: nodeZoomPercent <= 50 ? '#cbd5e1' : '#475569', cursor: nodeZoomPercent <= 50 ? 'default' : 'pointer' }}
+            style={{ ...zoomStepStyle, color: nodeZoomPercent <= 50 ? 'var(--flow-border-strong)' : 'var(--flow-text-muted)', cursor: nodeZoomPercent <= 50 ? 'default' : 'pointer' }}
             title="Zoom out all nodes"
           >
             −
           </button>
-          <span style={{ fontSize: 12, fontWeight: 700, color: '#475569', minWidth: 40, textAlign: 'center' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--flow-text-muted)', minWidth: 40, textAlign: 'center' }}>
             {nodeZoomPercent}%
           </span>
           <button
             onClick={() => onNodeZoomChange(nodeZoomPercent + 10)}
             disabled={nodeZoomPercent >= 200}
-            style={{ ...zoomStepStyle, color: nodeZoomPercent >= 200 ? '#cbd5e1' : '#475569', cursor: nodeZoomPercent >= 200 ? 'default' : 'pointer' }}
+            style={{ ...zoomStepStyle, color: nodeZoomPercent >= 200 ? 'var(--flow-border-strong)' : 'var(--flow-text-muted)', cursor: nodeZoomPercent >= 200 ? 'default' : 'pointer' }}
             title="Zoom in all nodes"
           >
             +
           </button>
           {nodeZoomPercent !== 100 && (
-            <button onClick={() => onNodeZoomChange(100)} style={{ ...zoomStepStyle, fontSize: 10, color: '#6366f1' }} title="Reset to 100%">
+            <button onClick={() => onNodeZoomChange(100)} style={{ ...zoomStepStyle, fontSize: 10, color: 'var(--flow-accent)' }} title="Reset to 100%">
               Reset
             </button>
           )}
         </div>
-        <button onClick={onUndo} disabled={!canUndo} style={btnStyle({ background: canUndo ? 'white' : '#f8fafc', color: canUndo ? '#475569' : '#cbd5e1', cursor: canUndo ? 'pointer' : 'default' })} title="Undo">↩</button>
-        <button onClick={onRedo} disabled={!canRedo} style={btnStyle({ background: canRedo ? 'white' : '#f8fafc', color: canRedo ? '#475569' : '#cbd5e1', cursor: canRedo ? 'pointer' : 'default' })} title="Redo">↪</button>
+        <button onClick={onUndo} disabled={!canUndo} style={btnStyle({ background: canUndo ? 'var(--flow-surface)' : 'var(--flow-surface-muted)', color: canUndo ? 'var(--flow-text-muted)' : 'var(--flow-border-strong)', cursor: canUndo ? 'pointer' : 'default' })} title="Undo">↩</button>
+        <button onClick={onRedo} disabled={!canRedo} style={btnStyle({ background: canRedo ? 'var(--flow-surface)' : 'var(--flow-surface-muted)', color: canRedo ? 'var(--flow-text-muted)' : 'var(--flow-border-strong)', cursor: canRedo ? 'pointer' : 'default' })} title="Redo">↪</button>
         {generateVisualsStatus && (
           <span
             style={{
               fontSize: 11,
               fontWeight: 600,
-              color: generateVisualsStatus.type === 'success' ? '#16a34a' : '#dc2626',
+              color: generateVisualsStatus.type === 'success' ? 'var(--flow-success)' : 'var(--flow-danger)',
               maxWidth: 220,
             }}
             title={generateVisualsStatus.text}
@@ -115,21 +115,21 @@ export default function FlowEditorTopBar({
               style={{ display: 'flex', alignItems: 'center', gap: 6 }}
               title={`Generated ${generateVisualsProgress.completed} of ${generateVisualsProgress.total} steps`}
             >
-              <div style={{ width: 72, height: 6, borderRadius: 999, background: '#f3e8ff', overflow: 'hidden' }}>
-                <div style={{ width: `${percent}%`, height: '100%', background: '#a21caf', transition: 'width 200ms ease' }} />
+              <div style={{ width: 72, height: 6, borderRadius: 999, background: 'var(--flow-magic-soft)', overflow: 'hidden' }}>
+                <div style={{ width: `${percent}%`, height: '100%', background: 'var(--flow-magic)', transition: 'width 200ms ease' }} />
               </div>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#a21caf', minWidth: 32 }}>{percent}%</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--flow-magic)', minWidth: 32 }}>{percent}%</span>
             </div>
           )
         })()}
-        <button onClick={onGenerateVisuals} disabled={isGeneratingVisuals} style={btnStyle({ background: '#fdf4ff', borderColor: '#e9d5ff', color: '#a21caf', opacity: isGeneratingVisuals ? 0.7 : 1 })}>
+        <button onClick={onGenerateVisuals} disabled={isGeneratingVisuals} style={btnStyle({ background: 'var(--flow-magic-soft)', borderColor: 'var(--flow-magic-border)', color: 'var(--flow-magic)', opacity: isGeneratingVisuals ? 0.7 : 1 })}>
           {isGeneratingVisuals
             ? `⏳ Generating… ${generateVisualsProgress ? `${generateVisualsProgress.completed}/${generateVisualsProgress.total}` : ''}`
             : '🎨 Generate Visuals'}
         </button>
-        <button onClick={onVisualize} style={btnStyle({ background: '#eff6ff', borderColor: '#93c5fd', color: '#2563eb' })}>🎬 Visualize</button>
-        <button onClick={onExport} style={btnStyle({ background: '#f0fdf4', borderColor: '#86efac', color: '#16a34a' })}>📤 Export</button>
-        <button onClick={onSave} style={btnStyle({ background: '#fef3c7', borderColor: '#fde68a', color: '#92400e' })}>💾 Save</button>
+        <button onClick={onVisualize} style={btnStyle({ background: 'var(--flow-info-soft)', borderColor: 'var(--flow-info-border)', color: 'var(--flow-info)' })}>🎬 Visualize</button>
+        <button onClick={onExport} style={btnStyle({ background: 'var(--flow-success-soft)', borderColor: 'var(--flow-success-border)', color: 'var(--flow-success)' })}>📤 Export</button>
+        <button onClick={onSave} style={btnStyle({ background: 'var(--flow-warning-soft)', borderColor: 'var(--flow-warning-border)', color: 'var(--flow-warning)' })}>💾 Save</button>
       </div>
     </div>
   )
