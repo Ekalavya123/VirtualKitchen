@@ -36,6 +36,8 @@ export interface VisualizationRequest {
 
 export interface RecipeFlowGenerationRequest {
   recipe: string
+  /** Client-generated id (e.g. crypto.randomUUID()) used as the AI request's idempotency key, so an accidental double-submit never charges credits twice. */
+  clientRequestId?: string
 }
 
 export type LegacyRecipeFlowGenerationResponse = {
@@ -43,7 +45,15 @@ export type LegacyRecipeFlowGenerationResponse = {
   edges: unknown[]
 }
 
-export type RecipeFlowGenerationResponse = RecipeExecutionModel | LegacyRecipeFlowGenerationResponse
+/** Which AI model actually served a request, and whether that was a fallback because premium credits are exhausted. */
+export interface AiFallbackMetadata {
+  modelUsed?: string
+  modelTier?: 'PAID' | 'OPEN_SOURCE'
+  usedFallback?: boolean
+  fallbackReason?: 'INSUFFICIENT_CREDITS' | 'PREFERRED_MODEL_DISABLED' | null
+}
+
+export type RecipeFlowGenerationResponse = (RecipeExecutionModel | LegacyRecipeFlowGenerationResponse) & AiFallbackMetadata
 
 export interface VisualizationClip {
   clipId?: string
@@ -152,11 +162,14 @@ export const VisualizationApi = {
   },
 }
 
-export interface RecipeVisualizationStep {
+export interface RecipeVisualizationStep extends AiFallbackMetadata {
   stepId: string
   visualizationAssetId: number
   imagePrompt?: string
   imageUrl?: string | null
+  modelKey?: string
+  modelTier?: 'PAID' | 'OPEN_SOURCE'
+  usedFallback?: boolean
 }
 
 export interface RecipeVisualizationGenerateResponse {
@@ -184,5 +197,44 @@ export const RecipeVisualizationApi = {
       API.recipeVisualization.generateStep(recipeId, stepId),
       {}
     )
+  },
+}
+
+export type VisualizationJobStatus = 'QUEUED' | 'IN_PROGRESS' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'FAILED'
+
+export interface VisualizationJobStepResult {
+  stepId: string
+  success: boolean
+  visualizationAssetId?: number
+  imageUrl?: string | null
+  errorMessage?: string | null
+  modelKey?: string
+  tier?: 'PAID' | 'OPEN_SOURCE'
+  usedFallback?: boolean
+}
+
+export interface VisualizationJobResponse {
+  jobId: string
+  recipeId: string
+  status: VisualizationJobStatus
+  totalSteps: number
+  completedSteps: number
+  steps: VisualizationJobStepResult[]
+}
+
+/**
+ * Async, job-based visualization generation: {@link startJob} returns immediately with a
+ * QUEUED job, and the caller polls {@link getJobStatus} until it reaches a terminal status
+ * (COMPLETED / COMPLETED_WITH_ERRORS / FAILED). Preferred over {@link RecipeVisualizationApi}'s
+ * synchronous per-step calls since the backend bounds concurrency and reports per-step
+ * fallback/model metadata here.
+ */
+export const VisualizationJobApi = {
+  async startJob(recipeId: number | string): Promise<VisualizationJobResponse> {
+    return apiPost<VisualizationJobResponse>(API.recipeVisualization.startJob(recipeId), {})
+  },
+
+  async getJobStatus(jobId: string): Promise<VisualizationJobResponse> {
+    return apiGet<VisualizationJobResponse>(API.recipeVisualization.jobStatus(jobId))
   },
 }

@@ -4,6 +4,12 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.processVisualisation.virtualKitchen.ai.dispatch.AiClientResolver;
+import com.processVisualisation.virtualKitchen.ai.queue.AiRequestOutcome;
+import com.processVisualisation.virtualKitchen.ai.queue.AiRequestQueueService;
+import com.processVisualisation.virtualKitchen.ai.registry.AiCapability;
+import com.processVisualisation.virtualKitchen.ai.routing.FallbackReason;
+import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionOutcome;
 import com.processVisualisation.virtualKitchen.restclient.client.AIClient;
 import com.processVisualisation.virtualKitchen.restclient.dto.AIRequest;
 import com.processVisualisation.virtualKitchen.restclient.dto.AIResponse;
@@ -25,10 +31,12 @@ import java.util.Map;
 /**
  * Orchestrates AI-driven generation of a structured recipe execution flow
  * from free-form recipe text: builds prompts via {@link AIRecipeFlowPromptBuilder},
- * calls {@link AIClient} to invoke the AI provider, parses and validates the
- * resulting JSON graph via {@link AIRecipeValidator}, retries once on
- * validation failure, and persists each attempt (success or failure) via
- * {@link IAIResponseService} for analytics.
+ * routes the call through {@link AiRequestQueueService} (model
+ * selection/fallback, credit reservation, bounded concurrency) to invoke the
+ * resolved provider, parses and validates the resulting JSON graph via
+ * {@link AIRecipeValidator}, retries once on validation failure (reusing the
+ * same model/credit reservation for both attempts), and persists each
+ * attempt (success or failure) via {@link IAIResponseService} for analytics.
  */
 @Service
 public class AIRecipeGenerationService {
@@ -39,7 +47,8 @@ public class AIRecipeGenerationService {
     private static final TypeReference<List<RecipeExecutionEdgeDTO>> LIST_OF_EDGE_TYPE = new TypeReference<>() {
     };
 
-    private final AIClient aiClient;
+    private final AiRequestQueueService queueService;
+    private final AiClientResolver clientResolver;
     private final AIRecipeFlowPromptBuilder promptBuilder;
     private final AIRecipeValidator AIRecipeValidator;
     private final IAIResponseService aiResponseService;
@@ -47,12 +56,14 @@ public class AIRecipeGenerationService {
     private static final Logger logger = LoggerFactory.getLogger(AIRecipeGenerationService.class);
 
     public AIRecipeGenerationService(
-            AIClient aiClient,
+            AiRequestQueueService queueService,
+            AiClientResolver clientResolver,
             AIRecipeFlowPromptBuilder promptBuilder,
             AIRecipeValidator AIRecipeValidator,
             IAIResponseService aiResponseService
     ) {
-        this.aiClient = aiClient;
+        this.queueService = queueService;
+        this.clientResolver = clientResolver;
         this.promptBuilder = promptBuilder;
         this.AIRecipeValidator = AIRecipeValidator;
         this.aiResponseService = aiResponseService;
@@ -60,23 +71,51 @@ public class AIRecipeGenerationService {
 
     /**
      * Generates a structured recipe execution flow from free-form recipe
-     * text. Makes one AI generation attempt; if the result fails validation,
-     * retries once with the validation errors fed back to the model.
+     * text. Selects a model (falling back to a standard/open-source model if
+     * premium credits are exhausted), makes one AI generation attempt, and —
+     * if the result fails validation — retries once with the validation
+     * errors fed back to the same model, before giving up.
      *
+     * @param userId the id of the user this generation (and its credit charge) belongs to
      * @param recipeText the free-form recipe text to convert
-     * @return the generated recipe flow (steps and edges)
+     * @param clientRequestId optional client-generated idempotency key, or {@code null}
+     * @return the generated recipe flow (steps and edges), annotated with which model produced it
      * @throws RecipeFlowGenerationException if a valid flow could not be
      *         produced after the retry attempt
      */
-    public RecipeFlowGenerationResponseDTO generateFlow(String recipeText) {
+    public RecipeFlowGenerationResponseDTO generateFlow(Long userId, String recipeText, String clientRequestId) {
         System.out.println("[RECIPE-GEN] Start generate flow");
-        AttemptResult firstAttempt = runAttempt(recipeText, null);
+
+        AiRequestOutcome<RecipeFlowGenerationResponseDTO> outcome = queueService.executeBounded(
+                userId,
+                AiCapability.TEXT_TO_TEXT,
+                null,
+                clientRequestId,
+                "recipe-generation",
+                null,
+                selection -> runAttempts(recipeText, selection)
+        );
+
+        RecipeFlowGenerationResponseDTO response = outcome.value();
+        ModelSelectionOutcome selection = outcome.selection();
+        response.setModelUsed(selection.model().getKey());
+        response.setModelTier(selection.model().getTier().name());
+        response.setUsedFallback(selection.usedFallback());
+        response.setFallbackReason(selection.fallbackReason() == FallbackReason.NONE ? null : selection.fallbackReason().name());
+        return response;
+    }
+
+    private RecipeFlowGenerationResponseDTO runAttempts(String recipeText, ModelSelectionOutcome selection) {
+        AIClient client = clientResolver.resolveTextClient(selection.model());
+        String modelId = selection.model().getProviderModelId();
+
+        AttemptResult firstAttempt = runAttempt(client, modelId, recipeText, null);
         if (firstAttempt.valid()) {
             return firstAttempt.response();
         }
 
         System.out.println("[RECIPE-GEN] Validation failed on first attempt. Retrying once.");
-        AttemptResult secondAttempt = runAttempt(recipeText, firstAttempt);
+        AttemptResult secondAttempt = runAttempt(client, modelId, recipeText, firstAttempt);
         if (secondAttempt.valid()) {
             return secondAttempt.response();
         }
@@ -86,9 +125,10 @@ public class AIRecipeGenerationService {
         throw new RecipeFlowGenerationException("Unable to generate valid recipe flow: " + errorMessage);
     }
 
-    private AttemptResult runAttempt(String userPrompt, AttemptResult prevAttempt) {
+    private AttemptResult runAttempt(AIClient client, String modelId, String userPrompt, AttemptResult prevAttempt) {
         String refinedPrompt = prevAttempt != null ? promptBuilder.buildRetryPrompt(userPrompt, prevAttempt.rawContent(), prevAttempt.errors()) : promptBuilder.buildInitialPrompt(userPrompt);
         AIRequest request = AIRequest.builder()
+                .model(modelId)
                 .systemPrompt(promptBuilder.buildSystemPrompt())
                 .userPrompt(refinedPrompt)
                 .temperature(0.1d)
@@ -96,7 +136,7 @@ public class AIRecipeGenerationService {
                 .build();
 
         long startNs = System.nanoTime();
-        AIResponse response = aiClient.chat(request);
+        AIResponse response = client.chat(request);
         long durationMs = (System.nanoTime() - startNs) / 1_000_000L;
         String content = response == null ? null : response.getContent();
 
@@ -128,7 +168,10 @@ public class AIRecipeGenerationService {
                 return invalidResult;
             }
 
-            RecipeFlowGenerationResponseDTO generated = new RecipeFlowGenerationResponseDTO(steps, edges);
+            RecipeFlowGenerationResponseDTO generated = RecipeFlowGenerationResponseDTO.builder()
+                    .steps(steps)
+                    .edges(edges)
+                    .build();
             AttemptResult validResult = AttemptResult.valid(content, generated);
             persistAIResponse(userPrompt, response, validResult.valid, durationMs, List.of());
             return validResult;

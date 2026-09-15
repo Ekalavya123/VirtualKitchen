@@ -12,7 +12,6 @@ import com.processVisualisation.virtualKitchen.restclient.exception.AIInvalidRes
 import com.processVisualisation.virtualKitchen.restclient.exception.AITimeoutException;
 
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -32,12 +31,7 @@ import java.util.concurrent.TimeUnit;
  * application as a text-generation provider when running models locally.
  * Active when the {@code ai.provider} property is set to {@code ollama}.
  */
-@Component
-@ConditionalOnProperty(
-        prefix = "ai",
-        name = "provider",
-        havingValue = "ollama"
-)
+@Component("ollamaAiClient")
 public class OllamaClient implements AIClient {
 
     private final RestClient restClient;

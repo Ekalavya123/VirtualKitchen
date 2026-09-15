@@ -66,13 +66,14 @@ public class VisualizationJobService {
      * @return the newly created job in {@code QUEUED} status
      * @throws RecipeFlowGenerationException if the recipe flow cannot be found
      */
-    public VisualizationJobResponseDTO startJob(String recipeId) {
+    public VisualizationJobResponseDTO startJob(Long userId, String recipeId) {
         AIRecipeVisualizationService.RecipeStepPreparation preparation =
                 aiRecipeVisualizationService.prepareStepContexts(recipeId);
 
         VisualizationJob job = new VisualizationJob();
         job.setId(java.util.UUID.randomUUID().toString());
         job.setRecipeId(recipeId);
+        job.setUserId(userId);
         job.setStatus(VisualizationJobStatus.QUEUED);
         job.setTotalSteps(preparation.steps().size());
         job.setCompletedSteps(0);
@@ -81,7 +82,7 @@ public class VisualizationJobService {
         visualizationJobRepository.save(job);
 
         visualizationOrchestratorTaskPool.submit(new NamedTask<>(job.getId(), () -> {
-            runPipeline(job.getId(), preparation);
+            runPipeline(userId, job.getId(), preparation);
             return null;
         }));
 
@@ -101,14 +102,14 @@ public class VisualizationJobService {
         return toDto(job);
     }
 
-    private void runPipeline(String jobId, AIRecipeVisualizationService.RecipeStepPreparation preparation) {
+    private void runPipeline(Long userId, String jobId, AIRecipeVisualizationService.RecipeStepPreparation preparation) {
         markStatus(jobId, VisualizationJobStatus.IN_PROGRESS, Map.of("startedAt", Instant.now()));
         try {
             List<NamedTask<VisualizationAsset>> tasks = preparation.steps().stream()
                     .map(ctx -> new NamedTask<VisualizationAsset>(
                             ctx.node().getId(),
                             () -> aiRecipeVisualizationService.resolveVisualizationAsset(
-                                    ctx.data(), ctx.stepFields(), ctx.previousStepFields())
+                                    userId, ctx.data(), ctx.stepFields(), ctx.previousStepFields())
                     ))
                     .toList();
 
@@ -153,6 +154,9 @@ public class VisualizationJobService {
             VisualizationAsset asset = result.value();
             stepResult.setVisualizationAssetId(asset.getId());
             stepResult.setImageUrl(asset.getImageUrl());
+            stepResult.setModelKey(asset.getResolvedModelKey());
+            stepResult.setTier(asset.getResolvedTier() != null ? asset.getResolvedTier().name() : null);
+            stepResult.setUsedFallback(asset.isUsedFallback());
             if (!success) {
                 stepResult.setErrorMessage("Image generation failed for this step");
             }
@@ -196,6 +200,9 @@ public class VisualizationJobService {
                         .visualizationAssetId(sr.getVisualizationAssetId())
                         .imageUrl(sr.getImageUrl())
                         .errorMessage(sr.getErrorMessage())
+                        .modelKey(sr.getModelKey())
+                        .tier(sr.getTier())
+                        .usedFallback(sr.isUsedFallback())
                         .build())
                 .toList();
 

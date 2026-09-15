@@ -7,7 +7,6 @@ import com.processVisualisation.virtualKitchen.restclient.client.ImageGeneration
 import com.processVisualisation.virtualKitchen.restclient.config.GeminiProperties;
 import com.processVisualisation.virtualKitchen.restclient.exception.AIInvalidResponseException;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -22,8 +21,7 @@ import java.util.Map;
  * application's process-visualization feature. Active when the
  * {@code ai.image.provider} property is set to {@code gemini}.
  */
-@ConditionalOnProperty(prefix = "ai.image", name = "provider", havingValue = "gemini", matchIfMissing = false)
-@Component
+@Component("geminiImageClient")
 public class GeminiImageClient implements ImageGenerationClient {
 
     private final RestClient restClient;

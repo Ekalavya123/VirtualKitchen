@@ -7,7 +7,6 @@ import com.processVisualisation.virtualKitchen.restclient.client.ImageGeneration
 import com.processVisualisation.virtualKitchen.restclient.config.DrawThingsProperties;
 import com.processVisualisation.virtualKitchen.restclient.exception.AIInvalidResponseException;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -19,11 +18,11 @@ import java.util.Map;
  * {@link ImageGenerationClient} implementation that talks to a self-hosted
  * Draw Things image generation server. It is the default image provider for
  * the Virtual Kitchen application, used to render process-visualization
- * images from text prompts. Active when the {@code ai.image.provider}
- * property is unset or set to {@code drawthings}.
+ * images from text prompts. Registered under the bean name
+ * {@code drawThingsImageClient} so it can be selected per-request by the AI
+ * model routing layer alongside every other provider bean.
  */
-@ConditionalOnProperty(prefix = "ai.image", name = "provider", havingValue = "drawthings", matchIfMissing = true)
-@Component
+@Component("drawThingsImageClient")
 public class DrawThingsImageClient implements ImageGenerationClient {
 
     private final RestClient restClient;

@@ -3,7 +3,8 @@ import Sidebar from '../sidebar/Sidebar'
 import PropertiesPanel from '../toolbar/PropertiesPanel'
 import FlowEditorTopBar from '../toolbar/FlowEditorTopBar'
 import RecipeBuilderPanel from './RecipeBuilderPanel'
-import { FlowApi, RecipeVisualizationApi } from '../../../../api'
+import { FlowApi, VisualizationJobApi, type VisualizationJobStepResult } from '../../../../api'
+import { useNotifications } from '../../../../shared/components/notifications/NotificationProvider'
 import './FlowCanvas.css'
 import '../sidebar/Sidebar.css'
 import '../toolbar/PropertiesPanel.css'
@@ -132,8 +133,13 @@ const readDraftFlowData = (recipeId: number | string): FlowData | null => {
 
 const toFlowNodes = (rawNodes: FlowNodePayload[]): Node[] => rawNodes.map((node) => normalizeFlowNode(node))
 
+const VISUALIZATION_JOB_POLL_MS = 2000
+
+const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
+  const { notifyInfo } = useNotifications()
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const flowMeta = useMemo(() => getFlowMetaCounts(nodes), [nodes])
@@ -146,6 +152,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const [visualsProgress, setVisualsProgress] = useState<{ completed: number; total: number } | null>(null)
   const [showSlideshow, setShowSlideshow] = useState(false)
   const [generatingFlow, setGeneratingFlow] = useState(false)
+  const [aiCreditsRefreshSignal, setAiCreditsRefreshSignal] = useState(0)
   const [nodeZoomPercent, setNodeZoomPercent] = useState(100)
   const [builderWidth, setBuilderWidth] = useState(380)
   const [builderCollapsed, setBuilderCollapsed] = useState(false)
@@ -154,6 +161,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const [propsCollapsed, setPropsCollapsed] = useState(false)
   const [propsWidth, setPropsWidth] = useState(260)
   const nodeZoomPercentRef = useRef(100)
+  const unmountedRef = useRef(false)
   const dragSnapshotRef = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null)
   const reactFlowInstance = useRef<ReactFlowInstance<Node, Edge> | null>(null)
   // Latest known viewport (from a restored save or live user pan/zoom), used to persist and to re-apply on re-init.
@@ -661,6 +669,18 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     persistDraft()
   }, [persistDraft])
 
+  useEffect(() => {
+    // Reset on every (re-)mount, not just declare-once: React StrictMode's dev-only
+    // mount -> cleanup -> remount cycle would otherwise run our cleanup once during
+    // the synthetic first "unmount", permanently latching this to true even though
+    // the component is actually mounted — which silently disables every unmountedRef
+    // guard (e.g. the generateVisuals polling loop) for the component's real lifetime.
+    unmountedRef.current = false
+    return () => {
+      unmountedRef.current = true
+    }
+  }, [])
+
   const applyStepVisualization = useCallback((stepResult: { stepId: string; visualizationAssetId: number; imagePrompt?: string; imageUrl?: string | null }) => {
     setNodes((nds) => nds.map((node) => {
       if (String(node.id) !== stepResult.stepId || !isRecipeStepNode(node)) return node
@@ -681,9 +701,18 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     }))
   }, [setNodes])
 
-  // Generates visuals one step at a time (sequentially, so each step's save doesn't race with
-  // the next) and reflects each result in the UI as soon as it comes back, instead of waiting
-  // for the whole recipe to finish.
+  const applyJobStepResult = useCallback((step: VisualizationJobStepResult) => {
+    if (!step.success || step.visualizationAssetId == null) return
+    applyStepVisualization({
+      stepId: step.stepId,
+      visualizationAssetId: step.visualizationAssetId,
+      imageUrl: step.imageUrl ?? undefined,
+    })
+  }, [applyStepVisualization])
+
+  // Starts an async visualization job (bounded-concurrency, credit/fallback-aware on the backend)
+  // and polls it until it reaches a terminal status, applying each step's result to the canvas
+  // as soon as it shows up in a poll response rather than waiting for the whole job to finish.
   const generateVisuals = useCallback(async () => {
     const stepNodes = orderRecipeStepNodes(nodes, edges)
     if (stepNodes.length === 0) {
@@ -695,29 +724,65 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     setGenerateVisualsStatus(null)
     setVisualsProgress({ completed: 0, total: stepNodes.length })
 
-    let failedCount = 0
+    const appliedStepIds = new Set<string>()
+    let notifiedFallback = false
 
-    for (let i = 0; i < stepNodes.length; i++) {
-      const stepNode = stepNodes[i]
-      try {
-        const stepResult = await RecipeVisualizationApi.generateStep(recipe.id, String(stepNode.id))
-        applyStepVisualization(stepResult)
-      } catch (error) {
-        console.error(`Unable to generate visualization for step ${stepNode.id}`, error)
-        failedCount += 1
-      } finally {
-        setVisualsProgress({ completed: i + 1, total: stepNodes.length })
+    const applyNewSteps = (steps: VisualizationJobStepResult[]) => {
+      for (const step of steps) {
+        if (!appliedStepIds.has(step.stepId)) {
+          applyJobStepResult(step)
+          appliedStepIds.add(step.stepId)
+        }
+        if (step.usedFallback && !notifiedFallback) {
+          notifiedFallback = true
+        }
       }
     }
 
-    setGenerateVisualsStatus(
-      failedCount === 0
-        ? { type: 'success', text: `Generated visuals for all ${stepNodes.length} steps` }
-        : { type: 'error', text: `Generated ${stepNodes.length - failedCount}/${stepNodes.length} steps — ${failedCount} failed` }
-    )
-    setGeneratingVisuals(false)
-    setVisualsProgress(null)
-  }, [recipe.id, nodes, edges, applyStepVisualization])
+    try {
+      let job = await VisualizationJobApi.startJob(recipe.id)
+
+      while (!unmountedRef.current && (job.status === 'QUEUED' || job.status === 'IN_PROGRESS')) {
+        await sleep(VISUALIZATION_JOB_POLL_MS)
+        if (unmountedRef.current) break
+
+        job = await VisualizationJobApi.getJobStatus(job.jobId)
+        applyNewSteps(job.steps)
+        setVisualsProgress({ completed: job.completedSteps, total: job.totalSteps || stepNodes.length })
+      }
+
+      if (unmountedRef.current) return
+
+      if (notifiedFallback) {
+        notifyInfo('Some visuals were generated using the standard image model — premium AI credits are exhausted for this month.')
+      }
+
+      const successCount = job.steps.filter((step) => step.success).length
+      const failedCount = job.totalSteps - successCount
+
+      setGenerateVisualsStatus(
+        job.status === 'COMPLETED'
+          ? { type: 'success', text: `Generated visuals for all ${job.totalSteps} steps` }
+          : job.status === 'COMPLETED_WITH_ERRORS'
+            ? { type: 'error', text: `Generated ${successCount}/${job.totalSteps} steps — ${failedCount} failed` }
+            : { type: 'error', text: 'Unable to generate visuals right now.' }
+      )
+    } catch (error) {
+      console.error('Unable to generate visuals', error)
+      if (!unmountedRef.current) {
+        setGenerateVisualsStatus({
+          type: 'error',
+          text: error instanceof Error ? error.message : 'Unable to generate visuals right now.',
+        })
+      }
+    } finally {
+      if (!unmountedRef.current) {
+        setGeneratingVisuals(false)
+        setVisualsProgress(null)
+        setAiCreditsRefreshSignal((n) => n + 1)
+      }
+    }
+  }, [recipe.id, nodes, edges, applyJobStepResult, notifyInfo])
 
   const generateVisualizationForNode = useCallback(() => {
     void generateVisuals()
@@ -842,8 +907,13 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const generateFlowFromRecipe = useCallback(async (recipeText: string) => {
     try {
       setGeneratingFlow(true)
-      const generated = await FlowApi.generateFlowFromRecipe({ recipe: recipeText })
+      const clientRequestId = crypto.randomUUID()
+      const generated = await FlowApi.generateFlowFromRecipe({ recipe: recipeText, clientRequestId })
       const normalizedFlowData = normalizeGeneratedFlowData(generated)
+
+      if (generated.usedFallback) {
+        notifyInfo('Generated using the standard AI model — premium AI credits are exhausted for this month.')
+      }
 
       replaceCanvasFlow(normalizedFlowData)
       setBuilderCollapsed(true)
@@ -858,8 +928,9 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
       throw new Error(message)
     } finally {
       setGeneratingFlow(false)
+      setAiCreditsRefreshSignal((n) => n + 1)
     }
-  }, [replaceCanvasFlow])
+  }, [replaceCanvasFlow, notifyInfo])
 
   // React Flow observes its own wrapper's size internally, so container/panel
   // resizes (sidebar, properties, builder) recalculate dimensions on their own —
@@ -886,6 +957,7 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
           onBack={onBack}
           nodeZoomPercent={nodeZoomPercent}
           onNodeZoomChange={handleNodeZoomChange}
+          aiCreditsRefreshSignal={aiCreditsRefreshSignal}
         />
       </div>
 

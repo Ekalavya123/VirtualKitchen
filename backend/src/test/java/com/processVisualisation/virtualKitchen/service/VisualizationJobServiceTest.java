@@ -1,8 +1,22 @@
 package com.processVisualisation.virtualKitchen.service;
 
+import com.processVisualisation.virtualKitchen.ai.credit.AiCreditProperties;
+import com.processVisualisation.virtualKitchen.ai.credit.AiCreditTransactionRepository;
+import com.processVisualisation.virtualKitchen.ai.credit.CreditService;
+import com.processVisualisation.virtualKitchen.ai.dispatch.AiClientResolver;
 import com.processVisualisation.virtualKitchen.ai.model.VisualizationJobStatus;
+import com.processVisualisation.virtualKitchen.ai.queue.AiQueueProperties;
+import com.processVisualisation.virtualKitchen.ai.queue.AiRequestJobRepository;
+import com.processVisualisation.virtualKitchen.ai.queue.AiRequestProperties;
+import com.processVisualisation.virtualKitchen.ai.queue.AiRequestQueueService;
+import com.processVisualisation.virtualKitchen.ai.registry.AiCapability;
+import com.processVisualisation.virtualKitchen.ai.registry.AiModelProperties;
+import com.processVisualisation.virtualKitchen.ai.registry.AiModelRegistry;
+import com.processVisualisation.virtualKitchen.ai.registry.ModelDefinition;
+import com.processVisualisation.virtualKitchen.ai.registry.ModelTier;
 import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationAssetRepository;
 import com.processVisualisation.virtualKitchen.ai.repository.VisualizationJobRepository;
+import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionService;
 import com.processVisualisation.virtualKitchen.ai.service.AIRecipeVisualizationService;
 import com.processVisualisation.virtualKitchen.ai.service.AIVisualizationPromptBuilder;
 import com.processVisualisation.virtualKitchen.ai.service.VisualizationJobService;
@@ -69,12 +83,58 @@ class VisualizationJobServiceTest {
                 AIResponse.builder().content("{\"imagePrompt\":\"p\",\"videoPrompt\":\"v\"}").build());
         when(imageStorageClient.upload(any(), anyString(), anyString())).thenReturn("https://cdn.example/img.png");
 
+        // Wire the real model-selection/queue stack with two OPEN_SOURCE test models (zero credit
+        // cost) pointing at the mocked AIClient/ImageGenerationClient above, so
+        // AIRecipeVisualizationService's generatePrompt/generateImage exercise the same
+        // AiRequestQueueService.executeInline path production code goes through, without needing
+        // Mongo-backed credit reservations for this test (OPEN_SOURCE models never reserve).
+        ModelDefinition textModel = new ModelDefinition();
+        textModel.setKey("test-text");
+        textModel.setCapability(AiCapability.TEXT_TO_TEXT);
+        textModel.setTier(ModelTier.OPEN_SOURCE);
+        textModel.setProviderBean("testTextClient");
+        textModel.setProviderModelId("test-text-model");
+        textModel.setEnabled(true);
+
+        ModelDefinition imageModel = new ModelDefinition();
+        imageModel.setKey("test-image");
+        imageModel.setCapability(AiCapability.TEXT_TO_IMAGE);
+        imageModel.setTier(ModelTier.OPEN_SOURCE);
+        imageModel.setProviderBean("testImageClient");
+        imageModel.setProviderModelId("test-image-model");
+        imageModel.setEnabled(true);
+
+        AiModelProperties modelProperties = new AiModelProperties();
+        modelProperties.setModels(List.of(textModel, imageModel));
+        modelProperties.setDefaultModel(Map.of(
+                AiCapability.TEXT_TO_TEXT.name(), "test-text",
+                AiCapability.TEXT_TO_IMAGE.name(), "test-image"));
+        AiModelRegistry modelRegistry = new AiModelRegistry(modelProperties);
+
+        CreditService creditService = new CreditService(
+                mock(MongoTemplate.class), new AiCreditProperties(), mock(AiCreditTransactionRepository.class));
+        ModelSelectionService modelSelectionService = new ModelSelectionService(modelRegistry, creditService);
+
+        AiClientResolver clientResolver = new AiClientResolver(
+                Map.of("testTextClient", aiClient), Map.of("testImageClient", imageGenerationClient));
+
+        AiRequestJobRepository aiRequestJobRepository = mock(AiRequestJobRepository.class);
+        when(aiRequestJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        AiRequestQueueService queueService = new AiRequestQueueService(
+                aiRequestJobRepository,
+                modelSelectionService,
+                creditService,
+                new ThreadPoolTaskPool(2, "test-ai-text"),
+                new AiQueueProperties(),
+                new AiRequestProperties());
+
         AIRecipeVisualizationService aiRecipeVisualizationService = new AIRecipeVisualizationService(
                 recipeRepository,
                 assetRepository,
                 sequenceGeneratorService,
-                aiClient,
-                imageGenerationClient,
+                queueService,
+                clientResolver,
                 imageStorageClient,
                 new AIVisualizationPromptBuilder());
 
@@ -98,7 +158,7 @@ class VisualizationJobServiceTest {
         Recipe flow = flowWithSteps(3);
         when(recipeRepository.findByFlowId("flow-1")).thenReturn(Optional.of(flow));
 
-        VisualizationJobResponseDTO started = service.startJob("flow-1");
+        VisualizationJobResponseDTO started = service.startJob(1L, "flow-1");
         assertEquals(3, started.getTotalSteps());
         assertEquals("QUEUED", started.getStatus());
 
@@ -129,7 +189,7 @@ class VisualizationJobServiceTest {
         Recipe flow = flowWithSteps(3);
         when(recipeRepository.findByFlowId("flow-2")).thenReturn(Optional.of(flow));
 
-        service.startJob("flow-2");
+        service.startJob(1L, "flow-2");
 
         verify(recipeRepository, timeout(5000).times(1)).save(flow);
 
@@ -150,7 +210,7 @@ class VisualizationJobServiceTest {
     void startJob_recipeNotFound_throwsSynchronouslyWithoutCreatingAJob() {
         when(recipeRepository.findByFlowId("missing")).thenReturn(Optional.empty());
 
-        assertThrows(RecipeFlowGenerationException.class, () -> service.startJob("missing"));
+        assertThrows(RecipeFlowGenerationException.class, () -> service.startJob(1L, "missing"));
 
         verify(visualizationJobRepository, never()).save(any());
     }

@@ -1,5 +1,8 @@
 package com.processVisualisation.virtualKitchen.common.exception;
 
+import com.processVisualisation.virtualKitchen.ai.queue.AiQueueFullException;
+import com.processVisualisation.virtualKitchen.ai.queue.AiRequestTimeoutException;
+import com.processVisualisation.virtualKitchen.ai.routing.NoAvailableModelException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AIAuthenticationException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AIClientException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AICommunicationException;
@@ -222,5 +225,61 @@ public class GlobalExceptionHandler {
                 ex.getMessage()
         );
         return new ResponseEntity<>(error, ex.getStatus());
+    }
+
+    /**
+     * Catches the case where a user's preferred/default AI model needs
+     * credits they don't have and no enabled fallback model is configured.
+     * Scoped to the single AI operation that triggered it — no other feature
+     * is affected.
+     *
+     * @param ex the no-available-model exception
+     * @return an {@link ErrorResponse} with {@code ex}'s message, at HTTP 503 Service Unavailable
+     */
+    @ExceptionHandler(NoAvailableModelException.class)
+    public ResponseEntity<ErrorResponse> handleNoAvailableModel(NoAvailableModelException ex) {
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.SERVICE_UNAVAILABLE.value(),
+                "AI Model Unavailable",
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    /**
+     * Catches a rejection from the bounded AI request queue when it is
+     * already at its configured max depth.
+     *
+     * @param ex the queue-full exception
+     * @return an {@link ErrorResponse} with {@code ex}'s message, at HTTP 429 Too Many Requests
+     */
+    @ExceptionHandler(AiQueueFullException.class)
+    public ResponseEntity<ErrorResponse> handleAiQueueFull(AiQueueFullException ex) {
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.TOO_MANY_REQUESTS.value(),
+                "AI System Busy",
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, HttpStatus.TOO_MANY_REQUESTS);
+    }
+
+    /**
+     * Catches a queued AI job that never completed within its configured
+     * job-level timeout.
+     *
+     * @param ex the AI request timeout exception
+     * @return an {@link ErrorResponse} with {@code ex}'s message, at HTTP 504 Gateway Timeout
+     */
+    @ExceptionHandler(AiRequestTimeoutException.class)
+    public ResponseEntity<ErrorResponse> handleAiRequestTimeout(AiRequestTimeoutException ex) {
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.GATEWAY_TIMEOUT.value(),
+                "AI Request Timeout",
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, HttpStatus.GATEWAY_TIMEOUT);
     }
 }

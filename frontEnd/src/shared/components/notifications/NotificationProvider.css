@@ -29,6 +29,10 @@
   border-left: 4px solid var(--flow-danger);
 }
 
+.notification-toast-info {
+  border-left: 4px solid var(--flow-info);
+}
+
 .notification-toast-icon {
   font-size: 1rem;
   line-height: 1.4;

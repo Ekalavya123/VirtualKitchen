@@ -32,5 +32,8 @@ public class VisualizationJobResponseDTO {
         private Long visualizationAssetId;
         private String imageUrl;
         private String errorMessage;
+        private String modelKey;
+        private String tier;
+        private boolean usedFallback;
     }
 }

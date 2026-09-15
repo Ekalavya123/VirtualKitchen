@@ -74,6 +74,12 @@ public class SecurityConfig {
                 // 3. Authorize requests
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/auth/me").authenticated() // requires a valid JWT
+                        // AI credit/admin endpoints carry a real per-user balance and an admin-only
+                        // adjustment action, so — unlike the rest of /api/** below — they must not
+                        // be reachable unauthenticated. Declared before the /api/** permitAll catch-all
+                        // since Spring Security's authorizeHttpRequests matches first-declared-wins.
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/users/me/ai-credits/**").authenticated()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**", "/api/**").permitAll() // Open API endpoints for local development
                         .anyRequest().authenticated() // Everything else needs login
                 )

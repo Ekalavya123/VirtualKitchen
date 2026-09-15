@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.model;
 
+import com.processVisualisation.virtualKitchen.ai.registry.ModelTier;
 import lombok.Data;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -35,6 +36,14 @@ public class VisualizationAsset {
     private String videoPrompt;
 
     private String videoUrl;
+
+    /** Registry key of the model that produced {@link #imageUrl} (the image-generation call, not the prompt-authoring one). */
+    private String resolvedModelKey;
+
+    private ModelTier resolvedTier;
+
+    /** Whether {@link #resolvedModelKey} was a fallback because premium credits were exhausted. */
+    private boolean usedFallback;
 
     @CreatedDate
     private LocalDateTime createdAt;

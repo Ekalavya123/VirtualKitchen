@@ -1,11 +1,14 @@
 package com.processVisualisation.virtualKitchen.recipe.controller;
 
+import com.processVisualisation.virtualKitchen.common.exception.AuthException;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeVisualizationResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeVisualizationStepResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.VisualizationJobResponseDTO;
 import com.processVisualisation.virtualKitchen.ai.service.AIRecipeVisualizationService;
 import com.processVisualisation.virtualKitchen.ai.service.VisualizationJobService;
 import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -44,7 +47,7 @@ public class RecipeVisualizationController {
      */
     @PostMapping("/{recipeId}/visualization/generate")
     public ApiResponse<RecipeVisualizationResponseDTO> generate(@PathVariable String recipeId) {
-        RecipeVisualizationResponseDTO data = AIRecipeVisualizationService.generateVisualization(recipeId);
+        RecipeVisualizationResponseDTO data = AIRecipeVisualizationService.generateVisualization(currentUserId(), recipeId);
         return ApiResponse.<RecipeVisualizationResponseDTO>builder()
                 .success(true)
                 .message(data.getMessage())
@@ -67,7 +70,7 @@ public class RecipeVisualizationController {
             @PathVariable String recipeId,
             @PathVariable String stepId
     ) {
-        RecipeVisualizationStepResponseDTO data = AIRecipeVisualizationService.generateVisualizationForStep(recipeId, stepId);
+        RecipeVisualizationStepResponseDTO data = AIRecipeVisualizationService.generateVisualizationForStep(currentUserId(), recipeId, stepId);
         return ApiResponse.<RecipeVisualizationStepResponseDTO>builder()
                 .success(true)
                 .message("Visualization generated for step")
@@ -86,13 +89,23 @@ public class RecipeVisualizationController {
      */
     @PostMapping("/{recipeId}/visualization/jobs")
     public ApiResponse<VisualizationJobResponseDTO> startJob(@PathVariable String recipeId) {
-        VisualizationJobResponseDTO data = visualizationJobService.startJob(recipeId);
+        VisualizationJobResponseDTO data = visualizationJobService.startJob(currentUserId(), recipeId);
         return ApiResponse.<VisualizationJobResponseDTO>builder()
                 .success(true)
                 .message("Visualization job started")
                 .data(data)
                 .timestamp(LocalDateTime.now())
                 .build();
+    }
+
+    private Long currentUserId() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication() != null
+                ? SecurityContextHolder.getContext().getAuthentication().getPrincipal()
+                : null;
+        if (!(principal instanceof Long userId)) {
+            throw new AuthException("Authentication required to generate a visualization", HttpStatus.UNAUTHORIZED);
+        }
+        return userId;
     }
 
     /**

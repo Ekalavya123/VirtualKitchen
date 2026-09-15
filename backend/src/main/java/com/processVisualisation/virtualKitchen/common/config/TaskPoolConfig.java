@@ -50,4 +50,23 @@ public class TaskPoolConfig {
             @Value("${app.taskpool.orchestrator.n-threads:2}") int nThreads) {
         return taskPoolFactory.getOrCreate("visualization-orchestrator", nThreads);
     }
+
+    /**
+     * Registers the {@link TaskPool} that bounds text-to-text AI calls
+     * (recipe generation, chat) submitted via {@code
+     * ai.queue.AiRequestQueueService#executeBounded}, sized via the {@code
+     * app.taskpool.ai-text.n-threads} property (defaults to 4 threads). Text
+     * generation previously ran entirely unbounded on the servlet thread;
+     * this is the pool that closes that gap.
+     *
+     * @param taskPoolFactory factory used to create or reuse the named pool
+     * @param nThreads number of worker threads to size this pool with
+     * @return the {@code "ai-text"} {@link TaskPool}
+     */
+    @Bean
+    public TaskPool aiTextTaskPool(
+            TaskPoolFactory taskPoolFactory,
+            @Value("${app.taskpool.ai-text.n-threads:4}") int nThreads) {
+        return taskPoolFactory.getOrCreate("ai-text", nThreads);
+    }
 }
