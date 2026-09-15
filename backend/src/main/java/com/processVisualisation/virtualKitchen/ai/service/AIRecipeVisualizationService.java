@@ -104,7 +104,7 @@ public class AIRecipeVisualizationService {
             Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
             Map<String, Object> stepFields = extractStepFields(data);
 
-            results.add(processStep(userId, node, data, stepFields, previousStepFields));
+            results.add(processStep(userId, recipeId, node, data, stepFields, previousStepFields));
 
             previousStepFields = stepFields;
         }
@@ -157,7 +157,7 @@ public class AIRecipeVisualizationService {
             previousStepFields = extractStepFields(previousData);
         }
 
-        RecipeVisualizationStepResponseDTO result = processStep(userId, node, data, stepFields, previousStepFields);
+        RecipeVisualizationStepResponseDTO result = processStep(userId, recipeId, node, data, stepFields, previousStepFields);
 
         recipeRepository.save(flow);
 
@@ -166,12 +166,13 @@ public class AIRecipeVisualizationService {
 
     private RecipeVisualizationStepResponseDTO processStep(
             Long userId,
+            String recipeId,
             Recipe.NodeDocument node,
             Map<String, Object> data,
             Map<String, Object> stepFields,
             Map<String, Object> previousStepFields
     ) {
-        VisualizationAsset asset = resolveVisualizationAsset(userId, data, stepFields, previousStepFields);
+        VisualizationAsset asset = resolveVisualizationAsset(userId, recipeId, node.getId(), stepFields, previousStepFields);
 
         attachAssetToNode(node, data, asset);
 
@@ -191,20 +192,27 @@ public class AIRecipeVisualizationService {
      * Touches only the {@code VisualizationAsset} collection and the AI/image/storage clients —
      * never the shared {@link Recipe} flow document — so it is safe to run concurrently across
      * steps of the same recipe as a {@link com.processVisualisation.virtualKitchen.common.concurrent.Task}.
+     * <p>
+     * The cache/dedup key is scoped to exactly this step of exactly this recipe
+     * ({@code recipeId::stepId} via {@link VisualizationKeyBuilder}) — two steps never share an
+     * asset, even if their content looks identical or is sparse/blank. Re-visualizing the same
+     * step of the same recipe is the only case that reuses an existing asset.
      *
      * @param userId the id of the user this generation's credit charges belong to
-     * @param data the step node's raw data map (used to derive the dedup/cache key)
+     * @param recipeId the recipe flow's id
+     * @param stepId the step node's id within that recipe
      * @param stepFields the current step's extracted fields used for prompt generation
      * @param previousStepFields the preceding step's extracted fields, or {@code null} if none
      * @return the resolved (existing or newly generated) visualization asset
      */
     public VisualizationAsset resolveVisualizationAsset(
             Long userId,
-            Map<String, Object> data,
+            String recipeId,
+            String stepId,
             Map<String, Object> stepFields,
             Map<String, Object> previousStepFields
     ) {
-        String visualizationKey = VisualizationKeyBuilder.buildFromNodeData(data);
+        String visualizationKey = VisualizationKeyBuilder.build(recipeId, stepId);
         Optional<VisualizationAsset> existingAsset = AIVisualizationAssetRepository.findByVisualizationKey(visualizationKey);
         VisualizationAsset asset;
         if (existingAsset.isPresent()) {

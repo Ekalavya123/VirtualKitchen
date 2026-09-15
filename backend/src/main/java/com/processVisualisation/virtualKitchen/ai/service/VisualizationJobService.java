@@ -105,11 +105,12 @@ public class VisualizationJobService {
     private void runPipeline(Long userId, String jobId, AIRecipeVisualizationService.RecipeStepPreparation preparation) {
         markStatus(jobId, VisualizationJobStatus.IN_PROGRESS, Map.of("startedAt", Instant.now()));
         try {
+            String recipeId = preparation.flow().getFlowId();
             List<NamedTask<VisualizationAsset>> tasks = preparation.steps().stream()
                     .map(ctx -> new NamedTask<VisualizationAsset>(
                             ctx.node().getId(),
                             () -> aiRecipeVisualizationService.resolveVisualizationAsset(
-                                    userId, ctx.data(), ctx.stepFields(), ctx.previousStepFields())
+                                    userId, recipeId, ctx.node().getId(), ctx.stepFields(), ctx.previousStepFields())
                     ))
                     .toList();
 
