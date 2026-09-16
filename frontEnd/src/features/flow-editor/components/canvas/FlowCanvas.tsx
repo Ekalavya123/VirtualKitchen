@@ -3,7 +3,13 @@ import Sidebar from '../sidebar/Sidebar'
 import PropertiesPanel from '../toolbar/PropertiesPanel'
 import FlowEditorTopBar from '../toolbar/FlowEditorTopBar'
 import RecipeBuilderPanel from './RecipeBuilderPanel'
-import { FlowApi, VisualizationJobApi, type VisualizationJobStepResult } from '../../../../api'
+import {
+  FlowApi,
+  VisualizationJobApi,
+  type VisualizationJobStepResult,
+  FlowGenerationJobApi,
+  type RecipeFlowGenerationStage,
+} from '../../../../api'
 import { useNotifications } from '../../../../shared/components/notifications/NotificationProvider'
 import './FlowCanvas.css'
 import '../sidebar/Sidebar.css'
@@ -134,6 +140,24 @@ const readDraftFlowData = (recipeId: number | string): FlowData | null => {
 const toFlowNodes = (rawNodes: FlowNodePayload[]): Node[] => rawNodes.map((node) => normalizeFlowNode(node))
 
 const VISUALIZATION_JOB_POLL_MS = 2000
+const FLOW_GENERATION_JOB_POLL_MS = 2000
+
+// Real, backend-reported percent checkpoints a flow-generation job can report (see
+// RecipeFlowGenerationStage on the backend). RETRYING is only hit if the first attempt fails
+// validation, so the displayed bar may jump straight from VALIDATING_RESPONSE to PERSISTING.
+const FLOW_GENERATION_PERCENT_CHECKPOINTS = [0, 10, 35, 65, 80, 95, 100]
+const FLOW_GENERATION_CREEP_TICK_MS = 400
+const FLOW_GENERATION_CREEP_MARGIN = 3
+
+const FLOW_GENERATION_STAGE_LABELS: Record<RecipeFlowGenerationStage, string> = {
+  QUEUED: 'Queued…',
+  BUILDING_PROMPT: 'Reading your recipe…',
+  CALLING_MODEL: 'Asking the AI to structure it…',
+  VALIDATING_RESPONSE: 'Checking the result…',
+  RETRYING: 'Retrying with feedback…',
+  PERSISTING: 'Finalizing…',
+  COMPLETED: 'Done',
+}
 
 const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 
@@ -152,6 +176,8 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
   const [visualsProgress, setVisualsProgress] = useState<{ completed: number; total: number } | null>(null)
   const [showSlideshow, setShowSlideshow] = useState(false)
   const [generatingFlow, setGeneratingFlow] = useState(false)
+  const [flowGenerationProgress, setFlowGenerationProgress] = useState<{ percent: number; stage: RecipeFlowGenerationStage } | null>(null)
+  const [flowGenerationDisplayPercent, setFlowGenerationDisplayPercent] = useState(0)
   const [aiCreditsRefreshSignal, setAiCreditsRefreshSignal] = useState(0)
   const [nodeZoomPercent, setNodeZoomPercent] = useState(100)
   const [builderWidth, setBuilderWidth] = useState(380)
@@ -904,11 +930,53 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
     })
   }, [applyCurrentNodeZoom, edges.length, fitCanvasView, nodes.length, saveSnapshot, selectNodeFromSidebar, setEdges, setFuture, setNodes])
 
+  // While a flow-generation job is in flight, smoothly creep the displayed percent toward the
+  // next real checkpoint above the last confirmed value (never reaching it), so the bar keeps
+  // moving during the ~10-20s the model call itself takes rather than sitting frozen between
+  // polls. Each poll response (flowGenerationProgress) snaps the displayed value up to the real,
+  // confirmed percent, which is always >= the creep target, so there's never a visible regression.
+  useEffect(() => {
+    if (!generatingFlow) {
+      setFlowGenerationDisplayPercent(0)
+      return
+    }
+
+    const interval = window.setInterval(() => {
+      setFlowGenerationDisplayPercent((prev) => {
+        const confirmed = flowGenerationProgress?.percent ?? 0
+        const nextCheckpoint = FLOW_GENERATION_PERCENT_CHECKPOINTS.find((p) => p > confirmed) ?? 100
+        const ceiling = Math.max(confirmed, nextCheckpoint - FLOW_GENERATION_CREEP_MARGIN)
+        return Math.min(ceiling, Math.max(prev, confirmed) + 1)
+      })
+    }, FLOW_GENERATION_CREEP_TICK_MS)
+
+    return () => window.clearInterval(interval)
+  }, [generatingFlow, flowGenerationProgress])
+
   const generateFlowFromRecipe = useCallback(async (recipeText: string) => {
+    setGeneratingFlow(true)
+    setFlowGenerationProgress({ percent: 0, stage: 'QUEUED' })
+
     try {
-      setGeneratingFlow(true)
       const clientRequestId = crypto.randomUUID()
-      const generated = await FlowApi.generateFlowFromRecipe({ recipe: recipeText, clientRequestId })
+      let job = await FlowGenerationJobApi.startJob({ recipe: recipeText, clientRequestId })
+      if (!unmountedRef.current) setFlowGenerationProgress({ percent: job.progressPercent, stage: job.stage })
+
+      while (!unmountedRef.current && (job.status === 'QUEUED' || job.status === 'IN_PROGRESS')) {
+        await sleep(FLOW_GENERATION_JOB_POLL_MS)
+        if (unmountedRef.current) break
+
+        job = await FlowGenerationJobApi.getJobStatus(job.jobId)
+        setFlowGenerationProgress({ percent: job.progressPercent, stage: job.stage })
+      }
+
+      if (unmountedRef.current) return
+
+      if (job.status !== 'COMPLETED' || !job.result) {
+        throw new Error(job.errorMessage || 'Unable to generate the workflow right now.')
+      }
+
+      const generated = job.result
       const normalizedFlowData = normalizeGeneratedFlowData(generated)
 
       if (generated.usedFallback) {
@@ -927,8 +995,11 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
       alert(message)
       throw new Error(message)
     } finally {
-      setGeneratingFlow(false)
-      setAiCreditsRefreshSignal((n) => n + 1)
+      if (!unmountedRef.current) {
+        setGeneratingFlow(false)
+        setFlowGenerationProgress(null)
+        setAiCreditsRefreshSignal((n) => n + 1)
+      }
     }
   }, [replaceCanvasFlow, notifyInfo])
 
@@ -1037,6 +1108,10 @@ export default function FlowCanvas({ recipe, onBack }: FlowCanvasProps) {
                 <RecipeBuilderPanel
                 collapsed={builderCollapsed}
                 isGenerating={generatingFlow}
+                progress={flowGenerationProgress ? {
+                  percent: flowGenerationDisplayPercent,
+                  stageLabel: FLOW_GENERATION_STAGE_LABELS[flowGenerationProgress.stage],
+                } : null}
                 onToggleCollapsed={() => setBuilderCollapsed((currentValue) => !currentValue)}
                 onGenerate={generateFlowFromRecipe}
               />

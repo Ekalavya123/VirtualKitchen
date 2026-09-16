@@ -238,3 +238,44 @@ export const VisualizationJobApi = {
     return apiGet<VisualizationJobResponse>(API.recipeVisualization.jobStatus(jobId))
   },
 }
+
+export type RecipeFlowGenerationJobStatus = 'QUEUED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
+
+/**
+ * Internal milestone of a recipe-flow generation job. There's no natural step
+ * count for a single AI call, so progress is reported as these coarse, real
+ * stage transitions instead — see {@link RecipeFlowGenerationJobResponse.progressPercent}.
+ */
+export type RecipeFlowGenerationStage =
+  | 'QUEUED'
+  | 'BUILDING_PROMPT'
+  | 'CALLING_MODEL'
+  | 'VALIDATING_RESPONSE'
+  | 'RETRYING'
+  | 'PERSISTING'
+  | 'COMPLETED'
+
+export interface RecipeFlowGenerationJobResponse {
+  jobId: string
+  status: RecipeFlowGenerationJobStatus
+  stage: RecipeFlowGenerationStage
+  progressPercent: number
+  result: RecipeFlowGenerationResponse | null
+  errorMessage?: string | null
+}
+
+/**
+ * Async, job-based flow generation: {@link startJob} returns immediately with a QUEUED job, and
+ * the caller polls {@link getJobStatus} until it reaches a terminal status (COMPLETED / FAILED).
+ * Preferred over {@link FlowApi.generateFlowFromRecipe}'s synchronous call since it never blocks
+ * the request for the full duration of the AI call and reports real progress milestones.
+ */
+export const FlowGenerationJobApi = {
+  async startJob(data: RecipeFlowGenerationRequest): Promise<RecipeFlowGenerationJobResponse> {
+    return apiPost<RecipeFlowGenerationJobResponse>(API.recipeGeneration.startJob, data)
+  },
+
+  async getJobStatus(jobId: string): Promise<RecipeFlowGenerationJobResponse> {
+    return apiGet<RecipeFlowGenerationJobResponse>(API.recipeGeneration.jobStatus(jobId))
+  },
+}

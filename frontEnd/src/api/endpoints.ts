@@ -61,6 +61,9 @@ export const API = {
 
   recipeGeneration: {
     generateFlow: '/api/recipe/generate-flow',
+    // Async job variant: start returns immediately (QUEUED), poll jobStatus for progress/results.
+    startJob: '/api/recipe/generate-flow/jobs',
+    jobStatus: (jobId: string) => `/api/recipe/generate-flow/jobs/${jobId}`,
   },
 
   // Flows

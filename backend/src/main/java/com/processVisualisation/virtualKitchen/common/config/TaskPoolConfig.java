@@ -69,4 +69,26 @@ public class TaskPoolConfig {
             @Value("${app.taskpool.ai-text.n-threads:4}") int nThreads) {
         return taskPoolFactory.getOrCreate("ai-text", nThreads);
     }
+
+    /**
+     * Registers the {@link TaskPool} that runs the coordinating task for an
+     * async recipe-flow generation job, sized via the {@code
+     * app.taskpool.flow-generation-orchestrator.n-threads} property (defaults
+     * to 2 threads). Kept separate from {@link #aiTextTaskPool} for the same
+     * reason {@link #visualizationOrchestratorTaskPool} is kept separate from
+     * {@link #visualizationTaskPool}: the orchestrator task blocks waiting on
+     * {@code AiRequestQueueService#executeBounded}, which itself submits to
+     * and blocks on the "ai-text" pool — running both on the same pool could
+     * deadlock a saturated pool against itself.
+     *
+     * @param taskPoolFactory factory used to create or reuse the named pool
+     * @param nThreads number of worker threads to size this pool with
+     * @return the {@code "flow-generation-orchestrator"} {@link TaskPool}
+     */
+    @Bean
+    public TaskPool flowGenerationOrchestratorTaskPool(
+            TaskPoolFactory taskPoolFactory,
+            @Value("${app.taskpool.flow-generation-orchestrator.n-threads:2}") int nThreads) {
+        return taskPoolFactory.getOrCreate("flow-generation-orchestrator", nThreads);
+    }
 }

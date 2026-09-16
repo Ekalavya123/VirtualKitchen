@@ -5,6 +5,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.processVisualisation.virtualKitchen.ai.dispatch.AiClientResolver;
+import com.processVisualisation.virtualKitchen.ai.model.RecipeFlowGenerationStage;
 import com.processVisualisation.virtualKitchen.ai.queue.AiRequestOutcome;
 import com.processVisualisation.virtualKitchen.ai.queue.AiRequestQueueService;
 import com.processVisualisation.virtualKitchen.ai.registry.AiCapability;
@@ -27,6 +28,7 @@ import org.springframework.util.StringUtils;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 
 /**
  * Orchestrates AI-driven generation of a structured recipe execution flow
@@ -84,7 +86,20 @@ public class AIRecipeGenerationService {
      *         produced after the retry attempt
      */
     public RecipeFlowGenerationResponseDTO generateFlow(Long userId, String recipeText, String clientRequestId) {
+        return generateFlow(userId, recipeText, clientRequestId, stage -> { });
+    }
+
+    /**
+     * Same as {@link #generateFlow(Long, String, String)}, but additionally reports the
+     * generation pipeline's internal progress milestones via {@code onStage} as it moves through
+     * them — used by {@code RecipeFlowGenerationJobService} to back a client-pollable job's
+     * progress percentage. Callers that don't care about progress can use the other overload.
+     */
+    public RecipeFlowGenerationResponseDTO generateFlow(
+            Long userId, String recipeText, String clientRequestId, Consumer<RecipeFlowGenerationStage> onStage
+    ) {
         System.out.println("[RECIPE-GEN] Start generate flow");
+        onStage.accept(RecipeFlowGenerationStage.BUILDING_PROMPT);
 
         AiRequestOutcome<RecipeFlowGenerationResponseDTO> outcome = queueService.executeBounded(
                 userId,
@@ -93,7 +108,7 @@ public class AIRecipeGenerationService {
                 clientRequestId,
                 "recipe-generation",
                 null,
-                selection -> runAttempts(recipeText, selection)
+                selection -> runAttempts(recipeText, selection, onStage)
         );
 
         RecipeFlowGenerationResponseDTO response = outcome.value();
@@ -105,17 +120,24 @@ public class AIRecipeGenerationService {
         return response;
     }
 
-    private RecipeFlowGenerationResponseDTO runAttempts(String recipeText, ModelSelectionOutcome selection) {
+    private RecipeFlowGenerationResponseDTO runAttempts(
+            String recipeText, ModelSelectionOutcome selection, Consumer<RecipeFlowGenerationStage> onStage
+    ) {
         AIClient client = clientResolver.resolveTextClient(selection.model());
         String modelId = selection.model().getProviderModelId();
 
+        onStage.accept(RecipeFlowGenerationStage.CALLING_MODEL);
         AttemptResult firstAttempt = runAttempt(client, modelId, recipeText, null);
+        onStage.accept(RecipeFlowGenerationStage.VALIDATING_RESPONSE);
         if (firstAttempt.valid()) {
+            onStage.accept(RecipeFlowGenerationStage.PERSISTING);
             return firstAttempt.response();
         }
 
         System.out.println("[RECIPE-GEN] Validation failed on first attempt. Retrying once.");
+        onStage.accept(RecipeFlowGenerationStage.RETRYING);
         AttemptResult secondAttempt = runAttempt(client, modelId, recipeText, firstAttempt);
+        onStage.accept(RecipeFlowGenerationStage.PERSISTING);
         if (secondAttempt.valid()) {
             return secondAttempt.response();
         }
