@@ -5,11 +5,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.processVisualisation.virtualKitchen.restclient.client.ImageGenerationClient;
 import com.processVisualisation.virtualKitchen.restclient.config.DrawThingsProperties;
+import com.processVisualisation.virtualKitchen.restclient.exception.AIAuthenticationException;
+import com.processVisualisation.virtualKitchen.restclient.exception.AICommunicationException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AIInvalidResponseException;
+import com.processVisualisation.virtualKitchen.restclient.exception.AITimeoutException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.Base64;
 import java.util.Map;
@@ -99,14 +104,23 @@ public class DrawThingsImageClient implements ImageGenerationClient {
     /**
      * Generates an image for the given prompt by calling the configured
      * Draw Things endpoint and decoding the returned base64 image.
+     * <p>
+     * Transport failures are translated into the typed {@code AIClientException}
+     * hierarchy. A self-hosted Draw Things server is the most likely provider to
+     * be transiently unreachable, and {@code AiRequestQueueService} only retries
+     * an attempt that fails with {@link AITimeoutException} or
+     * {@link AICommunicationException} — so without this wrapping a restarting
+     * server would fail the step outright instead of being retried.
      *
      * @param prompt the text prompt describing the image to generate
      * @return the generated image data and its MIME type
-     * @throws JsonProcessingException if the Draw Things response cannot be parsed as JSON
+     * @throws AIAuthenticationException if the endpoint rejects the request (401/403)
+     * @throws AICommunicationException if the endpoint returns any other HTTP error, or is misconfigured
+     * @throws AITimeoutException if the request times out or the host cannot be reached
+     * @throws AIInvalidResponseException if the response is not valid JSON or contains no usable image
      */
     @Override
-    public GeneratedImage generate(String prompt)
-            throws JsonProcessingException {
+    public GeneratedImage generate(String prompt) {
 
         Map<String, Object> request = Map.of(
                 "prompt", prompt,
@@ -114,13 +128,28 @@ public class DrawThingsImageClient implements ImageGenerationClient {
                 "height", drawThingsProperties.getHeight()
         );
 
-        String response = restClient.post()
-                .uri(drawThingsProperties.getEndpoint())
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(request)
-                .retrieve()
-                .body(String.class);
+        try {
+            String response = restClient.post()
+                    .uri(drawThingsProperties.getEndpoint())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(request)
+                    .retrieve()
+                    .body(String.class);
 
-        return parseImage(response);
+            return parseImage(response);
+        } catch (RestClientResponseException ex) {
+            int status = ex.getStatusCode().value();
+            if (status == 401 || status == 403) {
+                throw new AIAuthenticationException("Draw Things authentication failed", ex);
+            }
+            throw new AICommunicationException(
+                    "Draw Things request failed with status: " + ex.getStatusCode(), ex);
+        } catch (ResourceAccessException ex) {
+            throw new AITimeoutException("Draw Things request timed out or could not connect", ex);
+        } catch (JsonProcessingException ex) {
+            throw new AIInvalidResponseException("Failed to process Draw Things JSON payload", ex);
+        } catch (IllegalArgumentException ex) {
+            throw new AICommunicationException("Draw Things endpoint configuration is invalid", ex);
+        }
     }
 }

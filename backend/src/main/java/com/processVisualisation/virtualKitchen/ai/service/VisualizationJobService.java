@@ -159,7 +159,12 @@ public class VisualizationJobService {
             stepResult.setTier(asset.getResolvedTier() != null ? asset.getResolvedTier().name() : null);
             stepResult.setUsedFallback(asset.isUsedFallback());
             if (!success) {
-                stepResult.setErrorMessage("Image generation failed for this step");
+                // generateImage records the real cause on the asset rather than throwing, so
+                // prefer it over the generic fallback — a Supabase outage should reach the job
+                // document as itself, not as "image generation failed".
+                stepResult.setErrorMessage(asset.getImageFailureReason() != null
+                        ? asset.getImageFailureReason()
+                        : "Image generation failed for this step");
             }
         } else {
             stepResult.setErrorMessage(safeMessage(result.error()));

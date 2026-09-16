@@ -33,6 +33,13 @@ public class VisualizationAsset {
 
     private String imageUrl;
 
+    /**
+     * Why {@link #imageUrl} is null, when it is — the generation or upload failure's
+     * real cause, rather than the generic "image generation failed" the job layer used
+     * to infer from a null URL alone. Null whenever {@link #imageUrl} is populated.
+     */
+    private String imageFailureReason;
+
     private String videoPrompt;
 
     private String videoUrl;

@@ -2,6 +2,11 @@ package com.processVisualisation.virtualKitchen.ai.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifact;
+import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactKeyBuilder;
+import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactService;
+import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactSpec;
+import com.processVisualisation.virtualKitchen.ai.artifact.codec.GeneratedImageCodec;
 import com.processVisualisation.virtualKitchen.ai.dispatch.AiClientResolver;
 import com.processVisualisation.virtualKitchen.ai.queue.AiRequestOutcome;
 import com.processVisualisation.virtualKitchen.ai.queue.AiRequestQueueService;
@@ -9,7 +14,6 @@ import com.processVisualisation.virtualKitchen.ai.registry.AiCapability;
 import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionOutcome;
 import com.processVisualisation.virtualKitchen.restclient.client.AIClient;
 import com.processVisualisation.virtualKitchen.restclient.client.ImageGenerationClient;
-import com.processVisualisation.virtualKitchen.restclient.client.ImageStorageClient;
 import com.processVisualisation.virtualKitchen.restclient.dto.AIRequest;
 import com.processVisualisation.virtualKitchen.restclient.dto.AIResponse;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeVisualizationResponseDTO;
@@ -50,10 +54,12 @@ public class AIRecipeVisualizationService {
     private final RecipeRepository recipeRepository;
     private final AIVisualizationAssetRepository AIVisualizationAssetRepository;
     private final SequenceGeneratorService sequenceGeneratorService;
-    private final ImageStorageClient imageStorageClient;
     private final AiRequestQueueService queueService;
     private final AiClientResolver clientResolver;
     private final AIVisualizationPromptBuilder promptBuilder;
+    private final AiArtifactService artifactService;
+    private final GeneratedImageCodec generatedImageCodec;
+    private final VisualizationImageArtifactConsumer imageArtifactConsumer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AIRecipeVisualizationService(
@@ -62,16 +68,20 @@ public class AIRecipeVisualizationService {
             SequenceGeneratorService sequenceGeneratorService,
             AiRequestQueueService queueService,
             AiClientResolver clientResolver,
-            ImageStorageClient imageStorageClient,
-            AIVisualizationPromptBuilder promptBuilder
+            AIVisualizationPromptBuilder promptBuilder,
+            AiArtifactService artifactService,
+            GeneratedImageCodec generatedImageCodec,
+            VisualizationImageArtifactConsumer imageArtifactConsumer
     ) {
         this.recipeRepository = recipeRepository;
         this.AIVisualizationAssetRepository = AIVisualizationAssetRepository;
         this.sequenceGeneratorService = sequenceGeneratorService;
         this.queueService = queueService;
         this.clientResolver = clientResolver;
-        this.imageStorageClient = imageStorageClient;
         this.promptBuilder = promptBuilder;
+        this.artifactService = artifactService;
+        this.generatedImageCodec = generatedImageCodec;
+        this.imageArtifactConsumer = imageArtifactConsumer;
     }
 
     /**
@@ -220,6 +230,7 @@ public class AIRecipeVisualizationService {
             if (asset.getImagePrompt() == null || asset.getImagePrompt().isEmpty()) {
                 asset = generatePrompt(userId, visualizationKey, stepFields, previousStepFields);
             }
+            requirePrompted(asset, visualizationKey);
             if (asset.getImageUrl() == null || asset.getImageUrl().isEmpty()) {
                 asset = generateImage(userId, asset);
             }
@@ -340,10 +351,40 @@ public class AIRecipeVisualizationService {
         return null;
     }
 
+    /**
+     * Generates this step's image and places it in object storage, in two separable stages so a
+     * storage failure cannot destroy a paid generation.
+     * <p>
+     * The provider's bytes are persisted as an {@code AiArtifact} <em>before</em> the upload runs
+     * (inside {@code executeInline}), and the artifact is only retired once the upload has
+     * succeeded. If the upload throws, the artifact stays {@code PENDING} with its payload intact
+     * and no expiry, so the next attempt — the next request for this step, or
+     * {@code AiArtifactRecoveryJob} — uploads the image that was already paid for instead of
+     * generating a new one. The artifact lookup also means a retry after a failure here makes no
+     * provider call and spends no credits.
+     * <p>
+     * Exceptions are still absorbed rather than propagated: {@code VisualizationJobService}
+     * distinguishes a failed step by a null {@code imageUrl}, not by a thrown exception. What is
+     * new is that the real cause is recorded on the asset instead of being reduced to a log line.
+     *
+     * @param userId the id of the user this generation's credit charges belong to
+     * @param asset the asset whose {@code imagePrompt} should be rendered
+     * @return the saved asset, with either an image URL or a failure reason
+     */
     private VisualizationAsset generateImage(Long userId, VisualizationAsset asset) {
         String visualizationKey = asset.getVisualizationKey();
         try {
             logger.info("Generating image for visualizationKey: {}, prompt: {}", visualizationKey, asset.getImagePrompt());
+
+            AiArtifactSpec<ImageGenerationClient.GeneratedImage> artifactSpec = AiArtifactSpec.of(
+                    AiArtifactKeyBuilder.build(
+                            AiCapability.TEXT_TO_IMAGE,
+                            "visualization-image",
+                            visualizationKey,
+                            asset.getImagePrompt()),
+                    generatedImageCodec,
+                    VisualizationImageArtifactConsumer.CONSUMER_ID
+            );
 
             AiRequestOutcome<ImageGenerationClient.GeneratedImage> outcome = queueService.executeInline(
                     userId,
@@ -352,33 +393,29 @@ public class AIRecipeVisualizationService {
                     null,
                     "visualization-image",
                     visualizationKey,
+                    artifactSpec,
                     selection -> clientResolver.resolveImageClient(selection.model()).generate(asset.getImagePrompt())
             );
 
-            ImageGenerationClient.GeneratedImage generatedImage = outcome.value();
+            // The payload is durable from here on, whether it was just generated or reused.
+            AiArtifact artifact = artifactOrTransient(outcome, visualizationKey);
+            String imageUrl = imageArtifactConsumer.consume(artifact, outcome.value());
+            artifactService.markConsumed(artifact.getId());
+
             ModelSelectionOutcome selection = outcome.selection();
-
-            String imagePath = String.format(
-                    "visualizations/%s/%s/%s.png",
-                    visualizationKey,
-                    asset.getId(),
-                    UUID.randomUUID()
-            );
-
-            String imageUrl = imageStorageClient.upload(
-                    generatedImage.data(),
-                    generatedImage.mimeType(),
-                    imagePath
-            );
-
             asset.setImageUrl(imageUrl);
+            asset.setImageFailureReason(null);
             asset.setResolvedModelKey(selection.model().getKey());
             asset.setResolvedTier(selection.model().getTier());
             asset.setUsedFallback(selection.usedFallback());
-            logger.info("Successfully generated and uploaded image for visualizationKey: {}, prompt: {}", visualizationKey, asset.getImagePrompt());
+            logger.info("Successfully generated and uploaded image for visualizationKey: {}, prompt: {} (reused={})",
+                    visualizationKey, asset.getImagePrompt(), outcome.reused());
         } catch (Exception e) {
             asset.setImageUrl(null);
-            logger.error("Failed to generate or upload image for visualizationKey: {}, prompt: {}", visualizationKey, asset.getImagePrompt(), e);
+            asset.setImageFailureReason(describeFailure(e));
+            logger.error("Failed to generate or upload image for visualizationKey: {}, prompt: {} "
+                            + "(any generated payload is retained for recovery)",
+                    visualizationKey, asset.getImagePrompt(), e);
         }
         asset.setVideoUrl(null);
         return AIVisualizationAssetRepository.save(asset);
@@ -386,8 +423,72 @@ public class AIRecipeVisualizationService {
 
     private VisualizationAsset createAsset(Long userId, String visualizationKey, Map<String, Object> currentStep, Map<String, Object> previousStep) {
         VisualizationAsset asset = generatePrompt(userId, visualizationKey, currentStep, previousStep);
+        requirePrompted(asset, visualizationKey);
         asset = generateImage(userId, asset);
         return AIVisualizationAssetRepository.save(asset);
+    }
+
+    /**
+     * Supplies the artifact the image consumer works against.
+     * <p>
+     * Staging is best-effort — {@code AiRequestQueueService} logs and swallows a staging failure
+     * rather than failing an otherwise-successful paid call — so the artifact can legitimately be
+     * absent. In that case this builds a detached stand-in carrying the same correlation and
+     * model metadata, so the upload still happens and simply is not recoverable afterwards. Its
+     * null id makes the subsequent {@code markConsumed} a no-op.
+     *
+     * @param outcome the completed AI request
+     * @param visualizationKey the step key, which doubles as the artifact's correlation id
+     * @return the persisted artifact, or a detached stand-in if staging did not happen
+     */
+    private AiArtifact artifactOrTransient(
+            AiRequestOutcome<ImageGenerationClient.GeneratedImage> outcome, String visualizationKey) {
+        if (outcome.artifact() != null) {
+            return outcome.artifact();
+        }
+        ModelSelectionOutcome selection = outcome.selection();
+        AiArtifact transientArtifact = new AiArtifact();
+        transientArtifact.setCorrelationId(visualizationKey);
+        transientArtifact.setCorrelationType("visualization-image");
+        transientArtifact.setCapability(AiCapability.TEXT_TO_IMAGE);
+        transientArtifact.setProducedByModelKey(selection.model().getKey());
+        transientArtifact.setProducedByTier(selection.model().getTier());
+        transientArtifact.setUsedFallback(selection.usedFallback());
+        return transientArtifact;
+    }
+
+    /**
+     * Renders an exception as the short, human-readable reason stored on
+     * {@link VisualizationAsset#getImageFailureReason()} and surfaced in the job's step results.
+     * Keeps the exception type, since that is what distinguishes a provider failure
+     * ({@code AICommunicationException}) from a storage failure and from a malformed response.
+     *
+     * @param e the failure to describe
+     * @return the exception's simple name, with its message appended when it has one
+     */
+    private String describeFailure(Exception e) {
+        String message = e.getMessage();
+        return StringUtils.hasText(message)
+                ? e.getClass().getSimpleName() + ": " + message
+                : e.getClass().getSimpleName();
+    }
+
+    /**
+     * Guards the one case where {@link #generatePrompt} returns {@code null} — it absorbs every
+     * exception and yields null on failure. Callers previously dereferenced that null immediately,
+     * so a prompt-model outage surfaced as a bare {@code NullPointerException} in the step result.
+     * Failing with a typed exception instead lets the async job record the real reason per step and
+     * lets the synchronous endpoint map it through {@code GlobalExceptionHandler}.
+     *
+     * @param asset the asset returned by {@link #generatePrompt}, possibly null
+     * @param visualizationKey the step key being resolved, for the error message
+     * @throws RecipeFlowGenerationException if no prompt could be generated for the step
+     */
+    private void requirePrompted(VisualizationAsset asset, String visualizationKey) {
+        if (asset == null) {
+            throw new RecipeFlowGenerationException(
+                    "Could not generate a visualization prompt for step: " + visualizationKey);
+        }
     }
 
     private PromptPair parsePrompts(String content) {

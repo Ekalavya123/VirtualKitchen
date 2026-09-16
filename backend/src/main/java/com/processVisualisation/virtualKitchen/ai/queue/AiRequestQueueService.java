@@ -1,6 +1,12 @@
 package com.processVisualisation.virtualKitchen.ai.queue;
 
+import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifact;
+import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactService;
+import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactSpec;
 import com.processVisualisation.virtualKitchen.ai.registry.AiCapability;
+import com.processVisualisation.virtualKitchen.ai.registry.AiModelRegistry;
+import com.processVisualisation.virtualKitchen.ai.registry.ModelDefinition;
+import com.processVisualisation.virtualKitchen.ai.routing.FallbackReason;
 import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionOutcome;
 import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionService;
 import com.processVisualisation.virtualKitchen.ai.credit.CreditService;
@@ -16,6 +22,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -65,6 +72,8 @@ public class AiRequestQueueService {
     private final TaskPool aiTextTaskPool;
     private final AiQueueProperties queueProperties;
     private final AiRequestProperties requestProperties;
+    private final AiArtifactService artifactService;
+    private final AiModelRegistry modelRegistry;
 
     private final Map<String, AtomicInteger> inFlightByPool = new ConcurrentHashMap<>();
 
@@ -74,7 +83,9 @@ public class AiRequestQueueService {
             CreditService creditService,
             @Qualifier("aiTextTaskPool") TaskPool aiTextTaskPool,
             AiQueueProperties queueProperties,
-            AiRequestProperties requestProperties
+            AiRequestProperties requestProperties,
+            AiArtifactService artifactService,
+            AiModelRegistry modelRegistry
     ) {
         this.jobRepository = jobRepository;
         this.modelSelectionService = modelSelectionService;
@@ -82,6 +93,8 @@ public class AiRequestQueueService {
         this.aiTextTaskPool = aiTextTaskPool;
         this.queueProperties = queueProperties;
         this.requestProperties = requestProperties;
+        this.artifactService = artifactService;
+        this.modelRegistry = modelRegistry;
     }
 
     /** Bounded, pool-submitted execution — see class javadoc. Used for {@link AiCapability#TEXT_TO_TEXT}. */
@@ -89,12 +102,34 @@ public class AiRequestQueueService {
             Long userId, AiCapability capability, String preferredModelKey, String idempotencyKey,
             String correlationType, String correlationId, AiWork<R> work
     ) {
+        return executeBounded(userId, capability, preferredModelKey, idempotencyKey,
+                correlationType, correlationId, null, work);
+    }
+
+    /**
+     * Bounded execution with AI artifact reuse and staging.
+     * <p>
+     * Passing an {@code artifactSpec} opts this call site into the artifact store: a stored
+     * payload is served instead of calling the provider, and a fresh payload is persisted before
+     * this method returns. Passing {@code null} is exactly the previous behaviour.
+     *
+     * @param artifactSpec the artifact key, codec, and consumer for this call site, or null to opt out
+     */
+    public <R> AiRequestOutcome<R> executeBounded(
+            Long userId, AiCapability capability, String preferredModelKey, String idempotencyKey,
+            String correlationType, String correlationId, AiArtifactSpec<R> artifactSpec, AiWork<R> work
+    ) {
+        Optional<AiRequestOutcome<R>> reused = findReusable(userId, artifactSpec);
+        if (reused.isPresent()) {
+            return reused.get();
+        }
+
         return withAdmissionControl(AI_TEXT_POOL, capability, () -> {
             AiRequestJob job = createJob(userId, capability, preferredModelKey, idempotencyKey, correlationType, correlationId);
             ModelSelectionOutcome selection = beginProcessing(job, capability, preferredModelKey);
             long timeoutMs = requestProperties.timeoutFor(capability, 30_000L);
 
-            return runWithRetries(job, selection, () -> {
+            AiRequestOutcome<R> outcome = runWithRetries(job, selection, () -> {
                 CompletableFuture<TaskResult<R>> future =
                         aiTextTaskPool.submit(new NamedTask<>(job.getId(), () -> work.run(selection)));
                 TaskResult<R> result;
@@ -109,6 +144,8 @@ public class AiRequestQueueService {
                 }
                 return result.value();
             });
+
+            return withStagedArtifact(userId, capability, correlationType, correlationId, artifactSpec, outcome);
         });
     }
 
@@ -117,12 +154,109 @@ public class AiRequestQueueService {
             Long userId, AiCapability capability, String preferredModelKey, String idempotencyKey,
             String correlationType, String correlationId, AiWork<R> work
     ) {
+        return executeInline(userId, capability, preferredModelKey, idempotencyKey,
+                correlationType, correlationId, null, work);
+    }
+
+    /**
+     * Inline execution with AI artifact reuse and staging.
+     * <p>
+     * Passing an {@code artifactSpec} opts this call site into the artifact store; passing
+     * {@code null} is exactly the previous behaviour.
+     *
+     * @param artifactSpec the artifact key, codec, and consumer for this call site, or null to opt out
+     */
+    public <R> AiRequestOutcome<R> executeInline(
+            Long userId, AiCapability capability, String preferredModelKey, String idempotencyKey,
+            String correlationType, String correlationId, AiArtifactSpec<R> artifactSpec, AiWork<R> work
+    ) {
+        Optional<AiRequestOutcome<R>> reused = findReusable(userId, artifactSpec);
+        if (reused.isPresent()) {
+            return reused.get();
+        }
+
         return withAdmissionControl(AI_IMAGE_POOL, capability, () -> {
             AiRequestJob job = createJob(userId, capability, preferredModelKey, idempotencyKey, correlationType, correlationId);
             ModelSelectionOutcome selection = beginProcessing(job, capability, preferredModelKey);
 
-            return runWithRetries(job, selection, () -> work.run(selection));
+            AiRequestOutcome<R> outcome = runWithRetries(job, selection, () -> work.run(selection));
+            return withStagedArtifact(userId, capability, correlationType, correlationId, artifactSpec, outcome);
         });
+    }
+
+    /**
+     * Read-before-spend: serves a stored payload instead of calling the provider.
+     * <p>
+     * This runs <b>before</b> {@link #withAdmissionControl} and therefore before
+     * {@link #beginProcessing}, which is where {@code ModelSelectionService#select} reserves
+     * credits. A reuse check placed any later — inside the {@link AiWork} lambda, say — would
+     * still have reserved and consumed a credit, defeating the point of the store.
+     * <p>
+     * It also sits outside admission control on purpose: a hit performs no provider work, so it
+     * must not be rejected with {@link AiQueueFullException} while the queue is saturated. A burst
+     * of retried-after-failure requests should be absorbed by the store, not bounced by it.
+     * <p>
+     * No {@code AiRequestJob} row is written for a hit, so {@code ai_request_jobs} keeps meaning
+     * "a provider call we actually made"; reuse is observable via {@code AiArtifact.reuseCount}.
+     */
+    private <R> Optional<AiRequestOutcome<R>> findReusable(Long userId, AiArtifactSpec<R> artifactSpec) {
+        if (artifactSpec == null) {
+            return Optional.empty();
+        }
+        return artifactService.findReusable(userId, artifactSpec)
+                .map(hit -> AiRequestOutcome.reused(hit, reusedSelection(hit.artifact())));
+    }
+
+    /**
+     * Rebuilds the model selection for a reused payload from the artifact's recorded metadata.
+     * <p>
+     * The reservation is always {@code null}: the payload was paid for once, when it was produced,
+     * so nothing downstream may consume or release credits against it.
+     */
+    private ModelSelectionOutcome reusedSelection(AiArtifact artifact) {
+        ModelDefinition model = modelRegistry.find(artifact.getProducedByModelKey())
+                .orElseGet(() -> syntheticDefinition(artifact));
+        return new ModelSelectionOutcome(model, artifact.isUsedFallback(), FallbackReason.NONE, null);
+    }
+
+    /**
+     * Stands in for a model that has since been removed from configuration, so an artifact
+     * produced by it stays reusable rather than being stranded.
+     */
+    private ModelDefinition syntheticDefinition(AiArtifact artifact) {
+        ModelDefinition definition = new ModelDefinition();
+        definition.setKey(artifact.getProducedByModelKey());
+        definition.setCapability(artifact.getCapability());
+        definition.setTier(artifact.getProducedByTier());
+        definition.setCreditCost(artifact.getCreditCost());
+        definition.setEnabled(false);
+        return definition;
+    }
+
+    /**
+     * Write-before-dependency: persists the payload before the caller — and therefore before any
+     * dependent work — can touch it.
+     * <p>
+     * Staging failures are logged and swallowed. Failing an otherwise-successful <em>paid</em> call
+     * in order to report a bookkeeping failure would be strictly worse than the behaviour this
+     * feature replaces; the caller simply proceeds without a retained payload.
+     */
+    private <R> AiRequestOutcome<R> withStagedArtifact(
+            Long userId, AiCapability capability, String correlationType, String correlationId,
+            AiArtifactSpec<R> artifactSpec, AiRequestOutcome<R> outcome) {
+
+        if (artifactSpec == null) {
+            return outcome;
+        }
+        try {
+            AiArtifact artifact = artifactService.stage(userId, capability, correlationType, correlationId,
+                    artifactSpec, outcome.value(), outcome.selection(), outcome.jobId());
+            return AiRequestOutcome.fresh(outcome.jobId(), outcome.value(), outcome.selection(), artifact);
+        } catch (Exception e) {
+            log.error("Could not stage AI artifact for job {} (key={}); the payload is not retained",
+                    outcome.jobId(), artifactSpec.artifactKey(), e);
+            return outcome;
+        }
     }
 
     private <R> AiRequestOutcome<R> withAdmissionControl(String poolName, AiCapability capability,
@@ -191,6 +325,7 @@ public class AiRequestQueueService {
         Exception lastError = null;
 
         for (int i = 1; i <= maxAttempts; i++) {
+            job.setAttempt(i);
             try {
                 R value = attempt.run();
                 if (selection.reservation() != null) {
@@ -199,7 +334,7 @@ public class AiRequestQueueService {
                 job.setStatus(AiRequestStatus.COMPLETED);
                 job.setCompletedAt(Instant.now());
                 jobRepository.save(job);
-                return new AiRequestOutcome<>(job.getId(), value, selection);
+                return AiRequestOutcome.fresh(job.getId(), value, selection, null);
             } catch (TimeoutException te) {
                 lastError = te;
             } catch (Exception e) {
