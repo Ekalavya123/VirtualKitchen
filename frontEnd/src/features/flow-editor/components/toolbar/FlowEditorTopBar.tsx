@@ -1,4 +1,5 @@
 import React from 'react'
+import AiCreditBadge from './AiCreditBadge'
 import '../../styles/flow-editor.css'
 
 type FlowEditorTopBarProps = {
@@ -17,6 +18,8 @@ type FlowEditorTopBarProps = {
   onBack?: () => void
   nodeZoomPercent: number
   onNodeZoomChange: (percent: number) => void
+  /** Bump this after an AI generation completes so the credit badge refetches its balance. */
+  aiCreditsRefreshSignal?: number
 }
 
 export default function FlowEditorTopBar({
@@ -35,6 +38,7 @@ export default function FlowEditorTopBar({
   onBack,
   nodeZoomPercent,
   onNodeZoomChange,
+  aiCreditsRefreshSignal,
 }: FlowEditorTopBarProps) {
   const btnStyle = (extra: React.CSSProperties = {}): React.CSSProperties => ({
     padding: '8px 12px', borderRadius: 8, border: '1px solid var(--flow-border)',
@@ -64,6 +68,7 @@ export default function FlowEditorTopBar({
       </div>
 
       <div className="flex items-center gap-2">
+        <AiCreditBadge refreshSignal={aiCreditsRefreshSignal} />
         <div
           className="flex items-center gap-1 rounded-lg border border-[var(--flow-border)] bg-[var(--flow-surface)] px-1 py-1"
           title="Uniform node size — zooms every node on the canvas together"

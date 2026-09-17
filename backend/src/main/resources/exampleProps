@@ -61,3 +61,24 @@ ai.drawthings.endpoint=/sdapi/v1/txt2img
 ai.drawthings.width=512
 ai.drawthings.height=512
 ai.drawthings.timeoutMs=300000
+
+# AI artifact store — keeps a paid AI payload durable between the provider call that produced it
+# and the dependent work that consumes it (e.g. the image upload), so a failure in that work never
+# costs a second generation. See AI_ARTIFACT_STORE_DESIGN.md.
+ai.artifact.enabled=${AI_ARTIFACT_ENABLED:true}
+ai.artifact.max-inline-bytes=${AI_ARTIFACT_MAX_INLINE_BYTES:16000}
+ai.artifact.lease-ttl-ms=${AI_ARTIFACT_LEASE_TTL_MS:120000}
+ai.artifact.consumed-retention=${AI_ARTIFACT_CONSUMED_RETENTION:7d}
+ai.artifact.abandoned-retention=${AI_ARTIFACT_ABANDONED_RETENTION:30d}
+ai.artifact.sweeper.enabled=${AI_ARTIFACT_SWEEPER_ENABLED:true}
+ai.artifact.sweeper.fixed-delay-ms=${AI_ARTIFACT_SWEEPER_FIXED_DELAY_MS:300000}
+ai.artifact.sweeper.initial-delay-ms=${AI_ARTIFACT_SWEEPER_INITIAL_DELAY_MS:60000}
+ai.artifact.sweeper.orphan-age-ms=${AI_ARTIFACT_SWEEPER_ORPHAN_AGE_MS:120000}
+ai.artifact.sweeper.batch-size=${AI_ARTIFACT_SWEEPER_BATCH_SIZE:25}
+ai.artifact.sweeper.max-recovery-attempts=${AI_ARTIFACT_SWEEPER_MAX_RECOVERY_ATTEMPTS:3}
+
+# GridFS bucket backing artifact binary payloads (collections ai_artifacts.files / .chunks).
+spring.data.mongodb.gridfs.bucket=${MONGODB_GRIDFS_BUCKET:ai_artifacts}
+
+# Thread pool for the scheduled jobs (credit cycle reset, AI artifact recovery).
+spring.task.scheduling.pool.size=${SCHEDULING_POOL_SIZE:2}

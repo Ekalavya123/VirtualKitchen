@@ -26,6 +26,9 @@ public class VisualizationJob {
     @Indexed
     private String recipeId;
 
+    @Indexed
+    private Long userId;
+
     private VisualizationJobStatus status;
 
     private int totalSteps;
@@ -56,5 +59,8 @@ public class VisualizationJob {
         private Long visualizationAssetId;
         private String imageUrl;
         private String errorMessage;
+        private String modelKey;
+        private String tier;
+        private boolean usedFallback;
     }
 }

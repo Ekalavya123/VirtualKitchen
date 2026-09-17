@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react'
 import './NotificationProvider.css'
 
-type NotificationType = 'success' | 'error'
+type NotificationType = 'success' | 'error' | 'info'
 
 type NotificationItem = {
   id: number
@@ -12,6 +12,8 @@ type NotificationItem = {
 type NotificationContextValue = {
   notifySuccess: (message: string) => void
   notifyError: (message: string) => void
+  /** For neutral/informational notices — e.g. "using the standard model, premium credits are exhausted" — that are neither a success nor an error. */
+  notifyInfo: (message: string) => void
 }
 
 const AUTO_DISMISS_MS = 4000
@@ -35,9 +37,10 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
   const notifySuccess = useCallback((message: string) => notify(message, 'success'), [notify])
   const notifyError = useCallback((message: string) => notify(message, 'error'), [notify])
+  const notifyInfo = useCallback((message: string) => notify(message, 'info'), [notify])
 
   return (
-    <NotificationContext.Provider value={{ notifySuccess, notifyError }}>
+    <NotificationContext.Provider value={{ notifySuccess, notifyError, notifyInfo }}>
       {children}
 
       <div className="notification-container" role="status" aria-live="polite">
@@ -47,7 +50,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
             className={`notification-toast notification-toast-${item.type}`}
           >
             <span className="notification-toast-icon" aria-hidden="true">
-              {item.type === 'success' ? '✅' : '⚠️'}
+              {item.type === 'success' ? '✅' : item.type === 'error' ? '⚠️' : 'ℹ️'}
             </span>
 
             <span className="notification-toast-message">{item.message}</span>

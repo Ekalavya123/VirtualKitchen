@@ -61,6 +61,9 @@ export const API = {
 
   recipeGeneration: {
     generateFlow: '/api/recipe/generate-flow',
+    // Async job variant: start returns immediately (QUEUED), poll jobStatus for progress/results.
+    startJob: '/api/recipe/generate-flow/jobs',
+    jobStatus: (jobId: string) => `/api/recipe/generate-flow/jobs/${jobId}`,
   },
 
   // Flows
@@ -78,5 +81,15 @@ export const API = {
     generate: (recipeId: number | string) => `/api/recipes/${String(recipeId)}/visualization/generate`,
     generateStep: (recipeId: number | string, stepId: string) =>
       `/api/recipes/${String(recipeId)}/visualization/steps/${stepId}/generate`,
+    // Async job variant: start returns immediately (QUEUED), poll jobStatus for progress/results.
+    startJob: (recipeId: number | string) => `/api/recipes/${String(recipeId)}/visualization/jobs`,
+    jobStatus: (jobId: string) => `/api/recipes/visualization/jobs/${jobId}`,
+  },
+
+  // AI model management / credits
+  ai: {
+    models: '/api/v1/ai/models',
+    myCredits: '/api/v1/users/me/ai-credits',
+    myCreditHistory: '/api/v1/users/me/ai-credits/history',
   },
 }

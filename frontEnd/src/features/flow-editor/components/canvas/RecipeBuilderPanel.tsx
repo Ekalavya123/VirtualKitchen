@@ -3,6 +3,7 @@ import { useState } from 'react'
 type RecipeBuilderPanelProps = {
   collapsed: boolean
   isGenerating: boolean
+  progress?: { percent: number; stageLabel: string } | null
   onToggleCollapsed: () => void
   onGenerate: (recipeText: string) => Promise<void>
 }
@@ -19,6 +20,7 @@ Cook for twenty minutes.`
 export default function RecipeBuilderPanel({
   collapsed,
   isGenerating,
+  progress = null,
   onToggleCollapsed,
   onGenerate,
 }: RecipeBuilderPanelProps) {
@@ -125,7 +127,7 @@ export default function RecipeBuilderPanel({
             {isGenerating ? (
               <>
                 <span className="recipe-builder-spinner" aria-hidden="true" />
-                Generating flow...
+                {progress ? progress.stageLabel : 'Generating flow...'}
               </>
             ) : (
               'Generate Flow'
@@ -152,6 +154,25 @@ export default function RecipeBuilderPanel({
             </button>
           )}
         </div>
+
+        {isGenerating && progress && (
+          <div
+            className="recipe-builder-progress"
+            role="progressbar"
+            aria-valuenow={progress.percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            title={progress.stageLabel}
+          >
+            <div className="recipe-builder-progress-track">
+              <div
+                className="recipe-builder-progress-fill"
+                style={{ width: `${progress.percent}%` }}
+              />
+            </div>
+            <span className="recipe-builder-progress-label">{progress.percent}%</span>
+          </div>
+        )}
       </div>
     </aside>
   )

@@ -12,7 +12,6 @@ import com.processVisualisation.virtualKitchen.restclient.exception.AICommunicat
 import com.processVisualisation.virtualKitchen.restclient.exception.AIInvalidResponseException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AITimeoutException;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -31,11 +30,11 @@ import java.util.concurrent.TimeUnit;
 /**
  * {@link AIClient} implementation that talks to OpenAI's chat completion
  * API. Used by the Virtual Kitchen application as a text-generation
- * provider. Active when the {@code ai.provider} property is set to
- * {@code openai}.
+ * provider. Registered under the bean name {@code openAiAiClient} so it can
+ * be selected per-request by the AI model routing layer alongside every
+ * other provider bean.
  */
-@ConditionalOnProperty(prefix = "ai", name = "provider", havingValue = "openai")
-@Component
+@Component("openAiAiClient")
 public class OpenAIClient implements AIClient {
 
     private final RestClient restClient;

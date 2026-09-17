@@ -17,4 +17,11 @@ public class RecipeFlowGenerationRequestDTO {
 
     @NotBlank(message = "recipe is required")
     private String recipe;
+
+    /**
+     * Optional client-generated id (e.g. a UUID) used as the AI request's
+     * idempotency key, so an accidental double-submit of the same generation
+     * click never reserves/charges credits twice. Safe to omit.
+     */
+    private String clientRequestId;
 }

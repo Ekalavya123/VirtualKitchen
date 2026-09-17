@@ -12,7 +12,6 @@ import com.processVisualisation.virtualKitchen.restclient.exception.AICommunicat
 import com.processVisualisation.virtualKitchen.restclient.exception.AIInvalidResponseException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AITimeoutException;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
@@ -35,8 +34,7 @@ import java.util.concurrent.TimeUnit;
  * content from prompts. Active when the {@code ai.provider} property is
  * unset or set to {@code gemini}, and is the primary {@link AIClient} bean.
  */
-@ConditionalOnProperty(prefix = "ai", name = "provider", havingValue = "gemini", matchIfMissing = true)
-@Component
+@Component("geminiAiClient")
 @Primary
 public class GeminiClient implements AIClient {
 

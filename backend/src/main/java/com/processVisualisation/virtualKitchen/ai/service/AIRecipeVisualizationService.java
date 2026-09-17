@@ -2,9 +2,18 @@ package com.processVisualisation.virtualKitchen.ai.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifact;
+import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactKeyBuilder;
+import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactService;
+import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactSpec;
+import com.processVisualisation.virtualKitchen.ai.artifact.codec.GeneratedImageCodec;
+import com.processVisualisation.virtualKitchen.ai.dispatch.AiClientResolver;
+import com.processVisualisation.virtualKitchen.ai.queue.AiRequestOutcome;
+import com.processVisualisation.virtualKitchen.ai.queue.AiRequestQueueService;
+import com.processVisualisation.virtualKitchen.ai.registry.AiCapability;
+import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionOutcome;
 import com.processVisualisation.virtualKitchen.restclient.client.AIClient;
 import com.processVisualisation.virtualKitchen.restclient.client.ImageGenerationClient;
-import com.processVisualisation.virtualKitchen.restclient.client.ImageStorageClient;
 import com.processVisualisation.virtualKitchen.restclient.dto.AIRequest;
 import com.processVisualisation.virtualKitchen.restclient.dto.AIResponse;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeVisualizationResponseDTO;
@@ -45,28 +54,34 @@ public class AIRecipeVisualizationService {
     private final RecipeRepository recipeRepository;
     private final AIVisualizationAssetRepository AIVisualizationAssetRepository;
     private final SequenceGeneratorService sequenceGeneratorService;
-    private final ImageStorageClient imageStorageClient;
-    private final AIClient aiClient;
-    private final ImageGenerationClient imageGenerationClient;
+    private final AiRequestQueueService queueService;
+    private final AiClientResolver clientResolver;
     private final AIVisualizationPromptBuilder promptBuilder;
+    private final AiArtifactService artifactService;
+    private final GeneratedImageCodec generatedImageCodec;
+    private final VisualizationImageArtifactConsumer imageArtifactConsumer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AIRecipeVisualizationService(
             RecipeRepository recipeRepository,
             AIVisualizationAssetRepository AIVisualizationAssetRepository,
             SequenceGeneratorService sequenceGeneratorService,
-            AIClient aiClient,
-            ImageGenerationClient imageGenerationClient,
-            ImageStorageClient imageStorageClient,
-            AIVisualizationPromptBuilder promptBuilder
+            AiRequestQueueService queueService,
+            AiClientResolver clientResolver,
+            AIVisualizationPromptBuilder promptBuilder,
+            AiArtifactService artifactService,
+            GeneratedImageCodec generatedImageCodec,
+            VisualizationImageArtifactConsumer imageArtifactConsumer
     ) {
         this.recipeRepository = recipeRepository;
         this.AIVisualizationAssetRepository = AIVisualizationAssetRepository;
         this.sequenceGeneratorService = sequenceGeneratorService;
-        this.aiClient = aiClient;
-        this.imageGenerationClient = imageGenerationClient;
-        this.imageStorageClient = imageStorageClient;
+        this.queueService = queueService;
+        this.clientResolver = clientResolver;
         this.promptBuilder = promptBuilder;
+        this.artifactService = artifactService;
+        this.generatedImageCodec = generatedImageCodec;
+        this.imageArtifactConsumer = imageArtifactConsumer;
     }
 
     /**
@@ -74,11 +89,12 @@ public class AIRecipeVisualizationService {
      * recipe step of the given flow, in execution order, and persists the
      * updated flow with the assets attached.
      *
+     * @param userId the id of the user this generation's credit charges belong to
      * @param recipeId identifier of the recipe flow to visualize
      * @return the visualization response with one result per step, or a
      *         message-only response with an empty step list if the flow is not found
      */
-    public RecipeVisualizationResponseDTO generateVisualization(String recipeId) {
+    public RecipeVisualizationResponseDTO generateVisualization(Long userId, String recipeId) {
         Optional<Recipe> flowOpt = recipeRepository.findByFlowId(recipeId);
         if (flowOpt.isEmpty()) {
             return RecipeVisualizationResponseDTO.builder()
@@ -98,7 +114,7 @@ public class AIRecipeVisualizationService {
             Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
             Map<String, Object> stepFields = extractStepFields(data);
 
-            results.add(processStep(node, data, stepFields, previousStepFields));
+            results.add(processStep(userId, recipeId, node, data, stepFields, previousStepFields));
 
             previousStepFields = stepFields;
         }
@@ -116,13 +132,14 @@ public class AIRecipeVisualizationService {
      * Generate (or reuse) the visualization asset for a single recipe step, so the caller can
      * request steps one at a time and reflect progress in the UI as each one completes.
      *
+     * @param userId the id of the user this generation's credit charges belong to
      * @param recipeId identifier of the recipe flow containing the step
      * @param stepId identifier of the specific step node to visualize
      * @return the visualization result for the requested step
      * @throws RecipeFlowGenerationException if the recipe flow or the step id
      *         cannot be found within it
      */
-    public RecipeVisualizationStepResponseDTO generateVisualizationForStep(String recipeId, String stepId) {
+    public RecipeVisualizationStepResponseDTO generateVisualizationForStep(Long userId, String recipeId, String stepId) {
         Recipe flow = recipeRepository.findByFlowId(recipeId)
                 .orElseThrow(() -> new RecipeFlowGenerationException("Recipe flow not found for recipeId: " + recipeId));
 
@@ -150,7 +167,7 @@ public class AIRecipeVisualizationService {
             previousStepFields = extractStepFields(previousData);
         }
 
-        RecipeVisualizationStepResponseDTO result = processStep(node, data, stepFields, previousStepFields);
+        RecipeVisualizationStepResponseDTO result = processStep(userId, recipeId, node, data, stepFields, previousStepFields);
 
         recipeRepository.save(flow);
 
@@ -158,12 +175,14 @@ public class AIRecipeVisualizationService {
     }
 
     private RecipeVisualizationStepResponseDTO processStep(
+            Long userId,
+            String recipeId,
             Recipe.NodeDocument node,
             Map<String, Object> data,
             Map<String, Object> stepFields,
             Map<String, Object> previousStepFields
     ) {
-        VisualizationAsset asset = resolveVisualizationAsset(data, stepFields, previousStepFields);
+        VisualizationAsset asset = resolveVisualizationAsset(userId, recipeId, node.getId(), stepFields, previousStepFields);
 
         attachAssetToNode(node, data, asset);
 
@@ -172,6 +191,9 @@ public class AIRecipeVisualizationService {
                 .visualizationAssetId(asset.getId())
                 .imagePrompt(asset.getImagePrompt())
                 .imageUrl(asset.getImageUrl())
+                .modelKey(asset.getResolvedModelKey())
+                .modelTier(asset.getResolvedTier())
+                .usedFallback(asset.isUsedFallback())
                 .build();
     }
 
@@ -180,30 +202,40 @@ public class AIRecipeVisualizationService {
      * Touches only the {@code VisualizationAsset} collection and the AI/image/storage clients —
      * never the shared {@link Recipe} flow document — so it is safe to run concurrently across
      * steps of the same recipe as a {@link com.processVisualisation.virtualKitchen.common.concurrent.Task}.
+     * <p>
+     * The cache/dedup key is scoped to exactly this step of exactly this recipe
+     * ({@code recipeId::stepId} via {@link VisualizationKeyBuilder}) — two steps never share an
+     * asset, even if their content looks identical or is sparse/blank. Re-visualizing the same
+     * step of the same recipe is the only case that reuses an existing asset.
      *
-     * @param data the step node's raw data map (used to derive the dedup/cache key)
+     * @param userId the id of the user this generation's credit charges belong to
+     * @param recipeId the recipe flow's id
+     * @param stepId the step node's id within that recipe
      * @param stepFields the current step's extracted fields used for prompt generation
      * @param previousStepFields the preceding step's extracted fields, or {@code null} if none
      * @return the resolved (existing or newly generated) visualization asset
      */
     public VisualizationAsset resolveVisualizationAsset(
-            Map<String, Object> data,
+            Long userId,
+            String recipeId,
+            String stepId,
             Map<String, Object> stepFields,
             Map<String, Object> previousStepFields
     ) {
-        String visualizationKey = VisualizationKeyBuilder.buildFromNodeData(data);
+        String visualizationKey = VisualizationKeyBuilder.build(recipeId, stepId);
         Optional<VisualizationAsset> existingAsset = AIVisualizationAssetRepository.findByVisualizationKey(visualizationKey);
         VisualizationAsset asset;
         if (existingAsset.isPresent()) {
             asset = existingAsset.get();
             if (asset.getImagePrompt() == null || asset.getImagePrompt().isEmpty()) {
-                asset = generatePrompt(visualizationKey, stepFields, previousStepFields);
+                asset = generatePrompt(userId, visualizationKey, stepFields, previousStepFields);
             }
+            requirePrompted(asset, visualizationKey);
             if (asset.getImageUrl() == null || asset.getImageUrl().isEmpty()) {
-                asset = generateImage(asset);
+                asset = generateImage(userId, asset);
             }
         } else {
-            asset = createAsset(visualizationKey, stepFields, previousStepFields);
+            asset = createAsset(userId, visualizationKey, stepFields, previousStepFields);
         }
         return asset;
     }
@@ -279,19 +311,32 @@ public class AIRecipeVisualizationService {
     public record RecipeStepPreparation(Recipe flow, List<StepContext> steps) {
     }
 
-    private VisualizationAsset generatePrompt(String visualizationKey, Map<String, Object> currentStep, Map<String, Object> previousStep) {
-        AIRequest request = AIRequest.builder()
-                .systemPrompt(promptBuilder.buildSystemPrompt())
-                .userPrompt(promptBuilder.buildUserPrompt(currentStep, previousStep))
-                .temperature(0.4d)
-                .maxTokens(5000)
-                .build();
-
+    private VisualizationAsset generatePrompt(Long userId, String visualizationKey, Map<String, Object> currentStep, Map<String, Object> previousStep) {
         logger.info("generating prompt");
         try {
-            logger.info("AI Request: {}", objectMapper.writeValueAsString(request));
-            AIResponse response = aiClient.chat(request);
-            PromptPair prompts = parsePrompts(response == null ? null : response.getContent());
+            AiRequestOutcome<PromptPair> outcome = queueService.executeInline(
+                    userId,
+                    AiCapability.TEXT_TO_TEXT,
+                    null,
+                    null,
+                    "visualization-prompt",
+                    visualizationKey,
+                    selection -> {
+                        AIClient client = clientResolver.resolveTextClient(selection.model());
+                        AIRequest request = AIRequest.builder()
+                                .model(selection.model().getProviderModelId())
+                                .systemPrompt(promptBuilder.buildSystemPrompt())
+                                .userPrompt(promptBuilder.buildUserPrompt(currentStep, previousStep))
+                                .temperature(0.4d)
+                                .maxTokens(5000)
+                                .build();
+                        logger.info("AI Request: {}", objectMapper.writeValueAsString(request));
+                        AIResponse response = client.chat(request);
+                        return parsePrompts(response == null ? null : response.getContent());
+                    }
+            );
+
+            PromptPair prompts = outcome.value();
             VisualizationAsset asset = new VisualizationAsset();
             asset.setId(sequenceGeneratorService.generateSequence(VisualizationAsset.SEQUENCE_NAME));
             asset.setVisualizationKey(visualizationKey);
@@ -301,45 +346,149 @@ public class AIRecipeVisualizationService {
             asset.setVideoUrl(null);
             return AIVisualizationAssetRepository.save(asset);
         } catch (Exception e) {
-            logger.error("Failed to serialize AIRequest", e);
+            logger.error("Failed to generate visualization prompt", e);
         }
         return null;
     }
 
-    private VisualizationAsset generateImage(VisualizationAsset asset) {
+    /**
+     * Generates this step's image and places it in object storage, in two separable stages so a
+     * storage failure cannot destroy a paid generation.
+     * <p>
+     * The provider's bytes are persisted as an {@code AiArtifact} <em>before</em> the upload runs
+     * (inside {@code executeInline}), and the artifact is only retired once the upload has
+     * succeeded. If the upload throws, the artifact stays {@code PENDING} with its payload intact
+     * and no expiry, so the next attempt — the next request for this step, or
+     * {@code AiArtifactRecoveryJob} — uploads the image that was already paid for instead of
+     * generating a new one. The artifact lookup also means a retry after a failure here makes no
+     * provider call and spends no credits.
+     * <p>
+     * Exceptions are still absorbed rather than propagated: {@code VisualizationJobService}
+     * distinguishes a failed step by a null {@code imageUrl}, not by a thrown exception. What is
+     * new is that the real cause is recorded on the asset instead of being reduced to a log line.
+     *
+     * @param userId the id of the user this generation's credit charges belong to
+     * @param asset the asset whose {@code imagePrompt} should be rendered
+     * @return the saved asset, with either an image URL or a failure reason
+     */
+    private VisualizationAsset generateImage(Long userId, VisualizationAsset asset) {
         String visualizationKey = asset.getVisualizationKey();
         try {
             logger.info("Generating image for visualizationKey: {}, prompt: {}", visualizationKey, asset.getImagePrompt());
-            ImageGenerationClient.GeneratedImage generatedImage =
-                    imageGenerationClient.generate(asset.getImagePrompt());
 
-            String imagePath = String.format(
-                    "visualizations/%s/%s/%s.png",
+            AiArtifactSpec<ImageGenerationClient.GeneratedImage> artifactSpec = AiArtifactSpec.of(
+                    AiArtifactKeyBuilder.build(
+                            AiCapability.TEXT_TO_IMAGE,
+                            "visualization-image",
+                            visualizationKey,
+                            asset.getImagePrompt()),
+                    generatedImageCodec,
+                    VisualizationImageArtifactConsumer.CONSUMER_ID
+            );
+
+            AiRequestOutcome<ImageGenerationClient.GeneratedImage> outcome = queueService.executeInline(
+                    userId,
+                    AiCapability.TEXT_TO_IMAGE,
+                    null,
+                    null,
+                    "visualization-image",
                     visualizationKey,
-                    asset.getId(),
-                    UUID.randomUUID()
+                    artifactSpec,
+                    selection -> clientResolver.resolveImageClient(selection.model()).generate(asset.getImagePrompt())
             );
 
-            String imageUrl = imageStorageClient.upload(
-                    generatedImage.data(),
-                    generatedImage.mimeType(),
-                    imagePath
-            );
+            // The payload is durable from here on, whether it was just generated or reused.
+            AiArtifact artifact = artifactOrTransient(outcome, visualizationKey);
+            String imageUrl = imageArtifactConsumer.consume(artifact, outcome.value());
+            artifactService.markConsumed(artifact.getId());
 
+            ModelSelectionOutcome selection = outcome.selection();
             asset.setImageUrl(imageUrl);
-            logger.info("Successfully generated and uploaded image for visualizationKey: {}, prompt: {}", visualizationKey, asset.getImagePrompt());
+            asset.setImageFailureReason(null);
+            asset.setResolvedModelKey(selection.model().getKey());
+            asset.setResolvedTier(selection.model().getTier());
+            asset.setUsedFallback(selection.usedFallback());
+            logger.info("Successfully generated and uploaded image for visualizationKey: {}, prompt: {} (reused={})",
+                    visualizationKey, asset.getImagePrompt(), outcome.reused());
         } catch (Exception e) {
             asset.setImageUrl(null);
-            logger.error("Failed to generate or upload image for visualizationKey: {}, prompt: {}", visualizationKey, asset.getImagePrompt(), e);
+            asset.setImageFailureReason(describeFailure(e));
+            logger.error("Failed to generate or upload image for visualizationKey: {}, prompt: {} "
+                            + "(any generated payload is retained for recovery)",
+                    visualizationKey, asset.getImagePrompt(), e);
         }
         asset.setVideoUrl(null);
         return AIVisualizationAssetRepository.save(asset);
     }
 
-    private VisualizationAsset createAsset(String visualizationKey, Map<String, Object> currentStep, Map<String, Object> previousStep) {
-        VisualizationAsset asset = generatePrompt(visualizationKey, currentStep, previousStep);
-        asset = generateImage(asset);
+    private VisualizationAsset createAsset(Long userId, String visualizationKey, Map<String, Object> currentStep, Map<String, Object> previousStep) {
+        VisualizationAsset asset = generatePrompt(userId, visualizationKey, currentStep, previousStep);
+        requirePrompted(asset, visualizationKey);
+        asset = generateImage(userId, asset);
         return AIVisualizationAssetRepository.save(asset);
+    }
+
+    /**
+     * Supplies the artifact the image consumer works against.
+     * <p>
+     * Staging is best-effort — {@code AiRequestQueueService} logs and swallows a staging failure
+     * rather than failing an otherwise-successful paid call — so the artifact can legitimately be
+     * absent. In that case this builds a detached stand-in carrying the same correlation and
+     * model metadata, so the upload still happens and simply is not recoverable afterwards. Its
+     * null id makes the subsequent {@code markConsumed} a no-op.
+     *
+     * @param outcome the completed AI request
+     * @param visualizationKey the step key, which doubles as the artifact's correlation id
+     * @return the persisted artifact, or a detached stand-in if staging did not happen
+     */
+    private AiArtifact artifactOrTransient(
+            AiRequestOutcome<ImageGenerationClient.GeneratedImage> outcome, String visualizationKey) {
+        if (outcome.artifact() != null) {
+            return outcome.artifact();
+        }
+        ModelSelectionOutcome selection = outcome.selection();
+        AiArtifact transientArtifact = new AiArtifact();
+        transientArtifact.setCorrelationId(visualizationKey);
+        transientArtifact.setCorrelationType("visualization-image");
+        transientArtifact.setCapability(AiCapability.TEXT_TO_IMAGE);
+        transientArtifact.setProducedByModelKey(selection.model().getKey());
+        transientArtifact.setProducedByTier(selection.model().getTier());
+        transientArtifact.setUsedFallback(selection.usedFallback());
+        return transientArtifact;
+    }
+
+    /**
+     * Renders an exception as the short, human-readable reason stored on
+     * {@link VisualizationAsset#getImageFailureReason()} and surfaced in the job's step results.
+     * Keeps the exception type, since that is what distinguishes a provider failure
+     * ({@code AICommunicationException}) from a storage failure and from a malformed response.
+     *
+     * @param e the failure to describe
+     * @return the exception's simple name, with its message appended when it has one
+     */
+    private String describeFailure(Exception e) {
+        String message = e.getMessage();
+        return StringUtils.hasText(message)
+                ? e.getClass().getSimpleName() + ": " + message
+                : e.getClass().getSimpleName();
+    }
+
+    /**
+     * Guards the one case where {@link #generatePrompt} returns {@code null} — it absorbs every
+     * exception and yields null on failure. Callers previously dereferenced that null immediately,
+     * so a prompt-model outage surfaced as a bare {@code NullPointerException} in the step result.
+     * Failing with a typed exception instead lets the async job record the real reason per step and
+     * lets the synchronous endpoint map it through {@code GlobalExceptionHandler}.
+     *
+     * @param asset the asset returned by {@link #generatePrompt}, possibly null
+     * @param visualizationKey the step key being resolved, for the error message
+     * @throws RecipeFlowGenerationException if no prompt could be generated for the step
+     */
+    private void requirePrompted(VisualizationAsset asset, String visualizationKey) {
+        if (asset == null) {
+            throw new RecipeFlowGenerationException(
+                    "Could not generate a visualization prompt for step: " + visualizationKey);
+        }
     }
 
     private PromptPair parsePrompts(String content) {

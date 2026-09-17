@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.model;
 
+import com.processVisualisation.virtualKitchen.ai.registry.ModelTier;
 import lombok.Data;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -32,9 +33,24 @@ public class VisualizationAsset {
 
     private String imageUrl;
 
+    /**
+     * Why {@link #imageUrl} is null, when it is — the generation or upload failure's
+     * real cause, rather than the generic "image generation failed" the job layer used
+     * to infer from a null URL alone. Null whenever {@link #imageUrl} is populated.
+     */
+    private String imageFailureReason;
+
     private String videoPrompt;
 
     private String videoUrl;
+
+    /** Registry key of the model that produced {@link #imageUrl} (the image-generation call, not the prompt-authoring one). */
+    private String resolvedModelKey;
+
+    private ModelTier resolvedTier;
+
+    /** Whether {@link #resolvedModelKey} was a fallback because premium credits were exhausted. */
+    private boolean usedFallback;
 
     @CreatedDate
     private LocalDateTime createdAt;
