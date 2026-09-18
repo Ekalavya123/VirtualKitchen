@@ -6,6 +6,7 @@ import {
   resolveCatalogId,
   resolveCatalogInput,
 } from './catalogSelectionUtils'
+import type { UnitType } from '../../../types/process'
 
 export const INGREDIENT_CATEGORY_ORDER = [
   'Liquid',
@@ -71,8 +72,13 @@ export const INGREDIENTS_BY_CATEGORY: Readonly<Record<IngredientCategory, readon
 export const isIngredientId = (value: unknown): value is IngredientId =>
   typeof value === 'string' && ingredientById.has(value as IngredientId)
 
+// Falls back instead of crashing when `id` doesn't resolve (e.g. data saved under an older
+// ingredient catalog, or before the catalog had this entry) — this is looked up during render
+// (canvas node labels, the Action On panel), so a missing entry must never throw.
+const UNKNOWN_INGREDIENT: IngredientDefinition = { id: CUSTOM_INGREDIENT_ID, name: 'Unknown ingredient', category: 'Other', icon: '❓', defaultUnit: '' }
+
 export const getIngredientById = (id: IngredientId): IngredientDefinition =>
-  ingredientById.get(id) as IngredientDefinition
+  ingredientById.get(id) ?? UNKNOWN_INGREDIENT
 
 export const resolveIngredientId = (value: unknown): IngredientId | '' =>
   resolveCatalogId(ingredientAliasLookup, value)
@@ -99,3 +105,20 @@ export const getIngredientDefaultUnit = (ingredientId: IngredientId | '') => {
 
 export const getIngredientSearchValue = (ingredientId: IngredientId | '', customIngredientName = '') =>
   getIngredientDisplayName(ingredientId, customIngredientName)
+
+// Maps the catalog's raw defaultUnit (an old-model UnitId string like "piece"/"ml"/"g") to the
+// Process model's fixed UnitType enum, for defaulting a newly-added Action On ingredient's unit.
+// Not every raw unit has a Process-model equivalent (e.g. "tsp"/"tbsp"/"cup"/"pinch") — callers
+// should fall back to the existing default unit behavior (COUNT) when this returns null.
+const RAW_UNIT_TO_PROCESS_UNIT_TYPE: Partial<Record<string, UnitType>> = {
+  ml: 'ML',
+  l: 'LITER',
+  g: 'GRAM',
+  kg: 'KG',
+  piece: 'COUNT',
+}
+
+export const getIngredientDefaultUnitType = (ingredientId: IngredientId | ''): UnitType | null => {
+  if (!ingredientId || ingredientId === CUSTOM_INGREDIENT_ID) return null
+  return RAW_UNIT_TO_PROCESS_UNIT_TYPE[getIngredientById(ingredientId).defaultUnit] ?? null
+}

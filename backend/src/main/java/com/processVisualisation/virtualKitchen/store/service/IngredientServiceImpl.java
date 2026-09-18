@@ -99,6 +99,7 @@ public class IngredientServiceImpl implements IIngredientService {
         ingredient.setName(request.getName());
         ingredient.setDescription(request.getDescription());
         ingredient.setDefaultUnit(request.getDefaultUnit());
+        ingredient.setImageUrl(request.getImageUrl());
 
         Ingredient updated = ingredientRepository.save(ingredient);
         return ingredientMapper.toDTO(updated);

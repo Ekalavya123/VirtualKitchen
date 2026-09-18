@@ -19,4 +19,6 @@ public class IngredientUpdateDTO {
 
     @NotNull
     private UnitType defaultUnit;
+
+    private String imageUrl;
 }

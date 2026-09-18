@@ -95,8 +95,21 @@ export const ACTIONS_BY_CATEGORY: Readonly<Record<ActionCategory, readonly StepA
 export const isStepActionId = (value: unknown): value is StepActionId =>
   typeof value === 'string' && catalogById.has(value as StepActionId)
 
+// Falls back instead of crashing when `id` doesn't resolve (e.g. an action removed/renamed in
+// stepCatalogs.data.json since a process was saved) — this is looked up during render (canvas node
+// theming/labels, the Step Properties panel), so it must never throw.
+const UNKNOWN_ACTION: StepActionDefinition = {
+  id: CUSTOM_ACTION_ID,
+  displayName: 'Unknown Action',
+  icon: '❓',
+  category: 'Custom',
+  fields: [],
+  amountLabel: DEFAULT_AMOUNT_LABEL,
+  unitLabel: DEFAULT_UNIT_LABEL,
+}
+
 export const getStepActionById = (id: StepActionId): StepActionDefinition =>
-  catalogById.get(id) as StepActionDefinition
+  catalogById.get(id) ?? UNKNOWN_ACTION
 
 export const resolveStepActionId = (value: unknown): StepActionId | '' =>
   resolveCatalogId(actionAliasLookup, value)
