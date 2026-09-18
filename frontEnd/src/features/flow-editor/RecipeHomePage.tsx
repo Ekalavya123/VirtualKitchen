@@ -10,6 +10,8 @@ type RecipeHomePageProps = {
   userId: number
   onCreateRecipe?: (recipeId: number, title: string) => void
   onOpenRecipies?: (recipeId: number, title: string) => void
+  /** Opens the new Recipe Tool (summary/ingredients/nutrition/process) for a recipe — coexists with onCreateRecipe/onOpenRecipies, which still open the legacy flow editor. */
+  onOpenRecipeTool?: (recipeId: number) => void
 }
 
 type RecipeCardProps = {
@@ -20,6 +22,7 @@ type RecipeCardProps = {
   onDelete?: () => void
   onToggleVisibility?: () => void
   onAddToMyRecipes?: () => void
+  onOpenRecipeTool?: () => void
 }
 
 function RecipeCard({
@@ -30,6 +33,7 @@ function RecipeCard({
   onDelete,
   onToggleVisibility,
   onAddToMyRecipes,
+  onOpenRecipeTool,
 }: RecipeCardProps) {
   return (
     <article className={`recipe-card group${highlighted ? ' recipe-card-highlighted' : ''}`}>
@@ -70,13 +74,25 @@ function RecipeCard({
       </button>
 
       <div className="recipe-card-footer">
-        <button
-          onClick={onOpen}
-          className="recipe-card-open-button"
-        >
-          {variant === 'mine' ? 'Open recipe' : 'View recipe'}
-          <span aria-hidden="true">→</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onOpen}
+            className="recipe-card-open-button"
+          >
+            {variant === 'mine' ? 'Open recipe' : 'View recipe'}
+            <span aria-hidden="true">→</span>
+          </button>
+
+          {onOpenRecipeTool && (
+            <button
+              onClick={onOpenRecipeTool}
+              title="Open the Recipe Tool (ingredients, nutrition, process)"
+              className="recipe-card-open-button"
+            >
+              🧰 Recipe Tool
+            </button>
+          )}
+        </div>
 
         {variant === 'mine' ? (
           <div className="flex items-center gap-2">
@@ -527,6 +543,7 @@ export default function RecipeHomePage({
   userId,
   onCreateRecipe,
   onOpenRecipies,
+  onOpenRecipeTool,
 }: RecipeHomePageProps) {
   const handleOpenRecipe =
     onCreateRecipe || onOpenRecipies
@@ -875,6 +892,11 @@ export default function RecipeHomePage({
                 }
                 onAddToMyRecipes={() =>
                   void handleAddToMyRecipes(recipe)
+                }
+                onOpenRecipeTool={
+                  onOpenRecipeTool
+                    ? () => onOpenRecipeTool(recipe.id)
+                    : undefined
                 }
               />
             ))}

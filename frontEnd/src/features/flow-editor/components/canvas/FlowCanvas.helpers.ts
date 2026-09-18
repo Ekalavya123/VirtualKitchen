@@ -26,6 +26,21 @@ import {
   convertRecipeExecutionModelToFlowData,
   normalizeRecipeExecutionModel,
 } from './RecipeExecutionGraphConverter.ts'
+import { getIngredientDefaultUnit } from '../../catalog/ingredientCatalog'
+import { pruneStepFieldsByActionSchema } from '../../catalog/actionSchemaCatalog'
+import { buildDurationLabel, buildRepeatIntervalLabel } from '../../catalog/stepFieldCatalog'
+import { getActionDisplayName, resolveStepActionId } from '../../catalog/actionCatalog'
+import { CUSTOM_UNIT_ID, getUnitDisplayValue, resolveUnitId } from '../../catalog/unitCatalog'
+import {
+  CUSTOM_PREPARATION_STYLE_ID,
+  getPreparationStyleDisplayName,
+  resolvePreparationStyleId,
+} from '../../catalog/preparationStyleCatalog'
+import {
+  CUSTOM_FLAME_LEVEL_ID,
+  getFlameLevelDisplayName,
+  resolveFlameLevelId,
+} from '../../catalog/flameLevelCatalog'
 
 export type EdgeKind = 'step' | 'yes' | 'no' | 'parallel'
 
@@ -459,3 +474,122 @@ export const normalizeFlowEdges = (edges: FlowData['edges']): Edge[] =>
       label: edge.label ?? presentation.label,
     }
   })
+
+// ─── Shared with the new Process Builder (features/flow-editor/components/process/ProcessCanvas.tsx) ───
+//
+// Extracted verbatim from this file's own FlowCanvas.tsx caller's `updateNodeField` (the
+// step./condition. branches only — `parallel.` isn't part of the new Process model, which has no
+// parallel node kind). This is an additive export: FlowCanvas.tsx's own inline copy is untouched,
+// so existing behavior there cannot regress. New callers (the Process Builder) use this instead of
+// duplicating the same field-update logic a second time.
+
+/** Applies a single `step.<field>` or `condition.<field>` update to one node, returning the updated node (or the same node unchanged if the field doesn't match either prefix). Pure — does not touch edges (a condition's yes/no edge-label sync is the caller's responsibility, same as in FlowCanvas.tsx). */
+export const applyStepOrConditionFieldUpdate = (node: Node, field: string, value: string): Node => {
+  if (field.startsWith('step.')) {
+    const stepField = field.slice(5)
+    const normalized = normalizeStepNodeData(node.data)
+    const mergedStep = {
+      ...createDefaultStepFields(),
+      ...normalized.step,
+      [stepField]: value,
+    }
+
+    if (stepField === 'ingredientId') {
+      if (!value) {
+        mergedStep.customIngredientName = ''
+      } else {
+        mergedStep.customIngredientName = ''
+        if (!mergedStep.unitId) {
+          const defaultUnitId = resolveUnitId(getIngredientDefaultUnit(mergedStep.ingredientId))
+          mergedStep.unitId = defaultUnitId
+          mergedStep.unit = getUnitDisplayValue(defaultUnitId)
+        }
+      }
+    }
+
+    if (stepField === 'unitId') {
+      mergedStep.unitId = resolveUnitId(value)
+      if (mergedStep.unitId === CUSTOM_UNIT_ID) {
+        mergedStep.unit = mergedStep.customUnit.trim()
+      } else {
+        mergedStep.customUnit = ''
+        mergedStep.unit = getUnitDisplayValue(mergedStep.unitId)
+      }
+    }
+
+    if (stepField === 'customUnit' && mergedStep.unitId === CUSTOM_UNIT_ID) {
+      mergedStep.unit = value
+    }
+
+    if (stepField === 'preparationStyleId') {
+      mergedStep.preparationStyleId = resolvePreparationStyleId(value)
+      if (mergedStep.preparationStyleId === CUSTOM_PREPARATION_STYLE_ID) {
+        mergedStep.preparationStyle = mergedStep.customPreparationStyle.trim()
+      } else {
+        mergedStep.customPreparationStyle = ''
+        mergedStep.preparationStyle = getPreparationStyleDisplayName(mergedStep.preparationStyleId)
+      }
+    }
+
+    if (stepField === 'customPreparationStyle' && mergedStep.preparationStyleId === CUSTOM_PREPARATION_STYLE_ID) {
+      mergedStep.preparationStyle = value
+    }
+
+    if (stepField === 'flameLevelId') {
+      mergedStep.flameLevelId = resolveFlameLevelId(value)
+      if (mergedStep.flameLevelId === CUSTOM_FLAME_LEVEL_ID) {
+        mergedStep.flameLevel = mergedStep.customFlameLevel.trim()
+      } else {
+        mergedStep.customFlameLevel = ''
+        mergedStep.flameLevel = getFlameLevelDisplayName(mergedStep.flameLevelId)
+      }
+    }
+
+    if (stepField === 'customFlameLevel' && mergedStep.flameLevelId === CUSTOM_FLAME_LEVEL_ID) {
+      mergedStep.flameLevel = value
+    }
+
+    if (stepField === 'action' && !mergedStep.repeatAction) {
+      mergedStep.repeatAction = resolveStepActionId(value)
+    }
+
+    mergedStep.duration = buildDurationLabel(mergedStep.durationValue, mergedStep.durationUnit)
+    const repeatActionLabel = mergedStep.repeatAction ? getActionDisplayName(mergedStep.repeatAction) : ''
+    mergedStep.repeatInterval = buildRepeatIntervalLabel(
+      repeatActionLabel,
+      mergedStep.repeatEveryValue,
+      mergedStep.repeatEveryUnit,
+    )
+
+    const prunedStep = pruneStepFieldsByActionSchema(mergedStep)
+    const finalized = normalizeStepNodeData({ ...normalized, step: prunedStep })
+    return { ...node, data: finalized }
+  }
+
+  if (field.startsWith('condition.')) {
+    const conditionField = field.slice(10)
+    const normalized = normalizeConditionNodeData(node.data)
+    const mergedCondition = {
+      ...normalized.condition,
+      [conditionField]: value,
+    }
+
+    const finalized = normalizeConditionNodeData({
+      ...normalized,
+      condition: mergedCondition,
+    })
+
+    return {
+      ...node,
+      data: {
+        ...finalized,
+        title: getConditionNodeTitle(finalized.condition.question),
+        description: finalized.condition.notes,
+        yesLabel: finalized.condition.successLabel,
+        noLabel: finalized.condition.failureLabel,
+      },
+    }
+  }
+
+  return node
+}

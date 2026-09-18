@@ -59,6 +59,22 @@ export const API = {
     copy: (id: number) => `/api/v1/process-templates/${id}/copy`,
   },
 
+  // New Recipe Tool: recipe detail (ingredients/nutrition/main process) — coexists with
+  // `recipes` above, which still serves the legacy /api/v1/process-templates endpoints.
+  recipeDetail: {
+    byId: (recipeId: number) => `/api/v1/recipes/${recipeId}`,
+    ingredients: (recipeId: number) => `/api/v1/recipes/${recipeId}/ingredients`,
+    nutrition: (recipeId: number) => `/api/v1/recipes/${recipeId}/nutrition`,
+    mainProcess: (recipeId: number) => `/api/v1/recipes/${recipeId}/main-process`,
+  },
+
+  // New Recipe Tool: Process (MAIN/SUBPROCESS) CRUD + copy, scoped under a recipe.
+  processes: {
+    list: (recipeId: number) => `/api/v1/recipes/${recipeId}/processes`,
+    byId: (recipeId: number, processId: number) => `/api/v1/recipes/${recipeId}/processes/${processId}`,
+    copy: (recipeId: number, processId: number) => `/api/v1/recipes/${recipeId}/processes/${processId}/copy`,
+  },
+
   recipeGeneration: {
     generateFlow: '/api/recipe/generate-flow',
     // Async job variant: start returns immediately (QUEUED), poll jobStatus for progress/results.

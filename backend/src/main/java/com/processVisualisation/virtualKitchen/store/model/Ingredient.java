@@ -14,7 +14,11 @@ import java.time.LocalDateTime;
  * MongoDB document representing an ingredient in the store catalog, with
  * a default {@link UnitType} used when quantities are not otherwise
  * specified. Referenced by identifier from {@link Inventory} and
- * {@link ItemCost} via {@link ItemType#INGREDIENT}.
+ * {@link ItemCost} via {@link ItemType#INGREDIENT}, and from a recipe's
+ * ingredient list via
+ * {@code com.processVisualisation.virtualKitchen.recipe.model.RecipeIngredient}.
+ * {@link #imageUrl} lives here (not on the per-recipe reference) so the same
+ * ingredient's image is reused across every recipe rather than duplicated.
  */
 @Data
 @Document(collection = "ingredients")
@@ -31,6 +35,8 @@ public class Ingredient {
     private String description;
 
     private UnitType defaultUnit;
+
+    private String imageUrl;
 
     @CreatedDate
     private LocalDateTime createdAt;

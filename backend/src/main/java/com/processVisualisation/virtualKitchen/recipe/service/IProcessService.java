@@ -1,0 +1,93 @@
+package com.processVisualisation.virtualKitchen.recipe.service;
+
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessUpdateDTO;
+
+import java.util.List;
+
+/**
+ * Service contract for creating, reading, updating, deleting, and
+ * (recipe-scoped) copying {@code Process} documents — the new Recipe Tool's
+ * MAIN/SUBPROCESS graph model. Every method is scoped to a specific recipe
+ * ({@code recipeId}); a process that exists but does not belong to that
+ * recipe is treated as not found. Mutating methods enforce that the
+ * requesting user owns the recipe; read methods follow the recipe's
+ * existing {@code Visibility} (owner can always read; a non-owner can read
+ * only if the recipe is {@code PUBLIC}).
+ */
+public interface IProcessService {
+
+    /**
+     * Creates a new process (MAIN or SUBPROCESS, per {@code dto.getType()})
+     * under a recipe, after verifying the requesting user owns it and
+     * validating the result via {@code ProcessValidator} (which rejects,
+     * among other things, a second MAIN process for the same recipe).
+     *
+     * @param recipeId the id of the owning recipe
+     * @param userId   the id of the user requesting the creation, used for ownership verification
+     * @param dto      the process type/name/description to persist
+     * @return the created process
+     */
+    ProcessResponseDTO create(Long recipeId, Long userId, ProcessRequestDTO dto);
+
+    /**
+     * Retrieves a single process by id, scoped to a recipe.
+     *
+     * @param recipeId         the id of the recipe the process is expected to belong to
+     * @param processId        the id of the process to fetch
+     * @param requestingUserId the id of the requesting user, or null if unauthenticated; used for
+     *                         visibility on a private recipe
+     * @return the matching process
+     */
+    ProcessResponseDTO get(Long recipeId, Long processId, Long requestingUserId);
+
+    /**
+     * Retrieves every process (MAIN and any SUBPROCESS documents) belonging to a recipe.
+     *
+     * @param recipeId         the id of the owning recipe
+     * @param requestingUserId the id of the requesting user, or null if unauthenticated; used for
+     *                         visibility on a private recipe
+     * @return the recipe's processes
+     */
+    List<ProcessResponseDTO> listByRecipe(Long recipeId, Long requestingUserId);
+
+    /**
+     * Updates a process's name/description and replaces its node/edge graph
+     * and viewport, after verifying the requesting user owns the recipe and
+     * validating the result via {@code ProcessValidator}.
+     *
+     * @param recipeId  the id of the recipe the process is expected to belong to
+     * @param processId the id of the process to update
+     * @param userId    the id of the user requesting the update, used for ownership verification
+     * @param dto       the replacement name/description/nodes/edges/viewport
+     * @return the updated process
+     */
+    ProcessResponseDTO update(Long recipeId, Long processId, Long userId, ProcessUpdateDTO dto);
+
+    /**
+     * Deletes a process, after verifying the requesting user owns the
+     * recipe. Rejects deleting the recipe's MAIN process while it is still
+     * referenced by {@code RecipeTemplate.mainProcessId}, and rejects
+     * deleting any process still referenced by a PROCESS-kind node in
+     * another process belonging to the same recipe.
+     *
+     * @param recipeId  the id of the recipe the process is expected to belong to
+     * @param processId the id of the process to delete
+     * @param userId    the id of the user requesting the deletion, used for ownership verification
+     */
+    void delete(Long recipeId, Long processId, Long userId);
+
+    /**
+     * Copy-on-insert reuse (Phase 1 scope): deep-clones a SUBPROCESS
+     * (recursively, including any nested subprocess references) into a new,
+     * independent process within the same recipe. Does not create a live
+     * link to the source process. The MAIN process cannot be copied.
+     *
+     * @param recipeId  the id of the recipe both the source and the copy belong to
+     * @param processId the id of the SUBPROCESS to copy
+     * @param userId    the id of the user requesting the copy, used for ownership verification
+     * @return the newly created copy
+     */
+    ProcessResponseDTO copy(Long recipeId, Long processId, Long userId);
+}

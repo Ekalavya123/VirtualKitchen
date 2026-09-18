@@ -1,6 +1,7 @@
 import ConditionNode from './ConditionNode'
 import ParallelEndNode from './ParallelEndNode'
 import ParallelStartNode from './ParallelStartNode'
+import ProcessStepNode from './ProcessStepNode'
 import RecipeStepNode from './RecipeStepNode'
 import StartNode from './StartNode'
 import { FLOW_NODE_TYPES } from '../model/flowNodeModel'
@@ -11,4 +12,5 @@ export const nodeTypes = {
   [FLOW_NODE_TYPES.condition]: ConditionNode,
   [FLOW_NODE_TYPES.parallelStart]: ParallelStartNode,
   [FLOW_NODE_TYPES.parallelEnd]: ParallelEndNode,
+  [FLOW_NODE_TYPES.processStep]: ProcessStepNode,
 }

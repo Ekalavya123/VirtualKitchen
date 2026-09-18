@@ -2,6 +2,12 @@ package com.processVisualisation.virtualKitchen.recipe.service;
 
 import com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.common.mapper.ProcessTemplateMapper;
+import com.processVisualisation.virtualKitchen.recipe.dto.NutritionInfoDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeDetailResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeIngredientDTO;
+import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
 import com.processVisualisation.virtualKitchen.recipe.model.Recipe;
 import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
 import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
@@ -18,6 +24,7 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
 /**
@@ -42,6 +49,9 @@ public class RecipeTemplateServiceImpl implements IProcessTemplateService {
 
     @Autowired
     private RecipeRepository recipeRepository;
+
+    @Autowired
+    private IProcessService processService;
 
     /**
      * Creates and persists a new recipe template, assigning it a new sequence-generated id.
@@ -181,6 +191,103 @@ public class RecipeTemplateServiceImpl implements IProcessTemplateService {
         copyFlow(original.getId(), saved.getId(), userId);
 
         return mapper.toDTO(saved);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public RecipeDetailResponseDTO getRecipeDetails(Long recipeId, Long requestingUserId) {
+        RecipeTemplate recipe = requireAccessible(recipeId, requestingUserId);
+        return mapper.toDetailDTO(recipe);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public RecipeDetailResponseDTO updateIngredients(Long recipeId, Long userId, List<RecipeIngredientDTO> ingredients) {
+        RecipeTemplate recipe = repo.findById(recipeId)
+                .orElseThrow(() -> new NoSuchElementException("Recipe not found: " + recipeId));
+        requireOwner(recipe, userId);
+
+        recipe.setIngredients(mapper.toIngredientEntities(ingredients));
+        RecipeTemplate saved = repo.save(recipe);
+        return mapper.toDetailDTO(saved);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public RecipeDetailResponseDTO updateNutrition(Long recipeId, Long userId, NutritionInfoDTO nutrition) {
+        RecipeTemplate recipe = repo.findById(recipeId)
+                .orElseThrow(() -> new NoSuchElementException("Recipe not found: " + recipeId));
+        requireOwner(recipe, userId);
+
+        recipe.setNutrition(mapper.toNutritionEntity(nutrition));
+        RecipeTemplate saved = repo.save(recipe);
+        return mapper.toDetailDTO(saved);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public ProcessResponseDTO getMainProcess(Long recipeId, Long requestingUserId) {
+        RecipeTemplate recipe = requireAccessible(recipeId, requestingUserId);
+        if (recipe.getMainProcessId() == null) {
+            throw new NoSuchElementException("Recipe " + recipeId + " does not have a main process yet");
+        }
+        return processService.get(recipeId, recipe.getMainProcessId(), requestingUserId);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public ProcessResponseDTO createMainProcess(Long recipeId, Long userId) {
+        RecipeTemplate recipe = repo.findById(recipeId)
+                .orElseThrow(() -> new NoSuchElementException("Recipe not found: " + recipeId));
+        requireOwner(recipe, userId);
+
+        if (recipe.getMainProcessId() != null) {
+            // Idempotent: a main process already exists, so repeated calls never create a second one.
+            return processService.get(recipeId, recipe.getMainProcessId(), userId);
+        }
+
+        ProcessRequestDTO dto = new ProcessRequestDTO();
+        dto.setType(ProcessType.MAIN);
+        dto.setName(recipe.getName());
+        dto.setDescription(recipe.getDescription());
+
+        ProcessResponseDTO created = processService.create(recipeId, userId, dto);
+        recipe.setMainProcessId(created.getId());
+        repo.save(recipe);
+        return created;
+    }
+
+    /**
+     * Verifies that a recipe is accessible for reading by the given user: the owner can always
+     * read it; a non-owner (or unauthenticated caller) can read it only if it is
+     * {@link Visibility#PUBLIC}.
+     *
+     * @param recipeId         the id of the recipe to fetch
+     * @param requestingUserId the id of the requesting user, or null if unauthenticated
+     * @return the recipe, if accessible
+     * @throws NoSuchElementException      if no recipe exists with the given id
+     * @throws RecipeAccessDeniedException if the recipe is private and requestingUserId is not its owner
+     */
+    private RecipeTemplate requireAccessible(Long recipeId, Long requestingUserId) {
+        RecipeTemplate recipe = repo.findById(recipeId)
+                .orElseThrow(() -> new NoSuchElementException("Recipe not found: " + recipeId));
+        if (recipe.getVisibility() == Visibility.PUBLIC) {
+            return recipe;
+        }
+        if (requestingUserId != null && requestingUserId.equals(recipe.getCreatedBy())) {
+            return recipe;
+        }
+        throw new RecipeAccessDeniedException("You do not have permission to view this recipe");
     }
 
     /**

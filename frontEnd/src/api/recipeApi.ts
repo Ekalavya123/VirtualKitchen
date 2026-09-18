@@ -6,6 +6,15 @@
 import { apiGet, apiPost, apiDelete, apiPut } from './client'
 import { API } from './endpoints'
 import type { FlowData, RecipeExecutionModel } from '../types/recipeFlow'
+import type {
+  NutritionInfo,
+  Process,
+  ProcessCreateRequest,
+  ProcessUpdateRequest,
+  RecipeDetail,
+  RecipeIngredient,
+  UnitType,
+} from '../types/process'
 
 export type RecipeVisibility = 'PUBLIC' | 'PRIVATE'
 
@@ -277,5 +286,132 @@ export const FlowGenerationJobApi = {
 
   async getJobStatus(jobId: string): Promise<RecipeFlowGenerationJobResponse> {
     return apiGet<RecipeFlowGenerationJobResponse>(API.recipeGeneration.jobStatus(jobId))
+  },
+}
+
+/**
+ * New Recipe Tool: a recipe's ingredients/nutrition/main-process, backed by
+ * `/api/v1/recipes/{recipeId}/**`. Coexists with {@link RecipeApi} above,
+ * which still serves the legacy `/api/v1/process-templates` endpoints. The
+ * authenticated user is resolved by the backend from the request's JWT, so
+ * — unlike {@link RecipeApi}'s mutating methods — none of these take a
+ * userId parameter.
+ */
+export const RecipeDetailApi = {
+  /**
+   * Get a recipe's detail view (ingredients, nutrition, main process id, plus base fields).
+   */
+  async getRecipeDetail(recipeId: number): Promise<RecipeDetail> {
+    return apiGet<RecipeDetail>(API.recipeDetail.byId(recipeId))
+  },
+
+  /**
+   * Replace a recipe's ingredient list. Requires ownership.
+   */
+  async updateIngredients(recipeId: number, ingredients: RecipeIngredient[]): Promise<RecipeDetail> {
+    return apiPut<RecipeDetail>(API.recipeDetail.ingredients(recipeId), ingredients)
+  },
+
+  /**
+   * Replace a recipe's nutrition info. Requires ownership.
+   */
+  async updateNutrition(recipeId: number, nutrition: NutritionInfo): Promise<RecipeDetail> {
+    return apiPut<RecipeDetail>(API.recipeDetail.nutrition(recipeId), nutrition)
+  },
+
+  /**
+   * Get a recipe's MAIN process.
+   */
+  async getMainProcess(recipeId: number): Promise<Process> {
+    return apiGet<Process>(API.recipeDetail.mainProcess(recipeId))
+  },
+
+  /**
+   * Ensure a recipe has a MAIN process, creating one if it doesn't already have one
+   * (idempotent — safe to call repeatedly). Requires ownership.
+   */
+  async createMainProcess(recipeId: number): Promise<Process> {
+    return apiPost<Process>(API.recipeDetail.mainProcess(recipeId), undefined)
+  },
+}
+
+/**
+ * New Recipe Tool: Process (MAIN/SUBPROCESS) CRUD + recipe-scoped copy-on-insert reuse, backed
+ * by `/api/v1/recipes/{recipeId}/processes/**`. Every process is scoped to a recipe id.
+ */
+export const ProcessApi = {
+  /**
+   * List every process (MAIN and any SUBPROCESS documents) belonging to a recipe.
+   */
+  async listByRecipe(recipeId: number): Promise<Process[]> {
+    return apiGet<Process[]>(API.processes.list(recipeId))
+  },
+
+  /**
+   * Create a new process under a recipe. Pass `type: 'SUBPROCESS'` to create a subprocess;
+   * `type: 'MAIN'` is normally created via {@link RecipeDetailApi.createMainProcess} instead,
+   * which also assigns it as the recipe's main process. Requires ownership.
+   */
+  async create(recipeId: number, data: ProcessCreateRequest): Promise<Process> {
+    return apiPost<Process>(API.processes.list(recipeId), data)
+  },
+
+  /**
+   * Get a single process by id, scoped to a recipe.
+   */
+  async get(recipeId: number, processId: number): Promise<Process> {
+    return apiGet<Process>(API.processes.byId(recipeId, processId))
+  },
+
+  /**
+   * Update a process's name/description and replace its node/edge graph and viewport.
+   * Requires ownership.
+   */
+  async update(recipeId: number, processId: number, data: ProcessUpdateRequest): Promise<Process> {
+    return apiPut<Process>(API.processes.byId(recipeId, processId), data)
+  },
+
+  /**
+   * Delete a process. Rejected by the backend while it is the recipe's referenced MAIN
+   * process, or while another process in the recipe still references it. Requires ownership.
+   */
+  async delete(recipeId: number, processId: number): Promise<void> {
+    return apiDelete<void>(API.processes.byId(recipeId, processId))
+  },
+
+  /**
+   * Copy-on-insert reuse: deep-clone a SUBPROCESS (recursively, including nested subprocess
+   * references) into a new, independent process within the same recipe. Requires ownership.
+   * The MAIN process cannot be copied.
+   */
+  async copy(recipeId: number, processId: number): Promise<Process> {
+    return apiPost<Process>(API.processes.copy(recipeId, processId), undefined)
+  },
+}
+
+/**
+ * A global ingredient catalog entry (store/dto/IngredientResponseDTO), as referenced by a
+ * recipe's ingredient list (RecipeIngredient.ingredientId). Distinct from the looser `ShopItem`
+ * type in inventoryApi.ts — that one is shared with equipment and predates `imageUrl` — this one
+ * is typed to exactly what the backend returns for an ingredient.
+ */
+export interface GlobalIngredient {
+  id: number
+  name: string
+  description?: string
+  defaultUnit: UnitType
+  imageUrl?: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+/**
+ * The global ingredient catalog (`/api/v1/ingredients`, the same endpoint `ShopApi.getIngredients`
+ * already calls) — reused here with accurate typing (including `imageUrl`) for the Recipe Tool's
+ * ingredient selector. Recipes never copy an ingredient's own data; they only reference it by id.
+ */
+export const IngredientCatalogApi = {
+  async list(): Promise<GlobalIngredient[]> {
+    return apiGet<GlobalIngredient[]>(API.shop.ingredients)
   },
 }

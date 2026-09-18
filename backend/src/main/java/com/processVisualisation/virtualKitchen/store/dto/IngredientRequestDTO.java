@@ -19,4 +19,6 @@ public class IngredientRequestDTO {
 
     @NotNull(message = "Default unit is required")
     private UnitType defaultUnit;
+
+    private String imageUrl;
 }
