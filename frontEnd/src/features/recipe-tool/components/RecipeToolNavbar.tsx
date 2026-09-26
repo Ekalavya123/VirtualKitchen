@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import '../../flow-editor/styles/flow-editor.css'
-import type { RecipeDetail } from '../../../types/process'
+import '../styles/recipe-tool.css'
+import type { RecipeDetail } from '../../../types/recipe'
 import RecipeSummarySection from './RecipeSummarySection'
 
 export type RecipeToolView = 'RECIPE_PROCESS' | 'INGREDIENTS' | 'NUTRITION'

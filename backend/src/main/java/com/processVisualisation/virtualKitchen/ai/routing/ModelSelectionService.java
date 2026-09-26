@@ -13,7 +13,7 @@ import java.util.Optional;
 /**
  * Decides which model handles an AI request and, for a {@code PAID} model,
  * reserves the credits for it — the only place fallback logic lives. Neither
- * {@code AIRecipeGenerationService} nor {@code AIRecipeVisualizationService}
+ * {@code RecipeProcessGenerationService} nor {@code RecipeProcessVisualizationService}
  * ever reference a provider name, tier, or credit cost directly; they call
  * {@link #select} and act on the returned {@link ModelSelectionOutcome}.
  */

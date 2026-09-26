@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -174,6 +175,142 @@ public class ProcessServiceImpl implements IProcessService {
 
         Process copy = copyProcess(source);
         return processMapper.toDTO(copy);
+    }
+
+    @Override
+    public RecipeProcessCopyResult copyAllToRecipe(Long sourceRecipeId, Long targetRecipeId) {
+        List<Process> sources = processRepository.findByRecipeId(sourceRecipeId);
+
+        // Every id is allocated up front so a STEP's Action On reference can be rewritten to its
+        // copy regardless of which order the processes are copied in.
+        Map<Long, Long> processIdMap = new LinkedHashMap<>();
+        for (Process source : sources) {
+            processIdMap.put(source.getId(), sequenceGeneratorService.generateSequence(Process.SEQUENCE_NAME));
+        }
+
+        List<Process> copies = new ArrayList<>();
+        Long copiedMainId = null;
+        for (Process source : sources) {
+            Process copy = cloneIntoRecipe(source, processIdMap.get(source.getId()), targetRecipeId, processIdMap);
+            // Validates every copy before any of them are saved below, so an invalid source
+            // process aborts the whole copy without leaving a partial set of processes behind.
+            processValidator.validateOrThrow(copy);
+            copies.add(copy);
+            if (copy.getType() == ProcessType.MAIN) {
+                copiedMainId = copy.getId();
+            }
+        }
+
+        processRepository.saveAll(copies);
+        return new RecipeProcessCopyResult(processIdMap, copiedMainId);
+    }
+
+    /**
+     * Clones {@code original} into {@code targetRecipeId} under {@code newProcessId}, keeping its
+     * type/name/description, with freshly generated node/edge ids and every node's data deep-copied
+     * so the copy shares nothing with the source. Action On subprocess references are rewritten
+     * through {@code processIdMap}; see {@link #remapActionOnProcessRefs}.
+     */
+    private Process cloneIntoRecipe(Process original, Long newProcessId, Long targetRecipeId, Map<Long, Long> processIdMap) {
+        Map<String, String> nodeIdMap = new HashMap<>();
+        for (Process.ProcessNode node : safeNodes(original)) {
+            nodeIdMap.put(node.getId(), UUID.randomUUID().toString());
+        }
+
+        List<Process.ProcessNode> copiedNodes = new ArrayList<>();
+        for (Process.ProcessNode node : safeNodes(original)) {
+            Process.ProcessNode nodeCopy = cloneNode(node);
+            nodeCopy.setId(nodeIdMap.get(node.getId()));
+            if (node.getParentId() != null) {
+                nodeCopy.setParentId(nodeIdMap.getOrDefault(node.getParentId(), node.getParentId()));
+            }
+            Map<String, Object> data = deepCopyMap(node.getData());
+            remapActionOnProcessRefs(data, processIdMap);
+            nodeCopy.setData(data);
+            copiedNodes.add(nodeCopy);
+        }
+
+        List<Process.ProcessEdge> copiedEdges = new ArrayList<>();
+        for (Process.ProcessEdge edge : safeEdges(original)) {
+            Process.ProcessEdge edgeCopy = cloneEdge(edge);
+            edgeCopy.setId(UUID.randomUUID().toString());
+            edgeCopy.setSource(nodeIdMap.getOrDefault(edge.getSource(), edge.getSource()));
+            edgeCopy.setTarget(nodeIdMap.getOrDefault(edge.getTarget(), edge.getTarget()));
+            edgeCopy.setStyle(edge.getStyle() != null ? deepCopyMap(edge.getStyle()) : null);
+            edgeCopy.setData(deepCopyMap(edge.getData()));
+            copiedEdges.add(edgeCopy);
+        }
+
+        Process copy = new Process();
+        copy.setId(newProcessId);
+        copy.setType(original.getType());
+        copy.setRecipeId(targetRecipeId);
+        copy.setName(original.getName());
+        copy.setDescription(original.getDescription());
+        copy.setNodes(copiedNodes);
+        copy.setEdges(copiedEdges);
+        copy.setViewport(cloneViewport(original.getViewport()));
+        return copy;
+    }
+
+    /**
+     * Rewrites a STEP's Action On subprocess references ({@code data.step.actionOn.processes[].processId},
+     * the shape the frontend's recipe-tool/process/model/recipeStepData.ts writes) to the copied processes. A reference to a process
+     * that isn't in {@code processIdMap} — i.e. not part of the recipe being copied — is dropped
+     * rather than kept, since keeping it would be a live link from the copy into another recipe.
+     */
+    @SuppressWarnings("unchecked")
+    private void remapActionOnProcessRefs(Map<String, Object> data, Map<Long, Long> processIdMap) {
+        if (!(data.get("step") instanceof Map<?, ?> step)) return;
+        if (!(step.get("actionOn") instanceof Map<?, ?> actionOn)) return;
+        if (!(actionOn.get("processes") instanceof List<?> references)) return;
+
+        List<Object> remapped = new ArrayList<>();
+        for (Object reference : references) {
+            if (!(reference instanceof Map<?, ?> entry)) continue;
+            Long newId = processIdMap.get(asLong(entry.get("processId")));
+            if (newId == null) continue;
+            Map<String, Object> entryCopy = new LinkedHashMap<>((Map<String, Object>) entry);
+            entryCopy.put("processId", newId);
+            remapped.add(entryCopy);
+        }
+        ((Map<String, Object>) actionOn).put("processes", remapped);
+    }
+
+    private Long asLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Long.parseLong(text.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private Map<String, Object> deepCopyMap(Map<String, Object> source) {
+        Map<String, Object> copy = new LinkedHashMap<>();
+        if (source != null) {
+            source.forEach((key, value) -> copy.put(key, deepCopyValue(value)));
+        }
+        return copy;
+    }
+
+    private Object deepCopyValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> copy = new LinkedHashMap<>();
+            map.forEach((key, nested) -> copy.put(String.valueOf(key), deepCopyValue(nested)));
+            return copy;
+        }
+        if (value instanceof List<?> list) {
+            List<Object> copy = new ArrayList<>(list.size());
+            list.forEach(nested -> copy.add(deepCopyValue(nested)));
+            return copy;
+        }
+        return value;
     }
 
     /**

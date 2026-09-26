@@ -13,15 +13,14 @@ import KitchenLayout from '../features/kitchen/KitchenPage'
 import InventoryView from '../features/kitchen/InventoryView'
 import InventoryShopView from '../features/kitchen/InventoryShopView'
 import OrderHistoryView from '../features/kitchen/OrderHistoryView'
-import RecipeHomePage from '../features/flow-editor/RecipeHomePage'
-import FlowEditor from '../features/flow-editor/FlowEditor'
-import ProcessEditor from '../features/flow-editor/components/process/ProcessEditor'
-import ProcessListPage from '../features/flow-editor/components/process/ProcessListPage'
+import RecipeHomePage from '../features/recipes/RecipeHomePage'
+import RecipeProcessEditor from '../features/recipe-tool/process/components/RecipeProcessEditor'
+import RecipeProcessListPage from '../features/recipe-tool/process/components/RecipeProcessListPage'
 import RecipeToolPage from '../features/recipe-tool/RecipeToolPage'
 import { RecipeSessionProvider } from '../features/recipe-tool/context/RecipeSessionContext'
 import HomePage from '../features/HomePage'
 import type { User } from '../types/User'
-import type { ProcessBreadcrumbEntry } from '../types/process'
+import type { RecipeProcessBreadcrumbEntry } from '../types/recipe'
 import { AuthenticationApi, KitchenApi } from '../api'
 import { clearStoredToken, isAuthenticated } from '../shared/auth/session'
 import '../App.css'
@@ -30,10 +29,6 @@ interface Kitchen {
   id: number
   name: string
   ownerId: number
-}
-
-type RecipeRouteState = {
-  recipeTitle?: string
 }
 
 function ShopRoute({ userId }: { userId: number }) {
@@ -50,15 +45,11 @@ function ShopRoute({ userId }: { userId: number }) {
 function RecipesRoute({ userId }: { userId: number }) {
   const navigate = useNavigate()
 
+  // Opening (or just having created) a recipe goes straight to the Recipe Tool.
   return (
     <RecipeHomePage
       userId={userId}
-      onCreateRecipe={(recipeId, title) => {
-        navigate(`/kitchen/recipes/${recipeId}`, {
-          state: { recipeTitle: title } satisfies RecipeRouteState,
-        })
-      }}
-      onOpenRecipeTool={(recipeId) => navigate(`/kitchen/recipes/${recipeId}/tool`)}
+      onCreateRecipe={(recipeId) => navigate(`/kitchen/recipes/${recipeId}/tool`)}
     />
   )
 }
@@ -80,7 +71,7 @@ function RecipeToolRoute({ currentUserId }: { currentUserId: number }) {
   return (
     <RecipeToolPage
       // Fresh mount per recipe (fresh initial state) rather than resetting in place — mirrors
-      // ProcessEditorRoute's own `key` below.
+      // RecipeProcessEditorRoute's own `key` below.
       key={recipeId}
       recipeId={recipeId}
       currentUserId={currentUserId}
@@ -89,40 +80,12 @@ function RecipeToolRoute({ currentUserId }: { currentUserId: number }) {
   )
 }
 
-function RecipeEditorRoute() {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const { recipeId: recipeIdParam } = useParams()
-  const recipeId = Number(recipeIdParam)
-
-  if (!Number.isFinite(recipeId)) {
-    return (
-      <Navigate
-        to="/kitchen/recipes"
-        replace
-      />
-    )
-  }
-
-  const state = location.state as RecipeRouteState | null
-
-  return (
-    <FlowEditor
-      recipeId={recipeId}
-      recipeTitle={state?.recipeTitle}
-      onBackToRecipes={() =>
-        navigate('/kitchen/recipes')
-      }
-    />
-  )
-}
-
-type ProcessRouteState = {
+type RecipeProcessRouteState = {
   /** Ancestors from the recipe's process list down to this process's parent, root-first. */
-  breadcrumb?: ProcessBreadcrumbEntry[]
+  breadcrumb?: RecipeProcessBreadcrumbEntry[]
 }
 
-function ProcessListRoute({ currentUserId }: { currentUserId: number }) {
+function RecipeProcessListRoute({ currentUserId }: { currentUserId: number }) {
   const navigate = useNavigate()
   const { recipeId: recipeIdParam } = useParams()
   const recipeId = Number(recipeIdParam)
@@ -137,7 +100,7 @@ function ProcessListRoute({ currentUserId }: { currentUserId: number }) {
   }
 
   return (
-    <ProcessListPage
+    <RecipeProcessListPage
       recipeId={recipeId}
       currentUserId={currentUserId}
       onOpenProcess={(processId) => navigate(`/kitchen/recipes/${recipeId}/process/${processId}`)}
@@ -146,7 +109,7 @@ function ProcessListRoute({ currentUserId }: { currentUserId: number }) {
   )
 }
 
-function ProcessEditorRoute() {
+function RecipeProcessEditorRoute() {
   const navigate = useNavigate()
   const location = useLocation()
   const { recipeId: recipeIdParam, processId: processIdParam } = useParams()
@@ -162,15 +125,15 @@ function ProcessEditorRoute() {
     )
   }
 
-  // The navigation trail lives here, as router state, rather than in ProcessCanvas or any app-level
+  // The navigation trail lives here, as router state, rather than in RecipeProcessCanvas or any app-level
   // store — "normal route/navigation state" per the brief. Each entry is an ancestor process this
-  // editor was reached through; the process currently open is not included (ProcessCanvas already
+  // editor was reached through; the process currently open is not included (RecipeProcessCanvas already
   // knows its own name once loaded).
-  const breadcrumb = (location.state as ProcessRouteState | null)?.breadcrumb ?? []
+  const breadcrumb = (location.state as RecipeProcessRouteState | null)?.breadcrumb ?? []
 
-  const goToProcess = (targetProcessId: number, nextBreadcrumb: ProcessBreadcrumbEntry[]) => {
+  const goToProcess = (targetProcessId: number, nextBreadcrumb: RecipeProcessBreadcrumbEntry[]) => {
     navigate(`/kitchen/recipes/${recipeId}/process/${targetProcessId}`, {
-      state: { breadcrumb: nextBreadcrumb } satisfies ProcessRouteState,
+      state: { breadcrumb: nextBreadcrumb } satisfies RecipeProcessRouteState,
     })
   }
 
@@ -187,12 +150,12 @@ function ProcessEditorRoute() {
 
   return (
     // Keyed only by recipeId (not processId): navigating into/out of a subprocess here is the same
-    // "one recipe, one editing session" model as the embedded Recipe Tool tab — ProcessCanvas itself
+    // "one recipe, one editing session" model as the embedded Recipe Tool tab — RecipeProcessCanvas itself
     // handles switching which process is displayed without losing another process's unsaved edits or
     // re-fetching what's already loaded. A different recipe id (a real route change) still gets a
     // fresh session; the same recipeId across a process-to-process navigation does not remount.
     <RecipeSessionProvider recipeId={recipeId}>
-      <ProcessEditor
+      <RecipeProcessEditor
         recipeId={recipeId}
         processId={processId}
         breadcrumbAncestors={breadcrumb}
@@ -373,11 +336,11 @@ function App() {
 
           <Route
             path="recipes/:recipeId"
-            element={<RecipeEditorRoute />}
+            // Old links to a recipe (this path used to open a separate editor) land in the Recipe Tool.
+            element={<Navigate to="tool" replace />}
           />
 
-          {/* New Recipe Tool (Phase 6): recipe summary/ingredients/nutrition/process, linking into
-              the Phase 4+5 Process Builder rather than duplicating it. */}
+          {/* Recipe Tool: recipe summary/ingredients/nutrition plus the Recipe Process editor. */}
           <Route
             path="recipes/:recipeId/tool"
             element={
@@ -390,13 +353,13 @@ function App() {
             path="recipes/:recipeId/processes"
             element={
               currentUser ? (
-                <ProcessListRoute currentUserId={currentUser.id} />
+                <RecipeProcessListRoute currentUserId={currentUser.id} />
               ) : null
             }
           />
           <Route
             path="recipes/:recipeId/process/:processId"
-            element={<ProcessEditorRoute />}
+            element={<RecipeProcessEditorRoute />}
           />
 
           <Route

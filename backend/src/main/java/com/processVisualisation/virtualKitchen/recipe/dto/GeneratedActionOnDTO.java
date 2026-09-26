@@ -10,7 +10,7 @@ import java.util.List;
  * One AI-generated STEP's "Action On" target set: zero or more ingredients
  * and zero or more subprocess references. Subprocess references are
  * temporary, recipe-scoped semantic {@code ref} strings (declared by a
- * {@link GeneratedProcessDTO} elsewhere in the same generation result), not
+ * {@link GeneratedRecipeProcessDTO} elsewhere in the same generation result), not
  * database ids — the frontend resolves them once real (or client-temporary)
  * process ids exist, mirroring how {@code Process.ProcessNode} never embeds
  * another process as a node.

@@ -137,9 +137,9 @@ public interface IProcessTemplateService {
     /**
      * Ensures a recipe has a MAIN process: if {@code mainProcessId} is
      * already set, returns that existing process unchanged (idempotent —
-     * repeated calls never create a second MAIN process); otherwise creates
-     * a new MAIN process and assigns it, after verifying the requesting
-     * user owns the recipe.
+     * repeated calls never create a second MAIN process, including concurrent
+     * ones); otherwise creates a new MAIN process and assigns it, after
+     * verifying the requesting user owns the recipe.
      *
      * @param recipeId the id of the recipe to create/assign a main process for
      * @param userId   the id of the user requesting the creation, used for ownership verification

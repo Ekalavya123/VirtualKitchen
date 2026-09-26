@@ -59,8 +59,7 @@ export const API = {
     copy: (id: number) => `/api/v1/process-templates/${id}/copy`,
   },
 
-  // New Recipe Tool: recipe detail (ingredients/nutrition/main process) — coexists with
-  // `recipes` above, which still serves the legacy /api/v1/process-templates endpoints.
+  // Recipe detail (ingredients/nutrition/main process); `recipes` above serves the recipe list.
   recipeDetail: {
     byId: (recipeId: number) => `/api/v1/recipes/${recipeId}`,
     ingredients: (recipeId: number) => `/api/v1/recipes/${recipeId}/ingredients`,
@@ -68,48 +67,21 @@ export const API = {
     mainProcess: (recipeId: number) => `/api/v1/recipes/${recipeId}/main-process`,
   },
 
-  // New Recipe Tool: Process (MAIN/SUBPROCESS) CRUD + copy, scoped under a recipe.
+  // Process (MAIN/SUBPROCESS) graph CRUD + copy, scoped under a recipe.
   processes: {
     list: (recipeId: number) => `/api/v1/recipes/${recipeId}/processes`,
     byId: (recipeId: number, processId: number) => `/api/v1/recipes/${recipeId}/processes/${processId}`,
     copy: (recipeId: number, processId: number) => `/api/v1/recipes/${recipeId}/processes/${processId}/copy`,
   },
 
-  // AI-driven Process generation (semantic MAIN + subprocesses from recipe text) — async job only.
-  processGeneration: {
+  // AI-driven recipe process generation (semantic MAIN + subprocesses from recipe text) — async job only.
+  recipeProcessGeneration: {
     startJob: (recipeId: number) => `/api/v1/recipes/${recipeId}/processes/generate/jobs`,
     jobStatus: (recipeId: number, jobId: string) => `/api/v1/recipes/${recipeId}/processes/generate/jobs/${jobId}`,
   },
 
-  recipeGeneration: {
-    generateFlow: '/api/recipe/generate-flow',
-    // Async job variant: start returns immediately (QUEUED), poll jobStatus for progress/results.
-    startJob: '/api/recipe/generate-flow/jobs',
-    jobStatus: (jobId: string) => `/api/recipe/generate-flow/jobs/${jobId}`,
-  },
-
-  // Flows
-  flows: {
-    byId: (id: number | string) => `/api/v1/flows/${id}`,
-  },
-
-  // Visualizations
-  visualizations: {
-    byId: (id: number | string) => `/api/v1/visualizations/${String(id)}`,
-  },
-
-  // Recipe step visualization assets (image/video prompts per step)
-  recipeVisualization: {
-    generate: (recipeId: number | string) => `/api/recipes/${String(recipeId)}/visualization/generate`,
-    generateStep: (recipeId: number | string, stepId: string) =>
-      `/api/recipes/${String(recipeId)}/visualization/steps/${stepId}/generate`,
-    // Async job variant: start returns immediately (QUEUED), poll jobStatus for progress/results.
-    startJob: (recipeId: number | string) => `/api/recipes/${String(recipeId)}/visualization/jobs`,
-    jobStatus: (jobId: string) => `/api/recipes/visualization/jobs/${jobId}`,
-  },
-
-  // Process-model visualization (one image per STEP of a MAIN/SUBPROCESS) — async job only.
-  processVisualization: {
+  // Recipe process visualization (one image per STEP of a MAIN/SUBPROCESS) — async job only.
+  recipeProcessVisualization: {
     startJob: (recipeId: number, processId: number) =>
       `/api/v1/recipes/${recipeId}/processes/${processId}/visualization/jobs`,
     jobStatus: (recipeId: number, processId: number, jobId: string) =>

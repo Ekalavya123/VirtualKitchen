@@ -3,6 +3,8 @@ package com.processVisualisation.virtualKitchen.recipe.repository;
 import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
 import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
 import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.mongodb.repository.Query;
+import org.springframework.data.mongodb.repository.Update;
 
 import java.util.List;
 
@@ -30,4 +32,15 @@ public interface RecipeTemplateRepository extends MongoRepository<RecipeTemplate
      * @return the matching templates owned by other users
      */
     List<RecipeTemplate> findByVisibilityAndCreatedByNot(Visibility visibility, Long createdBy);
+
+    /**
+     * Atomically sets a recipe's {@code mainProcessId}, but only if it has none yet, so two
+     * concurrent "ensure a MAIN process" requests can never both link their own MAIN.
+     *
+     * @return the number of recipes updated: 1 if this call linked the process, 0 if the recipe
+     *         already had a main process (or doesn't exist)
+     */
+    @Query("{ '_id': ?0, 'mainProcessId': null }")
+    @Update("{ '$set': { 'mainProcessId': ?1 } }")
+    long linkMainProcessIfUnset(Long recipeId, Long processId);
 }

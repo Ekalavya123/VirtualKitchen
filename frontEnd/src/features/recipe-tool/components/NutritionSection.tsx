@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import '../../flow-editor/styles/flow-editor.css'
-import '../../flow-editor/components/toolbar/PropertiesPanel.css'
+import '../styles/recipe-tool.css'
+import '../process/styles/RecipePropertiesPanel.css'
 import { RecipeDetailApi } from '../../../api'
-import type { NutritionInfo } from '../../../types/process'
+import type { NutritionInfo } from '../../../types/recipe'
 import { useNotifications } from '../../../shared/components/notifications/NotificationProvider'
 
 type NutritionSectionProps = {

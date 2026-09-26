@@ -9,8 +9,7 @@ import lombok.Data;
  * Request payload for creating a new {@code Process} under a recipe, via
  * {@code POST /api/v1/recipes/{recipeId}/processes}. The owning recipe is
  * taken from the URL path, not this payload. Node/edge graph content is
- * submitted separately via update (mirroring how the legacy flow editor
- * saves nodes/edges independently of recipe creation).
+ * submitted separately via update.
  */
 @Data
 public class ProcessRequestDTO {

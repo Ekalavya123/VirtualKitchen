@@ -38,7 +38,7 @@ import static org.springframework.data.mongodb.core.query.Query.query;
  * <p>
  * Every mutation here is a single guarded {@code findAndModify}/{@code updateFirst} rather than a
  * read-modify-save, following the convention set by {@code CreditService} and
- * {@code VisualizationJobService}: the request path and {@link AiArtifactRecoveryJob} write these
+ * {@code RecipeProcessVisualizationJobService}: the request path and {@link AiArtifactRecoveryJob} write these
  * documents concurrently, and a lost update would either resurrect a consumed artifact or drop a
  * paid payload.
  *

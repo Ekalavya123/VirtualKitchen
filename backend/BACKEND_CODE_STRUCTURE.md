@@ -55,13 +55,13 @@ The response travels back through the same layers, with the service layer mappin
 
 ### `ai/`
 
-AI chat, AI-driven recipe-flow generation, and asynchronous AI visualization (image/clip) generation for recipe steps.
+AI chat, AI-driven recipe process generation, and asynchronous AI image generation for recipe steps, plus the shared AI infrastructure (model registry/routing, credits, request queue, durable artifacts).
 
-- **controller** — `AIController` (chat), `AIRecipeGenerationController` (text → structured recipe flow), `AIResponseController` (CRUD over logged AI interactions), `AIVisualizationController` (trigger flow visualization).
-- **service** — `IAIService`/`AIServiceImpl` (send a chat prompt to the configured provider), `IAIResponseService`/`AIResponseService` (persist/query AI interaction logs), `AIRecipeFlowPromptBuilder` + `AIRecipeValidator` + `AIRecipeFlowValidationResult` (prompt construction and validation for AI-generated recipe graphs), `AIRecipeGenerationService` (orchestrates generation + validation + retry), `AIVisualizationPromptBuilder` (builds per-step image/video prompts with continuity from the previous step), `IAIService`-adjacent `AIVisualizationService`/`AIVisualizationServiceImpl` (generates clip placeholders), `AIRecipeVisualizationService` (resolves/generates visualization assets per step), `VisualizationJobService` (orchestrates async, per-step visualization generation jobs on the `common/concurrent` `TaskPool` framework so slow AI/image calls never block the request thread).
-- **repository** — `AIResponseRepository`, `AIVisualizationAssetRepository`, `AIVisualizationClipRepository`, `VisualizationJobRepository`.
-- **model** — `AIResponseDocument`, `VisualizationAsset` (+ `VisualizationAssetType` enum), `VisualizationClip`, `VisualizationJob` (+ `VisualizationJobStatus` enum).
-- **dto** — chat request/response, AI response record, visualization request/response and clip response DTOs.
+- **controller** — `AIController` (chat), `AIResponseController` (CRUD over logged AI interactions), `RecipeProcessGenerationController` (recipe text → MAIN + subprocesses, async job), `AIModelController`, `AICreditController`.
+- **service** — `IAIService`/`AIServiceImpl` (send a chat prompt to the configured provider), `IAIResponseService`/`AIResponseService` (persist/query AI interaction logs), `RecipeProcessGenerationService` + `RecipeProcessGenerationPromptBuilder` + `RecipeProcessGenerationValidator` (generation with retry-with-feedback), `RecipeProcessGenerationJobService` (async generation jobs), `RecipeProcessVisualizationService` + `RecipeProcessVisualizationPromptBuilder` + `RecipeProcessVisualizationInput` (per-step image generation for one process), `RecipeProcessVisualizationJobService` (async visualization jobs on the `common/concurrent` `TaskPool` framework so slow AI/image calls never block the request thread), `RecipeStepVocabularyProvider` (step catalog vocabulary shared with the frontend), `VisualizationImageArtifactConsumer`.
+- **repository** — `AIResponseRepository`, `AIVisualizationAssetRepository`, `VisualizationJobRepository`, `RecipeProcessGenerationJobRepository`.
+- **model** — `AIResponseDocument`, `VisualizationAsset` (+ `VisualizationAssetType` enum), `VisualizationJob` (+ `VisualizationJobStatus` enum), `RecipeProcessGenerationJob` (+ `RecipeProcessGenerationJobStatus`, `RecipeProcessGenerationStage`).
+- **dto** — chat request/response, AI response record, AI model/credit DTOs.
 
 ### `auth/`
 
@@ -86,13 +86,14 @@ Kitchen management, kitchen-scoped inventory, and order placement/history.
 
 ### `recipe/`
 
-The largest feature package: recipe templates and their steps, the reusable step-definition catalog, recipe executions and per-step executions, ingredient/equipment usage tracking, and the saved process-flow graph (nodes/edges/viewport) that backs the visual editor.
+The largest feature package: recipe templates (the recipe itself, with ingredients, nutrition and its `mainProcessId`), the Process graph those recipes are built from, and the older step-definition/execution/usage-tracking records.
 
-- **controller** — `RecipeTemplateController` (CRUD + visibility + copy-to-user, ownership-enforced), `RecipeTemplateStepController`, `RecipeStepDefinitionController`, `RecipeExecutionController`, `RecipeStepExecutionController`, `RecipeEquipmentUsageController`, `RecipeIngredientUsageController`, `RecipeController` (saved flow graph CRUD by flow id), `RecipeVisualizationController` (sync + async AI visualization triggering).
-- **service** — `IProcessTemplateService`/`RecipeTemplateServiceImpl`, `IProcessTemplateStepService`/`ProcessTemplateStepServiceImpl`, `IStepDefinitionService`/`RecipeStepDefinitionServiceImpl`, `IProcessExecutionService`/`RecipeExecutionServiceImpl`, `IStepExecutionService`/`RecipeStepExecutionServiceImpl`, `IProcessEquipmentUsageService`/`RecipeEquipmentUsageServiceImpl`, `IProcessIngredientUsageService`/`RecipeIngredientUsageServiceImpl`, `RecipeService` (converts raw frontend flow-graph maps into typed documents and persists/retrieves them).
+- **Process** is the generic graph persistence structure: `Process` (MAIN or SUBPROCESS, a graph of STEP/CONDITION `ProcessNode`s and `ProcessEdge`s, collection `processes`), `ProcessNodeKind`, `ProcessType`, `ProcessRepository`, `ProcessController`/`IProcessService`/`ProcessServiceImpl` (recipe-scoped CRUD, batch save, copy, and recipe-copy of every process), `ProcessValidator`.
+- **controller** — `RecipeTemplateController` (CRUD + visibility + copy-to-user, ownership-enforced), `RecipeDetailController` (ingredients, nutrition, main process), `ProcessController`, `RecipeProcessVisualizationController` (async per-step visualization of one process), `RecipeTemplateStepController`, `RecipeStepDefinitionController`, `RecipeExecutionController`, `RecipeStepExecutionController`, `RecipeEquipmentUsageController`, `RecipeIngredientUsageController`.
+- **service** — `IProcessTemplateService`/`RecipeTemplateServiceImpl`, `IProcessService`/`ProcessServiceImpl`, `IProcessTemplateStepService`/`ProcessTemplateStepServiceImpl`, `IStepDefinitionService`/`RecipeStepDefinitionServiceImpl`, `IProcessExecutionService`/`RecipeExecutionServiceImpl`, `IStepExecutionService`/`RecipeStepExecutionServiceImpl`, `IProcessEquipmentUsageService`/`RecipeEquipmentUsageServiceImpl`, `IProcessIngredientUsageService`/`RecipeIngredientUsageServiceImpl`.
 - **repository** — one Spring Data MongoDB repository per model below.
-- **model** — `RecipeTemplate`, `RecipeTemplateStep`, `RecipeStepDefinition`, `RecipeExecution`, `RecipeStepExecution`, `RecipeEquipmentUsage`, `RecipeIngredientUsage`, `Recipe` (the saved flow graph, with nested `NodeDocument`/`EdgeDocument`/`PositionDocument`/`MeasuredDocument`/`ViewportDocument`), and enums `RecipeStatus`, `RecipeStepStatus`, `UnitType`, `Visibility`, `AssetType`.
-- **dto** — request/response DTOs mirroring each model, plus flow-graph specific DTOs (`RecipeExecutionEdgeDTO`, `RecipeExecutionStepDTO`, `RecipeFlowGenerationRequestDTO`/`ResponseDTO`, `RecipeFlowSaveRequestDTO`, `RecipeSaveResponseDTO`) and `VisualizationJobResponseDTO`.
+- **model** — `RecipeTemplate`, `Process`, `RecipeTemplateStep`, `RecipeStepDefinition`, `RecipeExecution`, `RecipeStepExecution`, `RecipeEquipmentUsage`, `RecipeIngredientUsage`, `RecipeIngredient`, `NutritionInfo`, and enums `ProcessNodeKind`, `ProcessType`, `RecipeStatus`, `RecipeStepStatus`, `UnitType`, `Visibility`, `AssetType`.
+- **dto** — request/response DTOs mirroring each model, the Process graph DTOs, the recipe process generation DTOs (`RecipeProcessGeneration*DTO`, `GeneratedRecipeProcessDTO`, `GeneratedRecipeStepDTO`, `GeneratedActionOn*DTO`) and `VisualizationJobResponseDTO`.
 
 ### `restclient/`
 
@@ -120,7 +121,7 @@ Shared by every feature package above; has no `controller/`.
 - **concurrent** — a generic, framework-agnostic task-pool abstraction used to run AI visualization generation concurrently: `Task<R>`/`NamedTask<R>` (a unit of work), `TaskPool`/`ThreadPoolTaskPool` (bounded executor that submits one task or a batch and catches per-task failures into a result rather than propagating), `TaskResult<R>`/`BatchResult<R>` (success/failure outcome carriers), `TaskPoolFactory` (mints and shuts down named pools).
 - **config** — `MongoConfig` (Mongo client bean), `JacksonConfig` (shared `ObjectMapper`), `SecurityConfig` (Spring Security filter chain: BCrypt, CORS for the local frontend, CSRF disabled, JWT filter, path-based authorization), `TaskPoolConfig` (registers the `"visualization"` and `"visualization-orchestrator"` `TaskPool` beans, kept separate to avoid deadlock).
 - **mapper** — one `*Mapper` class per resource converting entities ↔ DTOs, centralizing conversion logic used by the `service` layers across all feature packages (`UserMapper`, `KitchenMapper`, `OrderMapper`, `InventoryMapper`, `IngredientMapper`, `EquipmentMapper`, `ItemCostMapper`, `KitchenInventoryMapper`, `ProcessTemplateMapper`, `ProcessTemplateStepMapper`, `StepDefinitionMapper`, `ProcessExecutionMapper`, `StepExecutionMapper`, `ProcessEquipmentUsageMapper`, `ProcessIngredientUsageMapper`).
-- **exception** — `GlobalExceptionHandler` (`@RestControllerAdvice` mapping every custom/expected exception to an HTTP status + `ErrorResponse` body), and the custom exceptions it handles: `AuthException`, `RecipeAccessDeniedException`, `RecipeFlowGenerationException`, `UserNotFoundException`.
+- **exception** — `GlobalExceptionHandler` (`@RestControllerAdvice` mapping every custom/expected exception to an HTTP status + `ErrorResponse` body), and the custom exceptions it handles: `AuthException`, `RecipeAccessDeniedException`, `RecipeProcessAiException`, `ProcessValidationException`, `UserNotFoundException`.
 - **tools** — `PresetUp`, a standalone one-off CLI-style tool that idempotently seeds a demo user/kitchen/equipment/ingredients/inventory into MongoDB.
 - **utils** — `ApiResponse<T>` (generic API response envelope), `VisualizationKeyBuilder` (builds normalized cache keys for recipe-step visualizations).
 - **root** — `DBSequence` (Mongo model for auto-increment counters), `SequenceGeneratorService` (atomic find-and-modify sequence-id generator used by every feature that needs a `Long` id).
@@ -133,9 +134,9 @@ Shared by every feature package above; has no `controller/`.
 
 ## Example: recipe visualization request flow
 
-- `RecipeVisualizationController` receives a request to visualize a recipe/step.
-- It calls `AIRecipeVisualizationService` (or, for async jobs, `VisualizationJobService`), which resolves prompts via `AIVisualizationPromptBuilder` and dispatches to a `restclient` image-generation client (Gemini or DrawThings) plus a storage client (Supabase).
-- Results are persisted as `ai/model` documents (`VisualizationAsset`/`VisualizationClip`/`VisualizationJob`) via their repositories.
+- `RecipeProcessVisualizationController` receives a request to visualize one process's steps.
+- It starts a job on `RecipeProcessVisualizationJobService`, which calls `RecipeProcessVisualizationService` per step; that resolves prompts via `RecipeProcessVisualizationPromptBuilder` and dispatches to a `restclient` image-generation client (Gemini or DrawThings) plus a storage client (Supabase).
+- Results are persisted as `ai/model` documents (`VisualizationAsset`/`VisualizationJob`) via their repositories, and attached to the process's STEP nodes.
 - Async work is fanned out on the `common/concurrent` `TaskPool` so the HTTP request thread isn't blocked on slow AI calls.
 - The controller returns a DTO (e.g. `VisualizationJobResponseDTO`) describing progress/results.
 

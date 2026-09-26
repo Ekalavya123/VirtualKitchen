@@ -106,4 +106,19 @@ public interface IProcessService {
      * @return the newly created copy
      */
     ProcessResponseDTO copy(Long recipeId, Long processId, Long userId);
+
+    /**
+     * Recipe copy: deep-clones every process of {@code sourceRecipeId} (MAIN and every SUBPROCESS)
+     * into {@code targetRecipeId} as new, independent documents. Every copy gets a new process id
+     * and new node/edge ids, and every STEP's Action On subprocess reference is rewritten to the
+     * matching copy, so nothing in the target recipe points back at the source recipe (a reference
+     * to a process outside the source recipe is dropped). Every copy is validated before any of
+     * them are saved. Performs no ownership checks — callers (recipe copy) are responsible for
+     * authorizing both recipes.
+     *
+     * @param sourceRecipeId the recipe whose processes are copied
+     * @param targetRecipeId the (already persisted) recipe the copies belong to
+     * @return the source-to-copy process id map, and the id of the copied MAIN process
+     */
+    RecipeProcessCopyResult copyAllToRecipe(Long sourceRecipeId, Long targetRecipeId);
 }

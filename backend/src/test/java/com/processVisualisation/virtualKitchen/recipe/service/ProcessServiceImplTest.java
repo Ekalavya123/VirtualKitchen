@@ -373,6 +373,145 @@ class ProcessServiceImplTest {
         assertThrows(RecipeAccessDeniedException.class, () -> service.copy(recipeId, source.getId(), OTHER_USER_ID));
     }
 
+    @Test
+    void copyAllToRecipe_copiesMainAndSubprocessesWithRemappedIdsAndReferences() {
+        Long sourceRecipeId = seedRecipe(OWNER_ID, Visibility.PUBLIC);
+        Long targetRecipeId = seedRecipe(OTHER_USER_ID, Visibility.PRIVATE);
+
+        Process sub = saveProcess(sourceRecipeId, ProcessType.SUBPROCESS, "Make Sauce",
+                List.of(stepNode("s1", Map.of("step", Map.of("action", "stir")))), List.of());
+        Process main = saveProcess(sourceRecipeId, ProcessType.MAIN, "Main",
+                List.of(
+                        stepNode("m1", stepData(sub.getId(), 999_999L)),
+                        stepNode("m2", Map.of("step", Map.of("action", "serve")))),
+                List.of(edge("e1", "m1", "m2")));
+
+        RecipeProcessCopyResult result = service.copyAllToRecipe(sourceRecipeId, targetRecipeId);
+
+        Long copiedMainId = result.processIdMap().get(main.getId());
+        Long copiedSubId = result.processIdMap().get(sub.getId());
+        assertEquals(copiedMainId, result.mainProcessId());
+        assertNotEquals(main.getId(), copiedMainId);
+        assertNotEquals(sub.getId(), copiedSubId);
+
+        Process copiedMain = processStore.get(copiedMainId);
+        Process copiedSub = processStore.get(copiedSubId);
+        assertEquals(targetRecipeId, copiedMain.getRecipeId());
+        assertEquals(targetRecipeId, copiedSub.getRecipeId());
+        assertEquals(ProcessType.MAIN, copiedMain.getType());
+        assertEquals("Make Sauce", copiedSub.getName(), "a recipe copy keeps process names unchanged");
+
+        // Node ids regenerated, and the edge follows them.
+        Process.ProcessNode copiedStep = copiedMain.getNodes().get(0);
+        assertNotEquals("m1", copiedStep.getId());
+        assertEquals(copiedStep.getId(), copiedMain.getEdges().get(0).getSource());
+        assertEquals(copiedMain.getNodes().get(1).getId(), copiedMain.getEdges().get(0).getTarget());
+
+        // Action On now points at the copied subprocess; the reference outside the source recipe is dropped.
+        assertEquals(List.of(copiedSubId), actionOnProcessIds(copiedStep));
+        // The source is untouched.
+        assertEquals(List.of(sub.getId(), 999_999L), actionOnProcessIds(processStore.get(main.getId()).getNodes().get(0)));
+        assertEquals(2, processRepository.findByRecipeId(sourceRecipeId).size());
+    }
+
+    @Test
+    void copyAllToRecipe_copiedDataIsIndependentOfSource() {
+        Long sourceRecipeId = seedRecipe(OWNER_ID, Visibility.PUBLIC);
+        Long targetRecipeId = seedRecipe(OTHER_USER_ID, Visibility.PRIVATE);
+        Process main = saveProcess(sourceRecipeId, ProcessType.MAIN, "Main",
+                List.of(stepNode("m1", stepData())), List.of());
+
+        RecipeProcessCopyResult result = service.copyAllToRecipe(sourceRecipeId, targetRecipeId);
+
+        Process copiedMain = processStore.get(result.mainProcessId());
+        @SuppressWarnings("unchecked")
+        Map<String, Object> copiedStep = (Map<String, Object>) copiedMain.getNodes().get(0).getData().get("step");
+        copiedStep.put("action", "changed-in-copy");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> sourceStep = (Map<String, Object>) processStore.get(main.getId()).getNodes().get(0).getData().get("step");
+        assertEquals("chop", sourceStep.get("action"));
+    }
+
+    @Test
+    void copyAllToRecipe_sourceWithoutProcesses_copiesNothing() {
+        Long sourceRecipeId = seedRecipe(OWNER_ID, Visibility.PUBLIC);
+        Long targetRecipeId = seedRecipe(OTHER_USER_ID, Visibility.PRIVATE);
+
+        RecipeProcessCopyResult result = service.copyAllToRecipe(sourceRecipeId, targetRecipeId);
+
+        assertTrue(result.processIdMap().isEmpty());
+        assertEquals(null, result.mainProcessId());
+        assertTrue(processRepository.findByRecipeId(targetRecipeId).isEmpty());
+    }
+
+    @Test
+    void copyAllToRecipe_invalidSourceProcess_savesNothing() {
+        Long sourceRecipeId = seedRecipe(OWNER_ID, Visibility.PUBLIC);
+        Long targetRecipeId = seedRecipe(OTHER_USER_ID, Visibility.PRIVATE);
+        saveProcess(sourceRecipeId, ProcessType.MAIN, "Main", List.of(stepNode("m1", stepData())), List.of());
+        // A STEP with no data fails validation.
+        saveProcess(sourceRecipeId, ProcessType.SUBPROCESS, "Broken", List.of(stepNode("b1", Map.of())), List.of());
+
+        assertThrows(ProcessValidationException.class, () -> service.copyAllToRecipe(sourceRecipeId, targetRecipeId));
+        assertTrue(processRepository.findByRecipeId(targetRecipeId).isEmpty());
+    }
+
+    private Process saveProcess(Long ownerRecipeId, ProcessType type, String name,
+                                List<Process.ProcessNode> nodes, List<Process.ProcessEdge> edges) {
+        Process process = new Process();
+        process.setId(5000L + processStore.size());
+        process.setRecipeId(ownerRecipeId);
+        process.setType(type);
+        process.setName(name);
+        process.setNodes(new ArrayList<>(nodes));
+        process.setEdges(new ArrayList<>(edges));
+        processStore.put(process.getId(), process);
+        return process;
+    }
+
+    private static Process.ProcessNode stepNode(String id, Map<String, Object> data) {
+        Process.ProcessNode node = new Process.ProcessNode();
+        node.setId(id);
+        node.setKind(ProcessNodeKind.STEP);
+        node.setType("processStepNode");
+        node.setData(new java.util.LinkedHashMap<>(data));
+        return node;
+    }
+
+    private static Map<String, Object> stepData(Long... subprocessIds) {
+        List<Object> references = new ArrayList<>();
+        for (Long subprocessId : subprocessIds) {
+            references.add(new java.util.LinkedHashMap<>(Map.of("processId", subprocessId)));
+        }
+        Map<String, Object> actionOn = new java.util.LinkedHashMap<>();
+        actionOn.put("ingredients", new ArrayList<>());
+        actionOn.put("processes", references);
+        Map<String, Object> step = new java.util.LinkedHashMap<>();
+        step.put("action", "chop");
+        step.put("actionOn", actionOn);
+        Map<String, Object> data = new java.util.LinkedHashMap<>();
+        data.put("step", step);
+        return data;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Long> actionOnProcessIds(Process.ProcessNode node) {
+        Map<String, Object> step = (Map<String, Object>) node.getData().get("step");
+        Map<String, Object> actionOn = (Map<String, Object>) step.get("actionOn");
+        return ((List<Map<String, Object>>) actionOn.get("processes")).stream()
+                .map(entry -> ((Number) entry.get("processId")).longValue())
+                .collect(Collectors.toList());
+    }
+
+    private static Process.ProcessEdge edge(String id, String source, String target) {
+        Process.ProcessEdge edge = new Process.ProcessEdge();
+        edge.setId(id);
+        edge.setSource(source);
+        edge.setTarget(target);
+        return edge;
+    }
+
     private Long seedRecipe(Long ownerId, Visibility visibility) {
         long id = 100 + recipeStore.size();
         RecipeTemplate recipe = new RecipeTemplate();
