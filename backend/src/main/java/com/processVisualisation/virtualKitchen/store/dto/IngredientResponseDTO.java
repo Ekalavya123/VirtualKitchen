@@ -18,6 +18,7 @@ public class IngredientResponseDTO {
     private String name;
     private String description;
     private UnitType defaultUnit;
+    private String imageUrl;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

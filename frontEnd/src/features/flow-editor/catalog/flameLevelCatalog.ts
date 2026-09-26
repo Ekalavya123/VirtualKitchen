@@ -36,8 +36,12 @@ const flameAliasLookup = buildAliasLookup(
 
 export const resolveFlameLevelId = (value: unknown): FlameLevelId | '' => resolveCatalogId(flameAliasLookup, value)
 
+// Falls back instead of crashing when `id` doesn't resolve (e.g. stale/older saved data) — this is
+// looked up during render (canvas node detail badges), so it must never throw.
+const UNKNOWN_FLAME_LEVEL: FlameLevelDefinition = { id: CUSTOM_FLAME_LEVEL_ID, label: 'Unknown' }
+
 export const getFlameLevelById = (id: FlameLevelId): FlameLevelDefinition =>
-  flameById.get(id) as FlameLevelDefinition
+  flameById.get(id) ?? UNKNOWN_FLAME_LEVEL
 
 export const getFlameLevelDisplayName = (levelId: FlameLevelId | '', customLevel = '') =>
   getCatalogDisplayName(CUSTOM_FLAME_LEVEL_ID, levelId, customLevel, (id) => getFlameLevelById(id).label, '')

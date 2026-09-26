@@ -59,6 +59,28 @@ export const API = {
     copy: (id: number) => `/api/v1/process-templates/${id}/copy`,
   },
 
+  // New Recipe Tool: recipe detail (ingredients/nutrition/main process) — coexists with
+  // `recipes` above, which still serves the legacy /api/v1/process-templates endpoints.
+  recipeDetail: {
+    byId: (recipeId: number) => `/api/v1/recipes/${recipeId}`,
+    ingredients: (recipeId: number) => `/api/v1/recipes/${recipeId}/ingredients`,
+    nutrition: (recipeId: number) => `/api/v1/recipes/${recipeId}/nutrition`,
+    mainProcess: (recipeId: number) => `/api/v1/recipes/${recipeId}/main-process`,
+  },
+
+  // New Recipe Tool: Process (MAIN/SUBPROCESS) CRUD + copy, scoped under a recipe.
+  processes: {
+    list: (recipeId: number) => `/api/v1/recipes/${recipeId}/processes`,
+    byId: (recipeId: number, processId: number) => `/api/v1/recipes/${recipeId}/processes/${processId}`,
+    copy: (recipeId: number, processId: number) => `/api/v1/recipes/${recipeId}/processes/${processId}/copy`,
+  },
+
+  // AI-driven Process generation (semantic MAIN + subprocesses from recipe text) — async job only.
+  processGeneration: {
+    startJob: (recipeId: number) => `/api/v1/recipes/${recipeId}/processes/generate/jobs`,
+    jobStatus: (recipeId: number, jobId: string) => `/api/v1/recipes/${recipeId}/processes/generate/jobs/${jobId}`,
+  },
+
   recipeGeneration: {
     generateFlow: '/api/recipe/generate-flow',
     // Async job variant: start returns immediately (QUEUED), poll jobStatus for progress/results.
@@ -84,6 +106,14 @@ export const API = {
     // Async job variant: start returns immediately (QUEUED), poll jobStatus for progress/results.
     startJob: (recipeId: number | string) => `/api/recipes/${String(recipeId)}/visualization/jobs`,
     jobStatus: (jobId: string) => `/api/recipes/visualization/jobs/${jobId}`,
+  },
+
+  // Process-model visualization (one image per STEP of a MAIN/SUBPROCESS) — async job only.
+  processVisualization: {
+    startJob: (recipeId: number, processId: number) =>
+      `/api/v1/recipes/${recipeId}/processes/${processId}/visualization/jobs`,
+    jobStatus: (recipeId: number, processId: number, jobId: string) =>
+      `/api/v1/recipes/${recipeId}/processes/${processId}/visualization/jobs/${jobId}`,
   },
 
   // AI model management / credits

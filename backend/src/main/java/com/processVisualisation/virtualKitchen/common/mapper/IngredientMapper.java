@@ -25,6 +25,7 @@ public class IngredientMapper {
         ingredient.setName(dto.getName());
         ingredient.setDescription(dto.getDescription());
         ingredient.setDefaultUnit(dto.getDefaultUnit());
+        ingredient.setImageUrl(dto.getImageUrl());
         return ingredient;
     }
 
@@ -41,6 +42,7 @@ public class IngredientMapper {
                 .name(ingredient.getName())
                 .description(ingredient.getDescription())
                 .defaultUnit(ingredient.getDefaultUnit())
+                .imageUrl(ingredient.getImageUrl())
                 .createdAt(ingredient.getCreatedAt())
                 .updatedAt(ingredient.getUpdatedAt())
                 .build();

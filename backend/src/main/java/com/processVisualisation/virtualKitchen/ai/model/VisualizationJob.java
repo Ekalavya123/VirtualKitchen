@@ -26,6 +26,9 @@ public class VisualizationJob {
     @Indexed
     private String recipeId;
 
+    /** Set only for a Process-model job (visualizing one MAIN or SUBPROCESS's own steps); null for a legacy whole-flow job. */
+    private Long processId;
+
     @Indexed
     private Long userId;
 

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
+import java.util.NoSuchElementException;
 
 /**
  * Global exception handler for all REST controllers ({@code @RestControllerAdvice}).
@@ -281,5 +282,46 @@ public class GlobalExceptionHandler {
                 ex.getMessage()
         );
         return new ResponseEntity<>(error, HttpStatus.GATEWAY_TIMEOUT);
+    }
+
+    /**
+     * Catches a Process that failed structural validation (bad node/edge
+     * references, circular or self-referencing subprocesses, a duplicate
+     * MAIN process, unresolvable recipe ownership, etc).
+     *
+     * @param ex the process validation exception, carrying the joined list of validation errors
+     * @return an {@link ErrorResponse} with {@code ex}'s message, at HTTP 422 Unprocessable Entity
+     */
+    @ExceptionHandler(ProcessValidationException.class)
+    public ResponseEntity<ErrorResponse> handleProcessValidation(ProcessValidationException ex) {
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                "Process Validation Failed",
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    /**
+     * Catches a lookup that found no matching entity (e.g. an unknown
+     * recipe or process id). This is the same exception type
+     * {@code RecipeTemplateServiceImpl}'s {@code findById(id).orElseThrow()}
+     * calls already raised before this handler existed (previously falling
+     * through to a generic 500); adding a handler for it here fixes that for
+     * every existing caller as well as the new Recipe/Process endpoints.
+     *
+     * @param ex the not-found exception
+     * @return an {@link ErrorResponse} with {@code ex}'s message, at HTTP 404 Not Found
+     */
+    @ExceptionHandler(NoSuchElementException.class)
+    public ResponseEntity<ErrorResponse> handleNotFound(NoSuchElementException ex) {
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.NOT_FOUND.value(),
+                "Not Found",
+                ex.getMessage() != null ? ex.getMessage() : "The requested resource was not found"
+        );
+        return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
     }
 }

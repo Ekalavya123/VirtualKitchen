@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { Handle, Position, NodeResizeControl, useNodeId, useUpdateNodeInternals, useReactFlow } from '@xyflow/react'
 import '../styles/flow-editor.css'
 import { normalizeConditionNodeData, type ConditionNodeData } from '../../../types/recipeFlow'
+import { useProcessGraphContext } from '../context/ProcessGraphContext'
 
 type ConditionNodeProps = {
   selected: boolean
@@ -25,6 +26,9 @@ export default function ConditionNode({ selected, style: nodeStyle, data, width:
   const nodeId = useNodeId()
   const updateNodeInternals = useUpdateNodeInternals()
   const { updateNode } = useReactFlow()
+  // Undefined (no-op) when this shared component renders inside the legacy FlowCanvas, which
+  // doesn't wrap it in a ProcessGraphProvider — only ProcessCanvas's resize-undo tracking cares.
+  const { onNodeResizeStart, onNodeResizeEnd } = useProcessGraphContext()
   const normalized = normalizeConditionNodeData(data)
   const condition = normalized.condition
   const width = toNumber(nodeWidth, toNumber(nodeStyle?.width, 190))
@@ -107,8 +111,12 @@ export default function ConditionNode({ selected, style: nodeStyle, data, width:
           minWidth={140}
           minHeight={140}
           keepAspectRatio
+          onResizeStart={() => { if (nodeId) onNodeResizeStart?.(nodeId) }}
           onResize={() => syncNodeLayout()}
-          onResizeEnd={() => syncNodeLayout()}
+          onResizeEnd={() => {
+            syncNodeLayout()
+            if (nodeId) onNodeResizeEnd?.(nodeId)
+          }}
           position="bottom-right"
           style={{
             background: '#d97706',

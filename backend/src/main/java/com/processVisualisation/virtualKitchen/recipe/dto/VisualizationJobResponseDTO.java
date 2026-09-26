@@ -15,6 +15,8 @@ import java.util.List;
 public class VisualizationJobResponseDTO {
     private String jobId;
     private String recipeId;
+    /** Set only for a Process-model job. */
+    private Long processId;
     private String status;
     private int totalSteps;
     private int completedSteps;

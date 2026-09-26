@@ -28,6 +28,8 @@ export const PREPARATION_STYLE_CATALOG: readonly PreparationStyleDefinition[] = 
 }))
 
 export const CUSTOM_PREPARATION_STYLE_ID: PreparationStyleId = 'custom'
+/** Pre-fill for a newly added Action On ingredient, when the current action needs a preparation style at all — see actionSchemaCatalog's `isStepFieldEnabled`. */
+export const DEFAULT_PREPARATION_STYLE_ID: PreparationStyleId = 'medium'
 
 const styleById = new Map<PreparationStyleId, PreparationStyleDefinition>(
   PREPARATION_STYLE_CATALOG.map((style) => [style.id, style])
@@ -40,8 +42,12 @@ const styleAliasLookup = buildAliasLookup(
 export const resolvePreparationStyleId = (value: unknown): PreparationStyleId | '' =>
   resolveCatalogId(styleAliasLookup, value)
 
+// Falls back instead of crashing when `id` doesn't resolve (e.g. stale/older saved data) — this is
+// looked up during render (canvas node labels, the Action On panel), so it must never throw.
+const UNKNOWN_PREPARATION_STYLE: PreparationStyleDefinition = { id: CUSTOM_PREPARATION_STYLE_ID, label: 'Unknown' }
+
 export const getPreparationStyleById = (id: PreparationStyleId): PreparationStyleDefinition =>
-  styleById.get(id) as PreparationStyleDefinition
+  styleById.get(id) ?? UNKNOWN_PREPARATION_STYLE
 
 export const getPreparationStyleDisplayName = (styleId: PreparationStyleId | '', customStyle = '') =>
   getCatalogDisplayName(CUSTOM_PREPARATION_STYLE_ID, styleId, customStyle, (id) => getPreparationStyleById(id).label, '')
