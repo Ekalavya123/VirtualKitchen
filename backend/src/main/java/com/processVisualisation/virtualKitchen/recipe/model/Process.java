@@ -63,8 +63,7 @@ public class Process {
      * its exact shape (including a STEP's Action -> Action On ingredient/
      * subprocess references) is a frontend concern, not enforced here. The
      * remaining fields are React Flow presentation concerns (layout, sizing,
-     * drag/select behavior), carried through unchanged from the legacy
-     * {@link Recipe.NodeDocument} shape.
+     * drag/select behavior).
      */
     @Data
     public static class ProcessNode {
@@ -73,7 +72,7 @@ public class Process {
 
         private Map<String, Object> data = new LinkedHashMap<>();
 
-        // --- presentation-only fields, unchanged shape from Recipe.NodeDocument ---
+        // --- presentation-only (React Flow) fields ---
         private String type;
         private PositionDocument position;
         private MeasuredDocument measured;

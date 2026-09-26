@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * Tracks the progress of an async recipe-visualization run started via
- * {@code VisualizationJobService.startJob}. {@code completedSteps} and
+ * {@code RecipeProcessVisualizationJobService.startJob}. {@code completedSteps} and
  * {@code stepResults} are updated atomically (Mongo {@code $inc}/{@code $push})
  * as steps complete concurrently, never via read-modify-write, since several
  * worker threads can finish steps for the same job at the same time.
@@ -26,7 +26,7 @@ public class VisualizationJob {
     @Indexed
     private String recipeId;
 
-    /** Set only for a Process-model job (visualizing one MAIN or SUBPROCESS's own steps); null for a legacy whole-flow job. */
+    /** The MAIN or SUBPROCESS whose own steps this job visualizes (null only on jobs recorded before the Process model). */
     private Long processId;
 
     @Indexed

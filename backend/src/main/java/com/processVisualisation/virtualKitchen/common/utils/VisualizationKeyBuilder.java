@@ -27,8 +27,8 @@ public final class VisualizationKeyBuilder {
     /**
      * Builds the visualization asset key for one step of one recipe.
      *
-     * @param recipeId the recipe flow's id (e.g. {@code Recipe.flowId})
-     * @param stepId the step node's id within that recipe (e.g. {@code Recipe.NodeDocument.id})
+     * @param recipeId the recipe's id
+     * @param stepId the STEP node's id within one of that recipe's processes
      * @return the {@code recipeId::stepId} key, unique per (recipe, step) pair
      */
     public static String build(String recipeId, String stepId) {

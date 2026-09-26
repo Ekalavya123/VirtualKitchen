@@ -1,10 +1,10 @@
 import { useMemo } from 'react'
-import '../../flow-editor/styles/flow-editor.css'
-import '../../flow-editor/components/toolbar/PropertiesPanel.css'
-import type { UnitType } from '../../../types/process'
-import { normalizeProcessStepNodeData, type ActionOnIngredient } from '../../flow-editor/model/processStepData'
-import { getIngredientById } from '../../flow-editor/catalog/ingredientCatalog'
-import { getPreparationStyleDisplayName } from '../../flow-editor/catalog/preparationStyleCatalog'
+import '../styles/recipe-tool.css'
+import '../process/styles/RecipePropertiesPanel.css'
+import type { UnitType } from '../../../types/recipe'
+import { normalizeRecipeStepNodeData, type ActionOnIngredient } from '../process/model/recipeStepData'
+import { getIngredientById } from '../catalog/ingredientCatalog'
+import { getPreparationStyleDisplayName } from '../catalog/preparationStyleCatalog'
 import { useRecipeSession } from '../context/RecipeSessionContext'
 
 const UNIT_LABELS: Record<UnitType, string> = {
@@ -26,7 +26,7 @@ const deriveIngredientsFromProcesses = (
   for (const process of processes) {
     for (const node of process.nodes) {
       if (node.kind !== 'STEP') continue
-      const { step } = normalizeProcessStepNodeData(node.data)
+      const { step } = normalizeRecipeStepNodeData(node.data)
       for (const usage of step.actionOn.ingredients) {
         const key = `${usage.ingredientId}:${usage.unit}`
         const preparationLabel = getPreparationStyleDisplayName(usage.preparationStyleId ?? '', usage.customPreparationStyle)
@@ -55,7 +55,7 @@ const deriveIngredientsFromProcesses = (
  * in the Recipe Process tab.
  *
  * Reads directly from RecipeSessionContext — the same unified in-memory
- * recipe snapshot RecipeProcessView/ProcessCanvas read and write — so an
+ * recipe snapshot RecipeProcessView/RecipeProcessCanvas read and write — so an
  * unsaved Action On edit to any process (MAIN or any subprocess, including
  * one the user isn't currently looking at) shows up here immediately,
  * without requiring a save first and without a separate fetch of its own.

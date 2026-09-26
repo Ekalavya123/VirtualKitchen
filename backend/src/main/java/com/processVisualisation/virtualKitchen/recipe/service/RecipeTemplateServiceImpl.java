@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
+import com.processVisualisation.virtualKitchen.common.exception.ProcessValidationException;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.common.mapper.ProcessTemplateMapper;
 import com.processVisualisation.virtualKitchen.recipe.dto.NutritionInfoDTO;
@@ -7,8 +8,9 @@ import com.processVisualisation.virtualKitchen.recipe.dto.ProcessRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeDetailResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeIngredientDTO;
+import com.processVisualisation.virtualKitchen.recipe.model.NutritionInfo;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
-import com.processVisualisation.virtualKitchen.recipe.model.Recipe;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeIngredient;
 import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
 import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
 import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
@@ -16,23 +18,21 @@ import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateUpdateDTO;
-import com.processVisualisation.virtualKitchen.recipe.repository.RecipeRepository;
 import com.processVisualisation.virtualKitchen.recipe.repository.RecipeTemplateRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
  * Default implementation of IProcessTemplateService. Persists recipe templates via
  * RecipeTemplateRepository, enforces ownership (via requireOwner) on mutating operations,
  * and, when a public template is copied to a user library via copyToUser, deep-clones the
- * template saved process-flow graph (nodes, edges, viewport) from RecipeRepository onto the
- * new template so the copy is fully independent of the original. Maps between entities and
+ * template's ingredients, nutrition and Process documents onto the new template so the copy is fully independent of the original. Maps between entities and
  * DTOs via ProcessTemplateMapper.
  */
 @Service
@@ -46,9 +46,6 @@ public class RecipeTemplateServiceImpl implements IProcessTemplateService {
 
     @Autowired
     private SequenceGeneratorService seq;
-
-    @Autowired
-    private RecipeRepository recipeRepository;
 
     @Autowired
     private IProcessService processService;
@@ -162,8 +159,10 @@ public class RecipeTemplateServiceImpl implements IProcessTemplateService {
 
     /**
      * Copies a publicly visible recipe template into a new private template owned by the given
-     * user, including a deep clone of the original template saved process-flow graph (nodes,
-     * edges, viewport), if one exists, via copyFlow.
+     * user, as a complete, independent copy: its ingredients and nutrition, every Process
+     * document (MAIN and every SUBPROCESS, with process ids and Action On subprocess references
+     * remapped to the copies — see {@link IProcessService#copyAllToRecipe}) with the copy's
+     * mainProcessId pointing at the copied MAIN.
      *
      * @param id     the id of the public template to copy
      * @param userId the id of the user the copy will be owned by
@@ -185,10 +184,27 @@ public class RecipeTemplateServiceImpl implements IProcessTemplateService {
         copy.setDescription(original.getDescription());
         copy.setCreatedBy(userId);
         copy.setVisibility(Visibility.PRIVATE);
+        copy.setIngredients(cloneIngredients(original.getIngredients()));
+        copy.setNutrition(cloneNutrition(original.getNutrition()));
 
+        // Saved before its processes are copied: ProcessValidator requires each process's recipe to exist.
         RecipeTemplate saved = repo.save(copy);
 
-        copyFlow(original.getId(), saved.getId(), userId);
+        RecipeProcessCopyResult processCopy;
+        try {
+            processCopy = processService.copyAllToRecipe(original.getId(), saved.getId());
+        } catch (RuntimeException e) {
+            // copyAllToRecipe validates every process before saving any, so nothing but the
+            // template itself has been persisted at this point.
+            repo.deleteById(saved.getId());
+            throw e;
+        }
+
+        if (processCopy.mainProcessId() != null) {
+            saved.setMainProcessId(processCopy.mainProcessId());
+            saved = repo.save(saved);
+        }
+
 
         return mapper.toDTO(saved);
     }
@@ -256,15 +272,57 @@ public class RecipeTemplateServiceImpl implements IProcessTemplateService {
             return processService.get(recipeId, recipe.getMainProcessId(), userId);
         }
 
+        // A MAIN process can exist without being linked yet (an earlier call that was interrupted,
+        // or a concurrent one still in flight) — adopt it rather than creating a second one.
+        Optional<ProcessResponseDTO> unlinkedMain = findMainProcess(recipeId, userId);
+        if (unlinkedMain.isPresent()) {
+            return processService.get(recipeId, linkMainProcess(recipeId, unlinkedMain.get().getId()), userId);
+        }
+
         ProcessRequestDTO dto = new ProcessRequestDTO();
         dto.setType(ProcessType.MAIN);
         dto.setName(recipe.getName());
         dto.setDescription(recipe.getDescription());
 
-        ProcessResponseDTO created = processService.create(recipeId, userId, dto);
-        recipe.setMainProcessId(created.getId());
-        repo.save(recipe);
+        ProcessResponseDTO created;
+        try {
+            created = processService.create(recipeId, userId, dto);
+        } catch (ProcessValidationException e) {
+            // Lost a race: a concurrent call created the MAIN process between the check above and
+            // this insert, so the validator rejected a second one. Use that one instead.
+            Optional<ProcessResponseDTO> concurrentMain = findMainProcess(recipeId, userId);
+            if (concurrentMain.isEmpty()) {
+                throw e;
+            }
+            return processService.get(recipeId, linkMainProcess(recipeId, concurrentMain.get().getId()), userId);
+        }
+
+        Long linkedId = linkMainProcess(recipeId, created.getId());
+        if (!created.getId().equals(linkedId)) {
+            // Both concurrent calls inserted a MAIN process; the other one was linked first, so
+            // this one is an unreferenced duplicate.
+            processService.delete(recipeId, created.getId(), userId);
+            return processService.get(recipeId, linkedId, userId);
+        }
         return created;
+    }
+
+    private Optional<ProcessResponseDTO> findMainProcess(Long recipeId, Long userId) {
+        return processService.listByRecipe(recipeId, userId)
+                .stream()
+                .filter(process -> process.getType() == ProcessType.MAIN)
+                .findFirst();
+    }
+
+    /**
+     * Links {@code processId} as the recipe's main process unless it already has one, and returns
+     * whichever process id the recipe actually ends up linked to.
+     */
+    private Long linkMainProcess(Long recipeId, Long processId) {
+        repo.linkMainProcessIfUnset(recipeId, processId);
+        return repo.findById(recipeId)
+                .map(RecipeTemplate::getMainProcessId)
+                .orElseThrow(() -> new NoSuchElementException("Recipe not found: " + recipeId));
     }
 
     /**
@@ -303,108 +361,38 @@ public class RecipeTemplateServiceImpl implements IProcessTemplateService {
         }
     }
 
-    /**
-     * If the source recipe template has a saved process-flow graph, deep-clones its nodes,
-     * edges, and viewport onto a new Recipe document keyed to the new template id and owner,
-     * so the copy renders independently of the original flow.
-     *
-     * @param originalRecipeId the id of the source template whose flow graph is cloned
-     * @param newRecipeId      the id of the newly created template the cloned flow is attached to
-     * @param newOwnerId       the id of the user who will own the cloned flow
-     */
-    private void copyFlow(Long originalRecipeId, Long newRecipeId, Long newOwnerId){
-        recipeRepository.findByFlowId(String.valueOf(originalRecipeId)).ifPresent(originalFlow -> {
-            Recipe copyFlow = new Recipe();
-            copyFlow.setFlowId(String.valueOf(newRecipeId));
-            copyFlow.setUserId(String.valueOf(newOwnerId));
-            copyFlow.setTemplateId(newRecipeId);
-            copyFlow.setNodes(cloneNodes(originalFlow.getNodes()));
-            copyFlow.setEdges(cloneEdges(originalFlow.getEdges()));
-            copyFlow.setViewport(cloneViewport(originalFlow.getViewport()));
-            recipeRepository.save(copyFlow);
-        });
-    }
-
-    /**
-     * Deep-clones a list of flow graph nodes, copying every field onto new
-     * Recipe.NodeDocument instances.
-     *
-     * @param nodes the nodes to clone, may be null
-     * @return a new list of cloned nodes, empty if nodes was null
-     */
-    private List<Recipe.NodeDocument> cloneNodes(List<Recipe.NodeDocument> nodes){
-        List<Recipe.NodeDocument> result = new ArrayList<>();
-        if (nodes == null) {
+    private List<RecipeIngredient> cloneIngredients(List<RecipeIngredient> ingredients) {
+        List<RecipeIngredient> result = new ArrayList<>();
+        if (ingredients == null) {
             return result;
         }
 
-        for (Recipe.NodeDocument node : nodes) {
-            Recipe.NodeDocument copy = new Recipe.NodeDocument();
-            copy.setId(node.getId());
-            copy.setType(node.getType());
-            copy.setData(node.getData() != null ? new LinkedHashMap<>(node.getData()) : new LinkedHashMap<>());
-            copy.setPosition(node.getPosition());
-            copy.setMeasured(node.getMeasured());
-            copy.setWidth(node.getWidth());
-            copy.setHeight(node.getHeight());
-            copy.setParentId(node.getParentId());
-            copy.setExtent(node.getExtent());
-            copy.setDraggable(node.getDraggable());
-            copy.setSelectable(node.getSelectable());
-            copy.setDeletable(node.getDeletable());
+        for (RecipeIngredient ingredient : ingredients) {
+            RecipeIngredient copy = new RecipeIngredient();
+            copy.setIngredientId(ingredient.getIngredientId());
+            copy.setQuantity(ingredient.getQuantity());
+            copy.setUnit(ingredient.getUnit());
+            copy.setNotes(ingredient.getNotes());
+            copy.setPreparation(ingredient.getPreparation());
             result.add(copy);
         }
 
         return result;
     }
 
-    /**
-     * Deep-clones a list of flow graph edges, copying every field onto new
-     * Recipe.EdgeDocument instances.
-     *
-     * @param edges the edges to clone, may be null
-     * @return a new list of cloned edges, empty if edges was null
-     */
-    private List<Recipe.EdgeDocument> cloneEdges(List<Recipe.EdgeDocument> edges){
-        List<Recipe.EdgeDocument> result = new ArrayList<>();
-        if (edges == null) {
-            return result;
-        }
-
-        for (Recipe.EdgeDocument edge : edges) {
-            Recipe.EdgeDocument copy = new Recipe.EdgeDocument();
-            copy.setId(edge.getId());
-            copy.setSource(edge.getSource());
-            copy.setTarget(edge.getTarget());
-            copy.setSourceHandle(edge.getSourceHandle());
-            copy.setTargetHandle(edge.getTargetHandle());
-            copy.setType(edge.getType());
-            copy.setAnimated(edge.getAnimated());
-            copy.setStyle(edge.getStyle() != null ? new LinkedHashMap<>(edge.getStyle()) : null);
-            copy.setData(edge.getData() != null ? new LinkedHashMap<>(edge.getData()) : new LinkedHashMap<>());
-            copy.setLabel(edge.getLabel());
-            result.add(copy);
-        }
-
-        return result;
-    }
-
-    /**
-     * Deep-clones a flow graph viewport (pan/zoom state) onto a new
-     * Recipe.ViewportDocument instance.
-     *
-     * @param viewport the viewport to clone, may be null
-     * @return a new cloned viewport, or null if viewport was null
-     */
-    private Recipe.ViewportDocument cloneViewport(Recipe.ViewportDocument viewport){
-        if (viewport == null) {
+    private NutritionInfo cloneNutrition(NutritionInfo nutrition) {
+        if (nutrition == null) {
             return null;
         }
 
-        Recipe.ViewportDocument copy = new Recipe.ViewportDocument();
-        copy.setX(viewport.getX());
-        copy.setY(viewport.getY());
-        copy.setZoom(viewport.getZoom());
+        NutritionInfo copy = new NutritionInfo();
+        copy.setCalories(nutrition.getCalories());
+        copy.setProteinGrams(nutrition.getProteinGrams());
+        copy.setCarbohydratesGrams(nutrition.getCarbohydratesGrams());
+        copy.setFatGrams(nutrition.getFatGrams());
+        copy.setFiberGrams(nutrition.getFiberGrams());
+        copy.setSodiumMilligrams(nutrition.getSodiumMilligrams());
+        copy.setServings(nutrition.getServings());
         return copy;
     }
 }

@@ -15,8 +15,9 @@ frontEnd/
 ├── assets/
 ├── features/
 │   ├── auth/
-│   ├── flow-editor/
-│   └── kitchen/
+│   ├── kitchen/
+│   ├── recipe-tool/
+│   └── recipes/
 ├── shared/
 ├── styles/
 ├── types/
@@ -58,7 +59,8 @@ frontEnd/
 - Contains feature-based modules grouped by business capability.
 - Current features include:
   - `auth` for authentication and login flows.
-  - `flow-editor` for the workflow editor.
+  - `recipes` for the recipe list (create, publish, copy).
+  - `recipe-tool` for a single recipe: ingredients, nutrition and its Recipe Process editor.
   - `kitchen` for inventory and kitchen management.
 - Responsibilities:
   - Keep related UI, state, and business logic together.
@@ -73,26 +75,26 @@ frontEnd/
   - Manage authentication forms and validation.
   - Connect with the `api/authApi.ts` client.
 
-### `features/flow-editor`
+### `features/recipes`
 
-- Contains the visual flow editor feature.
-- Responsibilities:
-  - Render the workflow canvas and editor controls.
-  - Manage nodes, edges, and editor interactions.
-  - Provide the interface for editing process steps.
+- `RecipeHomePage.tsx`: My Recipes / Global Recipes, create, publish/unpublish, copy and delete. Opening a recipe goes to the Recipe Tool.
 
-#### Subfolders inside `flow-editor`
+### `features/recipe-tool`
 
-- `components/`
-  - Reusable UI elements for the editor.
-  - Contains `canvas`, `sidebar`, and `toolbar` subfolders.
-- `nodes/`
-  - Defines node types such as start, recipe step, condition, and section.
-- `edges/`
-  - Contains edge rendering and flow connection logic.
-- `store/`
-  - Holds editor state management logic.
-  - Example: `flowStore.ts`.
+- The Recipe Tool for one recipe (`RecipeToolPage.tsx`): summary, Ingredients and Nutrition tabs, and the Recipe Process tab.
+- `context/RecipeSessionContext.tsx` holds the unified in-memory recipe snapshot (MAIN + every SUBPROCESS); the recipe-level Save persists all of it at once.
+- `catalog/`: the recipe step catalogs (actions, ingredients, units, preparation styles, flame levels) built from `stepCatalogs.data.json`.
+- `styles/recipe-tool.css`: shared tokens and component styles.
+
+#### `features/recipe-tool/process` (Recipe Process)
+
+The recipe-specific editor built on the generic Process graph (`types/process.ts`):
+
+- `components/`: `RecipeProcessCanvas` (the React Flow editor), `RecipeProcessEditor`, `RecipeProcessTopBar`, `RecipeProcessSidebar`, `RecipeProcessBreadcrumb`, `RecipeStepPanel`, `RecipeConditionPanel`, `RecipeProcessView`, `RecipeProcessListPage`, `RecipeProcessGenerationModal` and `RecipeVisualizationSlideshow`.
+- `nodes/`: `RecipeStepNode` and `RecipeConditionNode`.
+- `model/`: recipe step data (Action / Action On / cooking properties), condition data, node type constants and the canvas payload types.
+- `adapters/`: Process graph ↔ canvas conversion, and AI generation result → processes.
+- `context/`: per-canvas graph context for node components.
 
 ### `features/kitchen`
 

@@ -1,24 +1,13 @@
 /**
- * Recipe & Flow API
- * Handles all recipe and flow-related API calls
+ * Recipe API
+ * Recipes, their detail (ingredients/nutrition/main process), their Process graphs, and the
+ * recipe-process AI generation/visualization jobs.
  */
 
 import { apiGet, apiPost, apiDelete, apiPut } from './client'
 import { API } from './endpoints'
-import type { FlowData, RecipeExecutionModel } from '../types/recipeFlow'
-import type {
-  NutritionInfo,
-  Process,
-  ProcessBatchUpdateItem,
-  ProcessCreateRequest,
-  ProcessGenerationJobResponse,
-  ProcessGenerationRequest,
-  ProcessUpdateRequest,
-  ProcessVisualizationJobResponse,
-  RecipeDetail,
-  RecipeIngredient,
-  UnitType,
-} from '../types/process'
+import type { Process, ProcessBatchUpdateItem, ProcessCreateRequest, ProcessUpdateRequest } from '../types/process'
+import type { NutritionInfo, RecipeProcessGenerationJobResponse, RecipeProcessGenerationRequest, RecipeProcessVisualizationJobResponse, RecipeDetail, RecipeIngredient, UnitType } from '../types/recipe'
 
 export type RecipeVisibility = 'PUBLIC' | 'PRIVATE'
 
@@ -40,47 +29,6 @@ export interface RecipeCreateRequest {
 export interface RecipeUpdateRequest {
   name: string
   description?: string
-}
-
-export interface VisualizationRequest {
-  nodes: FlowData['nodes']
-  edges: FlowData['edges']
-}
-
-export interface RecipeFlowGenerationRequest {
-  recipe: string
-  /** Client-generated id (e.g. crypto.randomUUID()) used as the AI request's idempotency key, so an accidental double-submit never charges credits twice. */
-  clientRequestId?: string
-}
-
-export type LegacyRecipeFlowGenerationResponse = {
-  nodes: unknown[]
-  edges: unknown[]
-}
-
-/** Which AI model actually served a request, and whether that was a fallback because premium credits are exhausted. */
-export interface AiFallbackMetadata {
-  modelUsed?: string
-  modelTier?: 'PAID' | 'OPEN_SOURCE'
-  usedFallback?: boolean
-  fallbackReason?: 'INSUFFICIENT_CREDITS' | 'PREFERRED_MODEL_DISABLED' | null
-}
-
-export type RecipeFlowGenerationResponse = (RecipeExecutionModel | LegacyRecipeFlowGenerationResponse) & AiFallbackMetadata
-
-export interface VisualizationClip {
-  clipId?: string
-  [key: string]: unknown
-}
-
-export interface VisualizationFinalClip {
-  clipId?: string
-  [key: string]: unknown
-}
-
-export interface VisualizationResponse {
-  clips?: VisualizationClip[]
-  finalClip?: VisualizationFinalClip
 }
 
 export const RecipeApi = {
@@ -134,169 +82,9 @@ export const RecipeApi = {
   },
 }
 
-export const FlowApi = {
-  /**
-   * Load flow data for a recipe
-   */
-  async getFlowByRecipeId(recipeId: number | string): Promise<FlowData> {
-    return apiGet<FlowData>(API.flows.byId(recipeId))
-  },
-
-  /**
-   * Save flow data for a recipe
-   */
-  async saveFlow(
-    flowId: number | string,
-    data: FlowData
-  ): Promise<FlowData> {
-    return apiPut<FlowData>(API.flows.byId(flowId), data)
-  },
-
-  /**
-   * Generate an initial flow from recipe text
-   */
-  async generateFlowFromRecipe(data: RecipeFlowGenerationRequest): Promise<RecipeFlowGenerationResponse> {
-    return apiPost<RecipeFlowGenerationResponse>(API.recipeGeneration.generateFlow, data)
-  },
-}
-
-export const VisualizationApi = {
-  /**
-   * Generate visualization for a flow
-   */
-  async generateVisualization(
-    recipeId: number | string,
-    data: VisualizationRequest
-  ): Promise<VisualizationResponse> {
-    return apiPost<VisualizationResponse>(
-      API.visualizations.byId(recipeId),
-      data
-    )
-  },
-}
-
-export interface RecipeVisualizationStep extends AiFallbackMetadata {
-  stepId: string
-  visualizationAssetId: number
-  imagePrompt?: string
-  imageUrl?: string | null
-  modelKey?: string
-  modelTier?: 'PAID' | 'OPEN_SOURCE'
-  usedFallback?: boolean
-}
-
-export interface RecipeVisualizationGenerateResponse {
-  recipeId: string
-  message?: string
-  steps: RecipeVisualizationStep[]
-}
-
-export const RecipeVisualizationApi = {
-  /**
-   * Generate (or reuse) visualization assets for every step of a recipe
-   */
-  async generate(recipeId: number | string): Promise<RecipeVisualizationGenerateResponse> {
-    return apiPost<RecipeVisualizationGenerateResponse>(
-      API.recipeVisualization.generate(recipeId),
-      {}
-    )
-  },
-
-  /**
-   * Generate (or reuse) the visualization asset for a single recipe step
-   */
-  async generateStep(recipeId: number | string, stepId: string): Promise<RecipeVisualizationStep> {
-    return apiPost<RecipeVisualizationStep>(
-      API.recipeVisualization.generateStep(recipeId, stepId),
-      {}
-    )
-  },
-}
-
-export type VisualizationJobStatus = 'QUEUED' | 'IN_PROGRESS' | 'COMPLETED' | 'COMPLETED_WITH_ERRORS' | 'FAILED'
-
-export interface VisualizationJobStepResult {
-  stepId: string
-  success: boolean
-  visualizationAssetId?: number
-  imageUrl?: string | null
-  errorMessage?: string | null
-  modelKey?: string
-  tier?: 'PAID' | 'OPEN_SOURCE'
-  usedFallback?: boolean
-}
-
-export interface VisualizationJobResponse {
-  jobId: string
-  recipeId: string
-  status: VisualizationJobStatus
-  totalSteps: number
-  completedSteps: number
-  steps: VisualizationJobStepResult[]
-}
-
 /**
- * Async, job-based visualization generation: {@link startJob} returns immediately with a
- * QUEUED job, and the caller polls {@link getJobStatus} until it reaches a terminal status
- * (COMPLETED / COMPLETED_WITH_ERRORS / FAILED). Preferred over {@link RecipeVisualizationApi}'s
- * synchronous per-step calls since the backend bounds concurrency and reports per-step
- * fallback/model metadata here.
- */
-export const VisualizationJobApi = {
-  async startJob(recipeId: number | string): Promise<VisualizationJobResponse> {
-    return apiPost<VisualizationJobResponse>(API.recipeVisualization.startJob(recipeId), {})
-  },
-
-  async getJobStatus(jobId: string): Promise<VisualizationJobResponse> {
-    return apiGet<VisualizationJobResponse>(API.recipeVisualization.jobStatus(jobId))
-  },
-}
-
-export type RecipeFlowGenerationJobStatus = 'QUEUED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
-
-/**
- * Internal milestone of a recipe-flow generation job. There's no natural step
- * count for a single AI call, so progress is reported as these coarse, real
- * stage transitions instead — see {@link RecipeFlowGenerationJobResponse.progressPercent}.
- */
-export type RecipeFlowGenerationStage =
-  | 'QUEUED'
-  | 'BUILDING_PROMPT'
-  | 'CALLING_MODEL'
-  | 'VALIDATING_RESPONSE'
-  | 'RETRYING'
-  | 'PERSISTING'
-  | 'COMPLETED'
-
-export interface RecipeFlowGenerationJobResponse {
-  jobId: string
-  status: RecipeFlowGenerationJobStatus
-  stage: RecipeFlowGenerationStage
-  progressPercent: number
-  result: RecipeFlowGenerationResponse | null
-  errorMessage?: string | null
-}
-
-/**
- * Async, job-based flow generation: {@link startJob} returns immediately with a QUEUED job, and
- * the caller polls {@link getJobStatus} until it reaches a terminal status (COMPLETED / FAILED).
- * Preferred over {@link FlowApi.generateFlowFromRecipe}'s synchronous call since it never blocks
- * the request for the full duration of the AI call and reports real progress milestones.
- */
-export const FlowGenerationJobApi = {
-  async startJob(data: RecipeFlowGenerationRequest): Promise<RecipeFlowGenerationJobResponse> {
-    return apiPost<RecipeFlowGenerationJobResponse>(API.recipeGeneration.startJob, data)
-  },
-
-  async getJobStatus(jobId: string): Promise<RecipeFlowGenerationJobResponse> {
-    return apiGet<RecipeFlowGenerationJobResponse>(API.recipeGeneration.jobStatus(jobId))
-  },
-}
-
-/**
- * New Recipe Tool: a recipe's ingredients/nutrition/main-process, backed by
- * `/api/v1/recipes/{recipeId}/**`. Coexists with {@link RecipeApi} above,
- * which still serves the legacy `/api/v1/process-templates` endpoints. The
+ * A recipe's ingredients/nutrition/main-process, backed by `/api/v1/recipes/{recipeId}/**`
+ * ({@link RecipeApi} above serves the recipe list/create/publish/copy endpoints). The
  * authenticated user is resolved by the backend from the request's JWT, so
  * — unlike {@link RecipeApi}'s mutating methods — none of these take a
  * userId parameter.
@@ -340,7 +128,7 @@ export const RecipeDetailApi = {
 }
 
 /**
- * New Recipe Tool: Process (MAIN/SUBPROCESS) CRUD + recipe-scoped copy-on-insert reuse, backed
+ * Process (MAIN/SUBPROCESS) graph CRUD + recipe-scoped copy-on-insert reuse, backed
  * by `/api/v1/recipes/{recipeId}/processes/**`. Every process is scoped to a recipe id.
  */
 export const ProcessApi = {
@@ -405,34 +193,34 @@ export const ProcessApi = {
 }
 
 /**
- * AI-driven Process generation (semantic MAIN + subprocesses from free-form recipe text) —
- * async job only, mirroring FlowGenerationJobApi for the legacy flow model. The result is never
- * persisted by the backend; the frontend loads it into the current Recipe working session (see
- * features/flow-editor/adapters/processGenerationConverter.ts and RecipeSessionContext) and the
- * user Saves explicitly.
+ * AI-driven recipe process generation (semantic MAIN + subprocesses from free-form recipe text) —
+ * async job only. The result is never persisted by the backend; the frontend loads it into the
+ * current Recipe working session (see
+ * features/recipe-tool/process/adapters/recipeProcessGenerationConverter.ts and
+ * RecipeSessionContext) and the user Saves explicitly.
  */
-export const ProcessGenerationApi = {
-  async startJob(recipeId: number, data: ProcessGenerationRequest): Promise<ProcessGenerationJobResponse> {
-    return apiPost<ProcessGenerationJobResponse>(API.processGeneration.startJob(recipeId), data)
+export const RecipeProcessGenerationApi = {
+  async startJob(recipeId: number, data: RecipeProcessGenerationRequest): Promise<RecipeProcessGenerationJobResponse> {
+    return apiPost<RecipeProcessGenerationJobResponse>(API.recipeProcessGeneration.startJob(recipeId), data)
   },
 
-  async getJobStatus(recipeId: number, jobId: string): Promise<ProcessGenerationJobResponse> {
-    return apiGet<ProcessGenerationJobResponse>(API.processGeneration.jobStatus(recipeId, jobId))
+  async getJobStatus(recipeId: number, jobId: string): Promise<RecipeProcessGenerationJobResponse> {
+    return apiGet<RecipeProcessGenerationJobResponse>(API.recipeProcessGeneration.jobStatus(recipeId, jobId))
   },
 }
 
 /**
- * Async, per-step Process-model visualization (one generated image per STEP of the given
- * MAIN/SUBPROCESS) — the Process-model counterpart to {@link VisualizationJobApi}. Scoped to one
+ * Async, per-step recipe process visualization (one generated image per STEP of the given
+ * MAIN/SUBPROCESS). Scoped to one
  * process at a time: visualizing a process only generates images for its own STEP nodes.
  */
-export const ProcessVisualizationApi = {
-  async startJob(recipeId: number, processId: number): Promise<ProcessVisualizationJobResponse> {
-    return apiPost<ProcessVisualizationJobResponse>(API.processVisualization.startJob(recipeId, processId), {})
+export const RecipeProcessVisualizationApi = {
+  async startJob(recipeId: number, processId: number): Promise<RecipeProcessVisualizationJobResponse> {
+    return apiPost<RecipeProcessVisualizationJobResponse>(API.recipeProcessVisualization.startJob(recipeId, processId), {})
   },
 
-  async getJobStatus(recipeId: number, processId: number, jobId: string): Promise<ProcessVisualizationJobResponse> {
-    return apiGet<ProcessVisualizationJobResponse>(API.processVisualization.jobStatus(recipeId, processId, jobId))
+  async getJobStatus(recipeId: number, processId: number, jobId: string): Promise<RecipeProcessVisualizationJobResponse> {
+    return apiGet<RecipeProcessVisualizationJobResponse>(API.recipeProcessVisualization.jobStatus(recipeId, processId, jobId))
   },
 }
 

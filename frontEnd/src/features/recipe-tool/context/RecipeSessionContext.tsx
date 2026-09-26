@@ -2,11 +2,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react'
 import { ProcessApi, RecipeDetailApi } from '../../../api'
 import type { Process, ProcessEdge, ProcessNode, ProcessViewport } from '../../../types/process'
-import { normalizeProcessStepNodeData, withProcessStepActionOnProcesses } from '../../flow-editor/model/processStepData'
+import { normalizeRecipeStepNodeData, withRecipeStepActionOnProcesses } from '../process/model/recipeStepData'
 
 /**
  * A process not yet created on the backend (e.g. from AI generation — see
- * processGenerationConverter.ts) is held in the session under a temporary
+ * recipeProcessGenerationConverter.ts) is held in the session under a temporary
  * negative id; a real Process id is always a positive sequence number, so
  * the two can never collide.
  */
@@ -22,7 +22,7 @@ const remapActionOnProcessRefs = (nodes: ProcessNode[], idMap: Map<number, numbe
   nodes.map((node) => {
     if (node.kind !== 'STEP') return node
 
-    const { step } = normalizeProcessStepNodeData(node.data)
+    const { step } = normalizeRecipeStepNodeData(node.data)
     const references = step.actionOn.processes
     if (references.length === 0) return node
 
@@ -30,7 +30,7 @@ const remapActionOnProcessRefs = (nodes: ProcessNode[], idMap: Map<number, numbe
     const changed = remapped.some((id, index) => id !== references[index].processId)
     if (!changed) return node
 
-    return { ...node, data: withProcessStepActionOnProcesses(node.data, remapped) as unknown as Record<string, unknown> }
+    return { ...node, data: withRecipeStepActionOnProcesses(node.data, remapped) as unknown as Record<string, unknown> }
   })
 
 /**
@@ -47,7 +47,7 @@ const remapActionOnProcessRefs = (nodes: ProcessNode[], idMap: Map<number, numbe
  * Loaded once per provider instance via `ProcessApi.listByRecipe` (already
  * returns full nodes/edges/viewport per process — no need to re-fetch a
  * process individually just to open/display it). Process content lives in a
- * ref (not reactive state) so that ProcessCanvas can write to it on every
+ * ref (not reactive state) so that RecipeProcessCanvas can write to it on every
  * keystroke without forcing every consumer (the process list sidebar, the
  * Ingredients view) to re-render on every keystroke via prop/array identity
  * churn; the exposed getters are stable functions that always read the
@@ -69,7 +69,7 @@ export type RecipeSessionContextValue = {
   anyDirty: boolean
   /**
    * Applies an in-memory edit to one process — a field update (rename), and/or a full graph
-   * replacement (nodes/edges/viewport, as ProcessCanvas already builds for a save). Marks that
+   * replacement (nodes/edges/viewport, as RecipeProcessCanvas already builds for a save). Marks that
    * process dirty; does not touch the backend.
    */
   updateProcess: (
@@ -79,7 +79,7 @@ export type RecipeSessionContextValue = {
   /**
    * Registers a process into the session without a re-fetch — either already persisted (e.g. just
    * created or copied via the Process API) or still pending (a negative, client-temporary id, e.g.
-   * freshly AI-generated and not yet saved — see processGenerationConverter.ts). `saveAll` creates
+   * freshly AI-generated and not yet saved — see recipeProcessGenerationConverter.ts). `saveAll` creates
    * any pending process for real (and resolves any Action On subprocess reference pointing at its
    * temp id) before persisting content.
    */
@@ -174,7 +174,7 @@ export function RecipeSessionProvider({ recipeId, children }: { recipeId: number
       // existing processes by id. A pending MAIN goes through the same idempotent "ensure a MAIN
       // exists" endpoint the manual "Create Main Process" flow uses (also wires up the recipe's
       // mainProcessId); by construction a pending MAIN only ever occurs when the recipe had none
-      // yet (see processGenerationConverter.ts's caller), so this is always the correct call here.
+      // yet (see recipeProcessGenerationConverter.ts's caller), so this is always the correct call here.
       const idMap = new Map<number, number>()
       for (const process of current) {
         if (!isPendingProcessId(process.id)) continue
@@ -234,5 +234,5 @@ export function RecipeSessionProvider({ recipeId, children }: { recipeId: number
   return <RecipeSessionContext.Provider value={value}>{children}</RecipeSessionContext.Provider>
 }
 
-/** Returns null outside a provider. Every route that renders ProcessCanvas wraps it in a RecipeSessionProvider (see RecipeToolPage.tsx and App.tsx's ProcessEditorRoute), so this should only be null if that wiring is missing. */
+/** Returns null outside a provider. Every route that renders RecipeProcessCanvas wraps it in a RecipeSessionProvider (see RecipeToolPage.tsx and App.tsx's RecipeProcessEditorRoute), so this should only be null if that wiring is missing. */
 export const useRecipeSession = () => useContext(RecipeSessionContext)

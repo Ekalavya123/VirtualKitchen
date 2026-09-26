@@ -1,35 +1,42 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
 import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
+import com.processVisualisation.virtualKitchen.common.exception.ProcessValidationException;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.common.mapper.ProcessTemplateMapper;
 import com.processVisualisation.virtualKitchen.recipe.dto.NutritionInfoDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeDetailResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeIngredientDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.model.NutritionInfo;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
 import com.processVisualisation.virtualKitchen.recipe.model.RecipeIngredient;
 import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
 import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
 import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
-import com.processVisualisation.virtualKitchen.recipe.repository.RecipeRepository;
 import com.processVisualisation.virtualKitchen.recipe.repository.RecipeTemplateRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -38,9 +45,9 @@ import static org.mockito.Mockito.when;
 /**
  * Service-level tests for the new Recipe Tool methods added to
  * {@link RecipeTemplateServiceImpl} (recipe details, ingredients, nutrition,
- * main process). Pre-existing methods (create/update/delete/copyToUser) are
- * not re-tested here — they were untested before this change and are
- * untouched by it. {@link IProcessService} is mocked so these tests exercise
+ * main process — including concurrent-call handling — and the Process-model recipe copy). Pre-existing methods
+ * (create/update/delete) are not re-tested here — they were untested before
+ * this change and are untouched by it. {@link IProcessService} is mocked so these tests exercise
  * only the recipe-level orchestration/ownership/visibility logic, not
  * {@link ProcessServiceImpl} itself (covered separately by
  * {@code ProcessServiceImplTest}). Uses {@link ReflectionTestUtils} to
@@ -69,13 +76,25 @@ class RecipeTemplateServiceImplTest {
             return recipe;
         });
 
+        when(repo.linkMainProcessIfUnset(anyLong(), anyLong())).thenAnswer(inv -> {
+            RecipeTemplate recipe = recipeStore.get(inv.<Long>getArgument(0));
+            if (recipe == null || recipe.getMainProcessId() != null) {
+                return 0L;
+            }
+            recipe.setMainProcessId(inv.getArgument(1));
+            return 1L;
+        });
+        doAnswer(inv -> recipeStore.remove(inv.<Long>getArgument(0))).when(repo).deleteById(anyLong());
+
         processService = mock(IProcessService.class);
+        SequenceGeneratorService seq = mock(SequenceGeneratorService.class);
+        AtomicLong idCounter = new AtomicLong(500);
+        when(seq.generateSequence(anyString())).thenAnswer(inv -> idCounter.incrementAndGet());
 
         service = new RecipeTemplateServiceImpl();
         ReflectionTestUtils.setField(service, "repo", repo);
         ReflectionTestUtils.setField(service, "mapper", new ProcessTemplateMapper());
-        ReflectionTestUtils.setField(service, "seq", mock(SequenceGeneratorService.class));
-        ReflectionTestUtils.setField(service, "recipeRepository", mock(RecipeRepository.class));
+        ReflectionTestUtils.setField(service, "seq", seq);
         ReflectionTestUtils.setField(service, "processService", processService);
     }
 
@@ -177,6 +196,119 @@ class RecipeTemplateServiceImplTest {
         assertEquals(777L, result.getId());
         assertEquals(777L, recipeStore.get(recipeId).getMainProcessId());
         verify(processService).create(eq(recipeId), eq(OWNER_ID), any());
+    }
+
+    @Test
+    void createMainProcess_unlinkedMainExists_adoptsItInsteadOfCreating() {
+        Long recipeId = seedRecipe(OWNER_ID, Visibility.PRIVATE);
+        ProcessResponseDTO orphan = ProcessResponseDTO.builder().id(888L).type(ProcessType.MAIN).recipeId(recipeId).build();
+        when(processService.listByRecipe(recipeId, OWNER_ID)).thenReturn(List.of(orphan));
+        when(processService.get(recipeId, 888L, OWNER_ID)).thenReturn(orphan);
+
+        ProcessResponseDTO result = service.createMainProcess(recipeId, OWNER_ID);
+
+        assertEquals(888L, result.getId());
+        assertEquals(888L, recipeStore.get(recipeId).getMainProcessId());
+        verify(processService, never()).create(any(), any(), any());
+    }
+
+    @Test
+    void createMainProcess_concurrentInsertRejectedByValidator_usesTheOtherMain() {
+        Long recipeId = seedRecipe(OWNER_ID, Visibility.PRIVATE);
+        ProcessResponseDTO other = ProcessResponseDTO.builder().id(901L).type(ProcessType.MAIN).recipeId(recipeId).build();
+        when(processService.listByRecipe(recipeId, OWNER_ID)).thenReturn(List.of()).thenReturn(List.of(other));
+        when(processService.create(eq(recipeId), eq(OWNER_ID), any()))
+                .thenThrow(new ProcessValidationException("recipe " + recipeId + " already has a MAIN process"));
+        when(processService.get(recipeId, 901L, OWNER_ID)).thenReturn(other);
+
+        ProcessResponseDTO result = service.createMainProcess(recipeId, OWNER_ID);
+
+        assertEquals(901L, result.getId());
+        assertEquals(901L, recipeStore.get(recipeId).getMainProcessId());
+    }
+
+    @Test
+    void createMainProcess_concurrentCallLinkedFirst_deletesOwnDuplicate() {
+        Long recipeId = seedRecipe(OWNER_ID, Visibility.PRIVATE);
+        when(processService.create(eq(recipeId), eq(OWNER_ID), any())).thenAnswer(inv -> {
+            // Simulates the other request linking its MAIN while this one is still inserting.
+            recipeStore.get(recipeId).setMainProcessId(901L);
+            return ProcessResponseDTO.builder().id(902L).type(ProcessType.MAIN).recipeId(recipeId).build();
+        });
+        ProcessResponseDTO winner = ProcessResponseDTO.builder().id(901L).type(ProcessType.MAIN).recipeId(recipeId).build();
+        when(processService.get(recipeId, 901L, OWNER_ID)).thenReturn(winner);
+
+        ProcessResponseDTO result = service.createMainProcess(recipeId, OWNER_ID);
+
+        assertEquals(901L, result.getId());
+        assertEquals(901L, recipeStore.get(recipeId).getMainProcessId());
+        verify(processService).delete(recipeId, 902L, OWNER_ID);
+    }
+
+    @Test
+    void createMainProcess_invalidConversion_withNoOtherMain_propagatesError() {
+        Long recipeId = seedRecipe(OWNER_ID, Visibility.PRIVATE);
+        when(processService.create(eq(recipeId), eq(OWNER_ID), any()))
+                .thenThrow(new ProcessValidationException("bad graph"));
+
+        assertThrows(ProcessValidationException.class, () -> service.createMainProcess(recipeId, OWNER_ID));
+        assertEquals(null, recipeStore.get(recipeId).getMainProcessId());
+    }
+
+    @Test
+    void copyToUser_copiesIngredientsNutritionAndProcessesIntoIndependentPrivateRecipe() {
+        Long sourceId = seedRecipe(OWNER_ID, Visibility.PUBLIC);
+        RecipeTemplate source = recipeStore.get(sourceId);
+        RecipeIngredient ingredient = new RecipeIngredient();
+        ingredient.setIngredientId(5L);
+        ingredient.setQuantity(2.0);
+        ingredient.setUnit(UnitType.COUNT);
+        ingredient.setNotes("diced");
+        source.setIngredients(new ArrayList<>(List.of(ingredient)));
+        NutritionInfo nutrition = new NutritionInfo();
+        nutrition.setCalories(250.0);
+        nutrition.setServings(2);
+        source.setNutrition(nutrition);
+        source.setMainProcessId(10L);
+        when(processService.copyAllToRecipe(eq(sourceId), anyLong()))
+                .thenAnswer(inv -> new RecipeProcessCopyResult(Map.of(10L, 20L, 11L, 21L), 20L));
+
+        RecipeTemplateResponseDTO copyDto = service.copyToUser(sourceId, OTHER_USER_ID);
+
+        RecipeTemplate copy = recipeStore.get(copyDto.getId());
+        assertNotEquals(sourceId, copy.getId());
+        assertEquals(OTHER_USER_ID, copy.getCreatedBy());
+        assertEquals(Visibility.PRIVATE, copy.getVisibility());
+        assertEquals(20L, copy.getMainProcessId());
+        assertEquals(1, copy.getIngredients().size());
+        assertEquals(5L, copy.getIngredients().get(0).getIngredientId());
+        assertEquals("diced", copy.getIngredients().get(0).getNotes());
+        assertNotSame(ingredient, copy.getIngredients().get(0));
+        assertEquals(250.0, copy.getNutrition().getCalories());
+        assertEquals(2, copy.getNutrition().getServings());
+        assertNotSame(nutrition, copy.getNutrition());
+        verify(processService).copyAllToRecipe(sourceId, copy.getId());
+
+        // The source recipe is untouched.
+        assertEquals(10L, source.getMainProcessId());
+        assertEquals(Visibility.PUBLIC, source.getVisibility());
+    }
+
+    @Test
+    void copyToUser_processCopyFails_removesTheNewRecipe() {
+        Long sourceId = seedRecipe(OWNER_ID, Visibility.PUBLIC);
+        when(processService.copyAllToRecipe(eq(sourceId), anyLong())).thenThrow(new ProcessValidationException("bad"));
+
+        assertThrows(ProcessValidationException.class, () -> service.copyToUser(sourceId, OTHER_USER_ID));
+        assertEquals(1, recipeStore.size(), "only the source recipe remains");
+    }
+
+    @Test
+    void copyToUser_privateRecipe_isRejected() {
+        Long sourceId = seedRecipe(OWNER_ID, Visibility.PRIVATE);
+
+        assertThrows(RecipeAccessDeniedException.class, () -> service.copyToUser(sourceId, OTHER_USER_ID));
+        verify(processService, never()).copyAllToRecipe(any(), any());
     }
 
     @Test

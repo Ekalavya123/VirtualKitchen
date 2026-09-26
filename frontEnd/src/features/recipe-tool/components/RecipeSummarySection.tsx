@@ -1,5 +1,5 @@
-import '../../flow-editor/styles/flow-editor.css'
-import type { RecipeDetail } from '../../../types/process'
+import '../styles/recipe-tool.css'
+import type { RecipeDetail } from '../../../types/recipe'
 
 type RecipeSummarySectionProps = {
   recipe: RecipeDetail

@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *     <li>{@link #executeInline} runs the work directly on the calling
  *     thread, with no nested pool submission. Used for text-to-image, whose
  *     per-step calls already run inside the existing {@code "visualization"}
- *     pool's own bounded worker threads (via {@code VisualizationJobService})
+ *     pool's own bounded worker threads (via {@code RecipeProcessVisualizationJobService})
  *     — submitting to that same pool again from within one of its own
  *     workers would risk a saturated pool deadlocking against itself, exactly
  *     what {@code TaskPoolConfig} already keeps the orchestrator/worker pools

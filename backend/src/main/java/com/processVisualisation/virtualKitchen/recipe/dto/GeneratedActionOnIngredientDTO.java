@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
  * ingredient id from the shared static catalog, or "custom" with a free-text
  * name, plus its own quantity/unit/preparation style). No presentation
  * fields: the frontend assembles this into a full {@code ActionOnIngredient}
- * (features/flow-editor/model/processStepData.ts) once the generated result
+ * (features/recipe-tool/process/model/recipeStepData.ts) once the generated result
  * is loaded into the Recipe working session.
  */
 @Data

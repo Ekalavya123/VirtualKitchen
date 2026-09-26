@@ -16,7 +16,7 @@
 }
 
 /* The flow/recipe editor manages its own full-bleed layout and scrolling
-   (see FlowCanvas.css) - the shared padding would push it below the navbar
+   (see recipe-tool/process/styles/RecipeProcessCanvas.css) - the shared padding would push it below the navbar
    and force this container to grow past the space it's actually given. */
 .kitchen-body:has(.flow-canvas-container) {
   padding: 0;

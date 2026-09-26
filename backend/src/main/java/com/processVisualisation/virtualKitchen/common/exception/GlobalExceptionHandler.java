@@ -179,8 +179,8 @@ public class GlobalExceptionHandler {
      * @param ex the recipe flow generation exception
      * @return an {@link ErrorResponse} with {@code ex}'s message, at HTTP 422 Unprocessable Entity
      */
-    @ExceptionHandler(RecipeFlowGenerationException.class)
-    public ResponseEntity<ErrorResponse> handleRecipeGeneration(RecipeFlowGenerationException ex) {
+    @ExceptionHandler(RecipeProcessAiException.class)
+    public ResponseEntity<ErrorResponse> handleRecipeGeneration(RecipeProcessAiException ex) {
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.UNPROCESSABLE_ENTITY.value(),

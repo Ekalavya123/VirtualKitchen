@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import '../../flow-editor/styles/flow-editor.css'
-import '../../flow-editor/components/toolbar/PropertiesPanel.css'
+import '../styles/recipe-tool.css'
+import '../process/styles/RecipePropertiesPanel.css'
 import SearchableSelect, { type SearchableSelectOption } from '../../../shared/components/SearchableSelect'
 import {
   CUSTOM_INGREDIENT_ID,
@@ -9,12 +9,12 @@ import {
   getIngredientDefaultUnitType,
   isIngredientId,
   type IngredientId,
-} from '../../flow-editor/catalog/ingredientCatalog'
-import { CUSTOM_PREPARATION_STYLE_ID, DEFAULT_PREPARATION_STYLE_ID, PREPARATION_STYLE_CATALOG } from '../../flow-editor/catalog/preparationStyleCatalog'
-import { isStepFieldEnabled } from '../../flow-editor/catalog/actionSchemaCatalog'
-import type { StepActionId } from '../../flow-editor/catalog/actionCatalog'
-import type { ActionOnIngredient } from '../../flow-editor/model/processStepData'
-import type { UnitType } from '../../../types/process'
+} from '../catalog/ingredientCatalog'
+import { CUSTOM_PREPARATION_STYLE_ID, DEFAULT_PREPARATION_STYLE_ID, PREPARATION_STYLE_CATALOG } from '../catalog/preparationStyleCatalog'
+import { isStepFieldEnabled } from '../catalog/actionSchemaCatalog'
+import type { StepActionId } from '../catalog/actionCatalog'
+import type { ActionOnIngredient } from '../process/model/recipeStepData'
+import type { UnitType } from '../../../types/recipe'
 
 const UNIT_OPTIONS: { value: UnitType; label: string }[] = [
   { value: 'COUNT', label: 'count' },

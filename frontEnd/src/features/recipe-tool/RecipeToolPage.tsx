@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { RecipeDetailApi } from '../../api'
-import type { NutritionInfo, RecipeDetail } from '../../types/process'
+import type { NutritionInfo, RecipeDetail } from '../../types/recipe'
 import { RecipeSessionProvider } from './context/RecipeSessionContext'
-import '../flow-editor/components/canvas/FlowCanvas.css'
+import './process/styles/RecipeProcessCanvas.css'
 import RecipeToolNavbar, { type RecipeToolView } from './components/RecipeToolNavbar'
 import IngredientsSection from './components/IngredientsSection'
 import NutritionSection from './components/NutritionSection'
-import RecipeProcessView from './components/RecipeProcessView'
+import RecipeProcessView from './process/components/RecipeProcessView'
 
 type RecipeToolPageProps = {
   recipeId: number
@@ -36,6 +36,22 @@ export default function RecipeToolPage({ recipeId, currentUserId, onBack }: Reci
     // by recipeId, so a different recipe means a fresh mount (fresh initial state) rather than this
     // effect re-running in place on an existing instance.
     RecipeDetailApi.getRecipeDetail(recipeId)
+      .then(async (result) => {
+        // Every recipe the owner opens gets its MAIN process before the session below loads, so
+        // the tool always opens on MAIN. The endpoint is idempotent (safe to race, e.g. StrictMode's
+        // double effect). Runs before RecipeSessionProvider mounts (it only mounts
+        // once `loading` is false), so the session's single process load already includes it.
+        if (result.mainProcessId == null && result.createdBy === currentUserId) {
+          try {
+            const main = await RecipeDetailApi.createMainProcess(recipeId)
+            return { ...result, mainProcessId: main.id }
+          } catch (error) {
+            // Not fatal: the Recipe Process tab still offers "Create Main Process" / AI generation.
+            console.error('Unable to prepare this recipe\'s main process:', error)
+          }
+        }
+        return result
+      })
       .then((result) => {
         if (!cancelled) {
           setRecipe(result)
@@ -53,7 +69,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, onBack }: Reci
     return () => {
       cancelled = true
     }
-  }, [recipeId])
+  }, [recipeId, currentUserId])
 
   const isOwner = recipe != null && recipe.createdBy != null && recipe.createdBy === currentUserId
 
@@ -90,8 +106,8 @@ export default function RecipeToolPage({ recipeId, currentUserId, onBack }: Reci
   return (
     <RecipeSessionProvider recipeId={recipeId}>
       {/* `flow-canvas-container` strips .kitchen-body's ambient page padding/scroll (see
-          KitchenPage.css) so the Recipe Process tab's ProcessCanvas can use the full available
-          area edge-to-edge, matching old FlowCanvas — applied unconditionally (not only while that
+          KitchenPage.css) so the Recipe Process tab's RecipeProcessCanvas can use the full available
+          area edge-to-edge — applied unconditionally (not only while that
           tab is active) since Ingredients/Nutrition already manage their own padding/scroll below
           and all three tabs stay mounted together (see the display:none toggling below). */}
       <div className="flow-canvas-container flex h-full w-full flex-col" style={{ background: 'var(--flow-surface-muted)' }}>
@@ -102,7 +118,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, onBack }: Reci
             nutrition/ingredient edit (verification requirement: switching tabs preserves state).
             The shared RecipeSessionProvider above is what makes MAIN + every SUBPROCESS one
             unified in-memory recipe snapshot — Ingredients reads it directly, and Recipe Process
-            (RecipeProcessView/ProcessCanvas) reads and writes the same processes, so switching
+            (RecipeProcessView/RecipeProcessCanvas) reads and writes the same processes, so switching
             between processes or tabs never loses an unsaved edit or re-fetches what's already
             loaded. */}
         <div className="min-h-0 flex-1" style={{ display: activeView === 'RECIPE_PROCESS' ? 'flex' : 'none', flexDirection: 'column' }}>
