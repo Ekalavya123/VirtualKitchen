@@ -200,7 +200,7 @@ class RecipeProcessVisualizationServiceTest {
         assertEquals(3, input.ingredients().size());
         assertTrue(input.ingredients().stream().anyMatch(i -> i.name().equals("Onion") && i.preparationStyle().equals("Medium")));
         assertTrue(input.ingredients().stream().anyMatch(i -> i.name().equals("Tomato") && i.preparationStyle().equals("Large")));
-        assertTrue(input.ingredients().stream().anyMatch(i -> i.name().equals("Chili") && i.preparationStyle().equals("Fine")));
+        assertTrue(input.ingredients().stream().anyMatch(i -> i.name().equals("Green Chili") && i.preparationStyle().equals("Fine")));
     }
 
     @Test

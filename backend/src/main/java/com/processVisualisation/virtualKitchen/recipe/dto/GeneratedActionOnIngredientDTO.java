@@ -18,7 +18,9 @@ import lombok.NoArgsConstructor;
 public class GeneratedActionOnIngredientDTO {
 
     private String ingredientId;
+    /** Null when the recipe states no amount, or the unit is non-numeric ("to-taste", "as-needed"). */
     private Double quantity;
+    /** A catalog unit id (e.g. "g", "tbsp", "clove"); legacy UnitType values (COUNT/GRAM/...) are still accepted. */
     private String unit;
 
     /** Blank/absent when preparation style doesn't apply to this action/ingredient. */

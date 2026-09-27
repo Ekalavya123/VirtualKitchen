@@ -1,5 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.service;
 
+import com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocabularyProvider.ActionDefinition;
+import com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocabularyProvider.FieldRequirement;
 import com.processVisualisation.virtualKitchen.recipe.dto.GeneratedActionOnDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.GeneratedActionOnIngredientDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.GeneratedRecipeProcessDTO;
@@ -14,7 +16,18 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocabularyProvider.CUSTOM_ID;
+import static com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocabularyProvider.FIELD_DURATION;
+import static com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocabularyProvider.FIELD_FLAME_LEVEL;
+import static com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocabularyProvider.FIELD_PREPARATION_STYLE;
+import static com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocabularyProvider.FIELD_QUANTITY;
+import static com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocabularyProvider.FIELD_REPEAT_INTERVAL;
+import static com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocabularyProvider.FIELD_TEMPERATURE;
 
 /**
  * Validates an AI-generated semantic Process structure (a MAIN process plus
@@ -23,39 +36,30 @@ import java.util.Set;
  * same simple valid/errors shape {@code ProcessValidator} already uses for
  * the persisted Process model — since this validates the same kind of
  * concern (structural integrity) one step earlier, before ids/edges exist.
+ * <p>
+ * Vocabulary and per-action rules (allowed Action On targets, allowed fields,
+ * allowed preparation styles) come from the shared catalog via
+ * {@link RecipeStepVocabularyProvider} — see docs/recipe-vocabulary-v2.md, sections F and G.
+ * Error messages name the fix (allowed ids, or the canonical id an alias maps to) so the
+ * single retry has what it needs.
  */
 @Component
 public class RecipeProcessGenerationValidator {
 
     private static final Set<String> NODE_TYPES = Set.of("STEP", "CONDITION");
     private static final Set<String> EXPECTED_RESULTS = Set.of("success", "failure");
-    private static final Set<String> UNIT_IDS = Set.of("COUNT", "GRAM", "KG", "ML", "LITER");
-    private static final String CUSTOM_ID = "custom";
+    /** The Process model's pre-catalog unit enum (UnitType) — still accepted; the frontend maps these onto catalog units. */
+    private static final Set<String> LEGACY_UNIT_IDS = Set.of("COUNT", "GRAM", "KG", "ML", "LITER");
+    private static final Pattern DURATION_PATTERN = Pattern.compile("^\\s*(\\d+(?:\\.\\d+)?)\\s*([a-zA-Z]+)\\s*$");
 
     /** Generous but finite caps so a pathological AI response can't produce an unbounded/unusable recipe. */
     private static final int MAX_SUBPROCESSES = 12;
     private static final int MAX_STEPS_PER_PROCESS = 40;
 
-    private final Set<String> actionIds;
-    private final Set<String> ingredientIds;
-    private final Set<String> preparationStyleIds;
-    private final Set<String> flameLevelIds;
+    private final RecipeStepVocabularyProvider vocabulary;
 
     public RecipeProcessGenerationValidator(RecipeStepVocabularyProvider recipeStepVocabularyProvider) {
-        this.actionIds = toSet(recipeStepVocabularyProvider.actionIds());
-        this.ingredientIds = toSet(recipeStepVocabularyProvider.ingredientIds());
-        this.preparationStyleIds = toSet(recipeStepVocabularyProvider.preparationStyleIds());
-        this.flameLevelIds = toSet(recipeStepVocabularyProvider.flameLevelIds());
-    }
-
-    private static Set<String> toSet(String pipeJoined) {
-        Set<String> set = new HashSet<>();
-        if (pipeJoined != null && !pipeJoined.isBlank()) {
-            for (String id : pipeJoined.split("\\|")) {
-                set.add(id.trim());
-            }
-        }
-        return set;
+        this.vocabulary = recipeStepVocabularyProvider;
     }
 
     /**
@@ -129,13 +133,27 @@ public class RecipeProcessGenerationValidator {
             errors.add(label + " has too many steps (" + steps.size() + " > " + MAX_STEPS_PER_PROCESS + ")");
         }
 
+        // stepId -> position, collected up front so each reference can be checked for "earlier".
+        Map<String, Integer> stepIndexById = new HashMap<>();
         for (int i = 0; i < steps.size(); i++) {
-            validateStep(steps.get(i), label + ".steps[" + i + "]", declaredRefs, ownRef, errors);
+            GeneratedRecipeStepDTO step = steps.get(i);
+            if (step == null || isBlank(step.getStepId())) continue;
+            if (stepIndexById.putIfAbsent(step.getStepId(), i) != null) {
+                errors.add(label + ".steps[" + i + "].stepId is a duplicate within this process: " + step.getStepId());
+            }
+        }
+
+        for (int i = 0; i < steps.size(); i++) {
+            StepOutputScope scope = new StepOutputScope(steps, stepIndexById, i);
+            validateStep(steps.get(i), label + ".steps[" + i + "]", declaredRefs, ownRef, scope, errors);
         }
     }
 
+    /** The consuming step's position plus its process's steps — what a step-output reference is resolved against. */
+    private record StepOutputScope(List<GeneratedRecipeStepDTO> steps, Map<String, Integer> stepIndexById, int consumerIndex) {}
+
     private void validateStep(
-            GeneratedRecipeStepDTO step, String label, Set<String> declaredRefs, String ownRef, List<String> errors
+            GeneratedRecipeStepDTO step, String label, Set<String> declaredRefs, String ownRef, StepOutputScope scope, List<String> errors
     ) {
         if (step == null) {
             errors.add(label + " is null");
@@ -172,33 +190,99 @@ public class RecipeProcessGenerationValidator {
 
         // STEP
         String action = step.getAction();
+        ActionDefinition definition = null;
         if (isBlank(action)) {
             errors.add(label + ".action is required for a STEP");
-        } else if (!actionIds.contains(action) && !CUSTOM_ID.equals(action)) {
-            errors.add(label + ".action is not in the known vocabulary: " + action);
-        }
-
-        validateActionOn(step.getActionOn(), label + ".actionOn", declaredRefs, ownRef, errors);
-    }
-
-    private void validateActionOn(
-            GeneratedActionOnDTO actionOn, String label, Set<String> declaredRefs, String ownRef, List<String> errors
-    ) {
-        if (actionOn == null) {
-            // Action On is allowed to be entirely absent (a step with neither ingredients nor a
-            // subprocess reference) — nothing further to check.
-            return;
-        }
-
-        List<GeneratedActionOnIngredientDTO> ingredients = actionOn.getIngredients();
-        if (ingredients != null) {
-            for (int i = 0; i < ingredients.size(); i++) {
-                validateActionOnIngredient(ingredients.get(i), label + ".ingredients[" + i + "]", errors);
+        } else {
+            definition = vocabulary.action(action).orElse(null);
+            if (definition == null) {
+                errors.add(label + ".action is not in the known vocabulary: " + action + aliasHint(vocabulary.resolveActionId(action)));
+            } else if (CUSTOM_ID.equals(action) && isBlank(step.getCustomActionName())) {
+                errors.add(label + ".customActionName is required when action is custom");
             }
         }
 
-        List<String> processes = actionOn.getProcesses();
-        if (processes == null) return;
+        validateActionOn(step.getActionOn(), definition, label + ".actionOn", declaredRefs, ownRef, scope, errors);
+        if (definition != null) {
+            validateStepFields(step, definition, label, errors);
+        }
+    }
+
+    /** Step-level advanced fields: each is rejected when the action doesn't declare it, and format-checked when present. */
+    private void validateStepFields(GeneratedRecipeStepDTO step, ActionDefinition action, String label, List<String> errors) {
+        String flameLevel = step.getFlameLevel();
+        if (!isBlank(flameLevel)) {
+            if (!action.hasField(FIELD_FLAME_LEVEL)) {
+                errors.add(notApplicable(label + ".flameLevel", action));
+            } else if (!vocabulary.isFlameLevelId(flameLevel)) {
+                errors.add(label + ".flameLevel must be one of " + vocabulary.flameLevelIdSet() + ", got: " + flameLevel);
+            }
+        }
+
+        boolean hasTemperature = step.getTemperatureValue() != null || !isBlank(step.getTemperatureUnit()) || !isBlank(step.getTemperature());
+        if (hasTemperature) {
+            if (!action.hasField(FIELD_TEMPERATURE)) {
+                errors.add(notApplicable(label + ".temperatureValue", action));
+            } else if (step.getTemperatureValue() != null || !isBlank(step.getTemperatureUnit())) {
+                if (step.getTemperatureValue() == null) {
+                    errors.add(label + ".temperatureValue is required when temperatureUnit is set");
+                } else if (!vocabulary.temperatureUnitIds().contains(step.getTemperatureUnit())) {
+                    errors.add(label + ".temperatureUnit must be one of " + vocabulary.temperatureUnitIds() + " when temperatureValue is set, got: " + step.getTemperatureUnit());
+                }
+            }
+        }
+
+        validateDurationField(step.getDuration(), FIELD_DURATION, label + ".duration", action, errors);
+        validateDurationField(step.getRepeatInterval(), FIELD_REPEAT_INTERVAL, label + ".repeatInterval", action, errors);
+    }
+
+    private void validateDurationField(String value, String fieldKey, String label, ActionDefinition action, List<String> errors) {
+        if (isBlank(value)) return;
+        if (!action.hasField(fieldKey)) {
+            errors.add(notApplicable(label, action));
+            return;
+        }
+        Matcher matcher = DURATION_PATTERN.matcher(value);
+        if (!matcher.matches() || vocabulary.resolveDurationUnit(matcher.group(2)).isEmpty()) {
+            errors.add(label + " must look like \"<number> <" + String.join("|", vocabulary.durationUnitIds()) + ">\", got: " + value);
+        }
+    }
+
+    private void validateActionOn(
+            GeneratedActionOnDTO actionOn, ActionDefinition action, String label, Set<String> declaredRefs, String ownRef,
+            StepOutputScope scope, List<String> errors
+    ) {
+        List<GeneratedActionOnIngredientDTO> ingredients = actionOn == null || actionOn.getIngredients() == null ? List.of() : actionOn.getIngredients();
+        List<String> processes = actionOn == null || actionOn.getProcesses() == null ? List.of() : actionOn.getProcesses();
+        List<String> stepRefs = actionOn == null || actionOn.getSteps() == null ? List.of() : actionOn.getSteps();
+
+        if (action != null) {
+            if (!ingredients.isEmpty() && !action.actionOn().allowsIngredients()) {
+                errors.add(label + ".ingredients: action " + action.id() + " cannot act on ingredients (allowed targets: " + action.actionOn() + ")");
+            }
+            if (!processes.isEmpty() && !action.actionOn().allowsProcesses()) {
+                errors.add(label + ".processes: action " + action.id() + " cannot act on subprocess outputs (allowed targets: " + action.actionOn() + ")");
+            }
+            // A step output is a prepared intermediate, like a subprocess output — same catalog rule.
+            if (!stepRefs.isEmpty() && !action.actionOn().allowsProcesses()) {
+                errors.add(label + ".steps: action " + action.id() + " cannot act on step outputs (allowed targets: " + action.actionOn() + ")");
+            }
+            if (ingredients.size() > 1 && !action.multipleIngredients()) {
+                errors.add(label + ".ingredients: action " + action.id() + " takes at most one ingredient per step, got " + ingredients.size());
+            }
+            if (ingredients.isEmpty() && processes.isEmpty() && stepRefs.isEmpty() && action.actionOnRequired()) {
+                errors.add(label + " is empty but action " + action.id() + " needs at least one ingredient, subprocess or step-output target");
+            }
+        }
+
+        for (int i = 0; i < stepRefs.size(); i++) {
+            validateStepOutputReference(stepRefs.get(i), scope, label + ".steps[" + i + "]", errors);
+        }
+
+        for (int i = 0; i < ingredients.size(); i++) {
+            validateActionOnIngredient(ingredients.get(i), action, label + ".ingredients[" + i + "]", errors);
+        }
+
         for (int i = 0; i < processes.size(); i++) {
             String ref = processes.get(i);
             String itemLabel = label + ".processes[" + i + "]";
@@ -216,38 +300,107 @@ public class RecipeProcessGenerationValidator {
         }
     }
 
-    private void validateActionOnIngredient(GeneratedActionOnIngredientDTO ingredient, String label, List<String> errors) {
+    /** Generated steps are an ordered list (connected linearly on conversion), so "earlier" is simply a lower index. */
+    private void validateStepOutputReference(String stepId, StepOutputScope scope, String label, List<String> errors) {
+        if (isBlank(stepId)) {
+            errors.add(label + " is blank");
+            return;
+        }
+        Integer sourceIndex = scope.stepIndexById().get(stepId);
+        if (sourceIndex == null) {
+            errors.add(label + " references an unknown stepId in this process: " + stepId);
+            return;
+        }
+        if (sourceIndex == scope.consumerIndex()) {
+            errors.add(label + " is a self-reference: " + stepId + " (a step cannot use its own output)");
+            return;
+        }
+        if (sourceIndex > scope.consumerIndex()) {
+            errors.add(label + " references a later step: " + stepId + " (only earlier steps' outputs can be used)");
+            return;
+        }
+        GeneratedRecipeStepDTO source = scope.steps().get(sourceIndex);
+        if (!"STEP".equals(source.getNodeType())) {
+            errors.add(label + " references " + stepId + ", which is a " + source.getNodeType() + " — only a STEP's output can be used");
+        } else if (isBlank(source.getExpectedOutput())) {
+            errors.add(label + " references " + stepId + ", which has no expectedOutput to use");
+        }
+    }
+
+    private void validateActionOnIngredient(GeneratedActionOnIngredientDTO ingredient, ActionDefinition action, String label, List<String> errors) {
         if (ingredient == null) {
             errors.add(label + " is null");
             return;
         }
 
         String ingredientId = ingredient.getIngredientId();
+        boolean knownIngredient = false;
         if (isBlank(ingredientId)) {
             errors.add(label + ".ingredientId is required");
-        } else if (!ingredientIds.contains(ingredientId) && !CUSTOM_ID.equals(ingredientId)) {
-            errors.add(label + ".ingredientId is not in the known catalog: " + ingredientId);
+        } else if (vocabulary.ingredient(ingredientId).isEmpty()) {
+            errors.add(label + ".ingredientId is not in the known catalog: " + ingredientId + aliasHint(vocabulary.resolveIngredientId(ingredientId)));
         } else if (CUSTOM_ID.equals(ingredientId) && isBlank(ingredient.getCustomIngredientName())) {
             errors.add(label + ".customIngredientName is required when ingredientId is custom");
-        }
-
-        if (ingredient.getQuantity() == null) {
-            errors.add(label + ".quantity is required");
-        } else if (ingredient.getQuantity() < 0) {
-            errors.add(label + ".quantity must not be negative");
+        } else {
+            knownIngredient = true;
         }
 
         String unit = ingredient.getUnit();
-        if (isBlank(unit)) {
-            errors.add(label + ".unit is required");
-        } else if (!UNIT_IDS.contains(unit)) {
-            errors.add(label + ".unit must be one of " + UNIT_IDS + ", got: " + unit);
+        boolean unitKnown = !isBlank(unit) && (vocabulary.unit(unit).isPresent() || LEGACY_UNIT_IDS.contains(unit));
+        if (!isBlank(unit) && !unitKnown) {
+            errors.add(label + ".unit must be a unit id from the catalog, got: " + unit + aliasHint(vocabulary.resolveUnitId(unit)));
+        }
+        boolean nonNumericUnit = unitKnown && !vocabulary.isQuantifiableUnit(unit);
+
+        Double quantity = ingredient.getQuantity();
+        if (quantity != null) {
+            if (quantity < 0) {
+                errors.add(label + ".quantity must not be negative");
+            }
+            if (nonNumericUnit) {
+                errors.add(label + ".quantity must be null when unit is " + unit);
+            } else if (isBlank(unit)) {
+                errors.add(label + ".unit is required when quantity is set");
+            }
+        } else if (action != null && action.fieldRequirement(FIELD_QUANTITY) == FieldRequirement.REQUIRED && !nonNumericUnit) {
+            errors.add(label + ".quantity is required for action " + action.id() + " (use unit to-taste/as-needed with a null quantity when there is no amount)");
         }
 
-        String preparationStyle = ingredient.getPreparationStyle();
-        if (!isBlank(preparationStyle) && !preparationStyleIds.contains(preparationStyle) && !CUSTOM_ID.equals(preparationStyle)) {
-            errors.add(label + ".preparationStyle is not in the known vocabulary: " + preparationStyle);
+        validatePreparationStyle(ingredient.getPreparationStyle(), action, knownIngredient ? ingredientId : null, label, errors);
+    }
+
+    private void validatePreparationStyle(String preparationStyle, ActionDefinition action, String ingredientId, String label, List<String> errors) {
+        if (isBlank(preparationStyle)) {
+            // A required style is only enforced when this ingredient can take one of the action's styles at all
+            // (e.g. cut + water has nothing to choose from).
+            if (action != null && ingredientId != null
+                    && action.fieldRequirement(FIELD_PREPARATION_STYLE) == FieldRequirement.REQUIRED
+                    && !vocabulary.allowedPreparationStyles(action.id(), ingredientId).isEmpty()) {
+                errors.add(label + ".preparationStyle is required for action " + action.id() + ", one of: "
+                        + String.join("|", vocabulary.allowedPreparationStyles(action.id(), ingredientId)));
+            }
+            return;
         }
+        if (!CUSTOM_ID.equals(preparationStyle) && !vocabulary.isPreparationStyleId(preparationStyle)) {
+            errors.add(label + ".preparationStyle is not in the known vocabulary: " + preparationStyle + aliasHint(vocabulary.resolvePreparationStyleId(preparationStyle)));
+            return;
+        }
+        if (action == null) return;
+        if (!action.hasField(FIELD_PREPARATION_STYLE)) {
+            errors.add(notApplicable(label + ".preparationStyle", action));
+        } else if (!CUSTOM_ID.equals(preparationStyle) && !vocabulary.allowedPreparationStyles(action.id()).contains(preparationStyle)) {
+            errors.add(label + ".preparationStyle " + preparationStyle + " is not allowed for action " + action.id() + ", use one of: "
+                    + String.join("|", vocabulary.allowedPreparationStyles(action.id())));
+        }
+    }
+
+    private static String notApplicable(String label, ActionDefinition action) {
+        return label + " does not apply to action " + action.id() + " (allowed fields: " + String.join(", ", action.fields().keySet()) + ")";
+    }
+
+    /** Names the canonical id when an unknown value is one of the catalog's input aliases (e.g. "dhania" -> "cilantro"). */
+    private static String aliasHint(Optional<String> canonical) {
+        return canonical.map(id -> " (use the canonical id '" + id + "')").orElse("");
     }
 
     /**

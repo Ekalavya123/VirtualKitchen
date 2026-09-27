@@ -34,16 +34,25 @@ const allocateTempIds = (count: number, existingIds: number[]): number[] => {
   return Array.from({ length: count }, (_, index) => start - index)
 }
 
-const buildStepNode = (step: GeneratedRecipeStep, refToProcessId: Map<string, number>, x: number, y: number): ProcessNode => {
+const buildStepNode = (
+  step: GeneratedRecipeStep,
+  nodeId: string,
+  refToProcessId: Map<string, number>,
+  stepIdToNodeId: Map<string, string>,
+  x: number,
+  y: number,
+): ProcessNode => {
+  const repeatInterval = parseDurationLabel(step.repeatInterval ?? '')
   const data: RecipeStepNodeData = normalizeRecipeStepNodeData({
     step: {
       action: step.action ?? '',
-      customActionName: '',
+      customActionName: step.customActionName ?? '',
       actionOn: {
         ingredients: (step.actionOn?.ingredients ?? []).map((ingredient) => ({
           ingredientId: ingredient.ingredientId,
+          customIngredientName: ingredient.customIngredientName ?? '',
           quantity: ingredient.quantity,
-          unit: ingredient.unit,
+          unit: ingredient.unit ?? '',
           preparationStyleId: ingredient.preparationStyle ?? '',
           customPreparationStyle: '',
         })),
@@ -51,18 +60,29 @@ const buildStepNode = (step: GeneratedRecipeStep, refToProcessId: Map<string, nu
           .map((ref) => refToProcessId.get(ref))
           .filter((processId): processId is number => processId != null)
           .map((processId) => ({ processId })),
+        // Generated `stepId` slugs resolve to this process's freshly assigned node ids; the backend
+        // validator already guaranteed each points at an earlier STEP with an Expected Output.
+        steps: (step.actionOn?.steps ?? [])
+          .map((ref) => stepIdToNodeId.get(ref))
+          .filter((stepId): stepId is string => stepId != null)
+          .map((stepId) => ({ stepId })),
       },
       actionDescription: step.actionDescription ?? '',
       expectedOutput: step.expectedOutput ?? '',
       flameLevelId: step.flameLevel ?? '',
       customFlameLevel: '',
+      // normalizeRecipeStepFields falls back to parsing the legacy free-text `temperature` when no value is given.
+      temperatureValue: step.temperatureValue ?? '',
+      temperatureUnit: step.temperatureUnit ?? '',
       temperature: step.temperature ?? '',
       ...parseDurationLabel(step.duration ?? ''),
+      repeatIntervalValue: repeatInterval.durationValue,
+      repeatIntervalUnit: repeatInterval.durationUnit,
     },
   })
 
   return {
-    id: crypto.randomUUID(),
+    id: nodeId,
     kind: 'STEP',
     type: RECIPE_NODE_TYPES.step,
     data: data as unknown as Record<string, unknown>,
@@ -76,7 +96,7 @@ const buildStepNode = (step: GeneratedRecipeStep, refToProcessId: Map<string, nu
   }
 }
 
-const buildConditionNode = (step: GeneratedRecipeStep, x: number, y: number): ProcessNode => {
+const buildConditionNode = (step: GeneratedRecipeStep, nodeId: string, x: number, y: number): ProcessNode => {
   const notes = [step.actionDescription, step.expectedOutput ? `Expected: ${step.expectedOutput}` : '']
     .filter(Boolean)
     .join(' ')
@@ -97,7 +117,7 @@ const buildConditionNode = (step: GeneratedRecipeStep, x: number, y: number): Pr
   })
 
   return {
-    id: crypto.randomUUID(),
+    id: nodeId,
     kind: 'CONDITION',
     type: RECIPE_NODE_TYPES.condition,
     data: data as unknown as Record<string, unknown>,
@@ -122,6 +142,13 @@ const buildConditionNode = (step: GeneratedRecipeStep, x: number, y: number): Pr
 const buildNodesAndEdges = (steps: GeneratedRecipeStep[], refToProcessId: Map<string, number>): { nodes: ProcessNode[]; edges: ProcessEdge[] } => {
   const columns = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, steps.length))))
 
+  // Node ids are assigned up front so a step can reference an earlier step's output by id.
+  const nodeIds = steps.map(() => crypto.randomUUID())
+  const stepIdToNodeId = new Map<string, string>()
+  steps.forEach((step, index) => {
+    if (step.stepId) stepIdToNodeId.set(step.stepId, nodeIds[index])
+  })
+
   const nodes = steps.map((step, index) => {
     const col = index % columns
     const row = Math.floor(index / columns)
@@ -129,8 +156,8 @@ const buildNodesAndEdges = (steps: GeneratedRecipeStep[], refToProcessId: Map<st
     const y = ORIGIN_Y + row * VERTICAL_GAP
 
     return step.nodeType === 'CONDITION'
-      ? buildConditionNode(step, x, y)
-      : buildStepNode(step, refToProcessId, x, y)
+      ? buildConditionNode(step, nodeIds[index], x, y)
+      : buildStepNode(step, nodeIds[index], refToProcessId, stepIdToNodeId, x, y)
   })
 
   const edges: ProcessEdge[] = []

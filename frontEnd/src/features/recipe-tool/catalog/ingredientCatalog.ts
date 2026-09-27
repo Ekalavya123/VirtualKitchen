@@ -1,38 +1,37 @@
 import stepCatalogsData from './stepCatalogs.data.json'
-import { resolveUnitId } from './unitCatalog'
+import { PIECE_UNIT_ID, UNIT_CATALOG, isUnitId, type UnitId } from './unitCatalog'
 import {
   buildAliasLookup,
   getCatalogDisplayName,
   resolveCatalogId,
   resolveCatalogInput,
 } from './catalogSelectionUtils'
-import type { UnitType } from '../../../types/recipe'
 
-export const INGREDIENT_CATEGORY_ORDER = [
-  'Liquid',
-  'Pantry',
-  'Produce',
-  'Protein',
-  'Dairy',
-  'Other',
-] as const
+export type IngredientCategory = string
 
-export type IngredientCategory = (typeof INGREDIENT_CATEGORY_ORDER)[number]
+/** An ingredient id from stepCatalogs.data.json (e.g. "onion"); the catalog is the only list of valid values. */
+export type IngredientId = string
 
-// The precise set of ids is data-driven (see stepCatalogs.data.json), but kept as an explicit
-// literal union here so the rest of the app still gets autocomplete/exhaustiveness checking.
-export type IngredientId =
-  | 'water' | 'oil' | 'salt' | 'sugar' | 'rice'
-  | 'onion' | 'tomato' | 'garlic' | 'ginger' | 'chili' | 'potato' | 'carrot' | 'capsicum'
-  | 'egg' | 'milk' | 'butter' | 'chicken' | 'paneer'
-  | 'custom'
+export type IngredientCategoryDefinition = {
+  id: IngredientCategory
+  label: string
+  icon: string
+  /** Preparation style sets that make sense for this category (intersected with the action's own sets). */
+  preparationStyleSets: readonly string[]
+}
 
 export type IngredientDefinition = {
   id: IngredientId
   name: string
   category: IngredientCategory
   icon: string
-  defaultUnit: string
+  defaultUnit: UnitId
+  /** Default unit first, then reasonable alternatives. */
+  units: readonly UnitId[]
+  /** Search/interpretation only — never stored. */
+  aliases: readonly string[]
+  /** Overrides the category's preparation style sets when present. */
+  preparationStyleSets?: readonly string[]
 }
 
 type RawIngredientEntry = {
@@ -41,16 +40,26 @@ type RawIngredientEntry = {
   category: string
   icon: string
   defaultUnit: string
+  units: string[]
+  aliases?: string[]
+  preparationStyleSets?: string[]
 }
+
+export const INGREDIENT_CATEGORIES: readonly IngredientCategoryDefinition[] = stepCatalogsData.ingredientCategories
+
+export const INGREDIENT_CATEGORY_ORDER: readonly IngredientCategory[] = INGREDIENT_CATEGORIES.map((category) => category.id)
 
 export const INGREDIENT_CATALOG: readonly IngredientDefinition[] = (
   stepCatalogsData.ingredients as RawIngredientEntry[]
 ).map((entry) => ({
-  id: entry.id as IngredientId,
+  id: entry.id,
   name: entry.name,
-  category: entry.category as IngredientCategory,
+  category: entry.category,
   icon: entry.icon,
   defaultUnit: entry.defaultUnit,
+  units: entry.units,
+  aliases: entry.aliases ?? [],
+  preparationStyleSets: entry.preparationStyleSets,
 }))
 
 export const CUSTOM_INGREDIENT_ID: IngredientId = 'custom'
@@ -59,8 +68,12 @@ const ingredientById = new Map<IngredientId, IngredientDefinition>(
   INGREDIENT_CATALOG.map((ingredient) => [ingredient.id, ingredient])
 )
 
+const categoryById = new Map<IngredientCategory, IngredientCategoryDefinition>(
+  INGREDIENT_CATEGORIES.map((category) => [category.id, category])
+)
+
 const ingredientAliasLookup = buildAliasLookup(
-  INGREDIENT_CATALOG.map((ingredient) => ({ id: ingredient.id, aliases: [ingredient.id, ingredient.name] }))
+  INGREDIENT_CATALOG.map((ingredient) => ({ id: ingredient.id, aliases: [ingredient.id, ingredient.name, ...ingredient.aliases] }))
 )
 
 export const INGREDIENTS_BY_CATEGORY: Readonly<Record<IngredientCategory, readonly IngredientDefinition[]>> =
@@ -69,13 +82,17 @@ export const INGREDIENTS_BY_CATEGORY: Readonly<Record<IngredientCategory, readon
     return accumulator
   }, {} as Record<IngredientCategory, readonly IngredientDefinition[]>)
 
+export const getIngredientCategoryLabel = (category: IngredientCategory) => categoryById.get(category)?.label ?? category
+
 export const isIngredientId = (value: unknown): value is IngredientId =>
-  typeof value === 'string' && ingredientById.has(value as IngredientId)
+  typeof value === 'string' && ingredientById.has(value)
 
 // Falls back instead of crashing when `id` doesn't resolve (e.g. data saved under an older
 // ingredient catalog, or before the catalog had this entry) — this is looked up during render
 // (canvas node labels, the Action On panel), so a missing entry must never throw.
-const UNKNOWN_INGREDIENT: IngredientDefinition = { id: CUSTOM_INGREDIENT_ID, name: 'Unknown ingredient', category: 'Other', icon: '❓', defaultUnit: '' }
+const UNKNOWN_INGREDIENT: IngredientDefinition = {
+  id: CUSTOM_INGREDIENT_ID, name: 'Unknown ingredient', category: 'other', icon: '❓', defaultUnit: PIECE_UNIT_ID, units: [], aliases: [],
+}
 
 export const getIngredientById = (id: IngredientId): IngredientDefinition =>
   ingredientById.get(id) ?? UNKNOWN_INGREDIENT
@@ -97,28 +114,25 @@ export const getIngredientDisplayName = (ingredientId: IngredientId | '', custom
     'Custom Ingredient'
   )
 
-export const getIngredientDefaultUnit = (ingredientId: IngredientId | '') => {
-  if (!ingredientId || ingredientId === CUSTOM_INGREDIENT_ID) return ''
-  const resolved = resolveUnitId(getIngredientById(ingredientId).defaultUnit)
-  return resolved || ''
+export const getIngredientDefaultUnit = (ingredientId: IngredientId | ''): UnitId => {
+  if (!ingredientId || ingredientId === CUSTOM_INGREDIENT_ID) return PIECE_UNIT_ID
+  const unit = getIngredientById(ingredientId).defaultUnit
+  return isUnitId(unit) ? unit : PIECE_UNIT_ID
+}
+
+/** The units offered first for this ingredient (its default, then its alternatives); every unit for a custom ingredient. */
+export const getIngredientUnitIds = (ingredientId: IngredientId | ''): readonly UnitId[] => {
+  if (!ingredientId || ingredientId === CUSTOM_INGREDIENT_ID) return UNIT_CATALOG.map((unit) => unit.id)
+  const units = getIngredientById(ingredientId).units
+  return units.length > 0 ? units : UNIT_CATALOG.map((unit) => unit.id)
+}
+
+/** Null for a custom/unknown ingredient, meaning "no ingredient-level restriction". */
+export const getIngredientPreparationStyleSets = (ingredientId: IngredientId | ''): readonly string[] | null => {
+  if (!ingredientId || ingredientId === CUSTOM_INGREDIENT_ID || !ingredientById.has(ingredientId)) return null
+  const ingredient = getIngredientById(ingredientId)
+  return ingredient.preparationStyleSets ?? categoryById.get(ingredient.category)?.preparationStyleSets ?? []
 }
 
 export const getIngredientSearchValue = (ingredientId: IngredientId | '', customIngredientName = '') =>
   getIngredientDisplayName(ingredientId, customIngredientName)
-
-// Maps the catalog's raw defaultUnit (an old-model UnitId string like "piece"/"ml"/"g") to the
-// Process model's fixed UnitType enum, for defaulting a newly-added Action On ingredient's unit.
-// Not every raw unit has a Process-model equivalent (e.g. "tsp"/"tbsp"/"cup"/"pinch") — callers
-// should fall back to the existing default unit behavior (COUNT) when this returns null.
-const RAW_UNIT_TO_PROCESS_UNIT_TYPE: Partial<Record<string, UnitType>> = {
-  ml: 'ML',
-  l: 'LITER',
-  g: 'GRAM',
-  kg: 'KG',
-  piece: 'COUNT',
-}
-
-export const getIngredientDefaultUnitType = (ingredientId: IngredientId | ''): UnitType | null => {
-  if (!ingredientId || ingredientId === CUSTOM_INGREDIENT_ID) return null
-  return RAW_UNIT_TO_PROCESS_UNIT_TYPE[getIngredientById(ingredientId).defaultUnit] ?? null
-}

@@ -1,23 +1,19 @@
 import { useMemo } from 'react'
 import '../styles/recipe-tool.css'
 import '../process/styles/RecipePropertiesPanel.css'
-import type { UnitType } from '../../../types/recipe'
-import { normalizeRecipeStepNodeData, type ActionOnIngredient } from '../process/model/recipeStepData'
+import { getActionOnIngredientDisplayName, normalizeRecipeStepNodeData, type ActionOnIngredient } from '../process/model/recipeStepData'
 import { getIngredientById } from '../catalog/ingredientCatalog'
 import { getPreparationStyleDisplayName } from '../catalog/preparationStyleCatalog'
+import { formatQuantityWithUnit } from '../catalog/unitCatalog'
 import { useRecipeSession } from '../context/RecipeSessionContext'
-
-const UNIT_LABELS: Record<UnitType, string> = {
-  COUNT: 'count',
-  GRAM: 'g',
-  KG: 'kg',
-  ML: 'mL',
-  LITER: 'L',
-}
 
 type DerivedIngredient = ActionOnIngredient & { preparations: string[] }
 
-/** Sums Action On ingredient usage across every STEP node in every process (MAIN + subprocesses) belonging to this recipe, grouped by ingredient + unit. */
+/**
+ * Sums Action On ingredient usage across every STEP node in every process (MAIN + subprocesses)
+ * belonging to this recipe, grouped by ingredient (custom ones by name) + unit. Steps that mention an
+ * ingredient without an amount (quantity null — e.g. "stir the onions") add nothing to the total.
+ */
 const deriveIngredientsFromProcesses = (
   processes: { nodes: { kind: string; data?: Record<string, unknown> }[] }[],
 ): DerivedIngredient[] => {
@@ -28,11 +24,11 @@ const deriveIngredientsFromProcesses = (
       if (node.kind !== 'STEP') continue
       const { step } = normalizeRecipeStepNodeData(node.data)
       for (const usage of step.actionOn.ingredients) {
-        const key = `${usage.ingredientId}:${usage.unit}`
+        const key = `${usage.ingredientId}:${usage.customIngredientName ?? ''}:${usage.unit}`
         const preparationLabel = getPreparationStyleDisplayName(usage.preparationStyleId ?? '', usage.customPreparationStyle)
         const existing = byKey.get(key)
         if (existing) {
-          existing.quantity += usage.quantity
+          if (usage.quantity != null) existing.quantity = (existing.quantity ?? 0) + usage.quantity
           if (preparationLabel && !existing.preparations.includes(preparationLabel)) {
             existing.preparations.push(preparationLabel)
           }
@@ -111,11 +107,11 @@ export default function IngredientsSection() {
                 </div>
 
                 <div style={{ minWidth: 120, fontWeight: 700, fontSize: 13, color: 'var(--flow-text)' }}>
-                  {catalogEntry.name}
+                  {getActionOnIngredientDisplayName(entry)}
                 </div>
 
                 <div style={{ fontSize: 12, color: 'var(--flow-text-muted)', fontWeight: 600 }}>
-                  {entry.quantity} {UNIT_LABELS[entry.unit]}
+                  {formatQuantityWithUnit(entry.quantity, entry.unit)}
                 </div>
 
                 {entry.preparations.length > 0 && (

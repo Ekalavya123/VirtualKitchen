@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react'
 import type { Process } from '../../../../types/process'
+import { EMPTY_STEP_OUTPUT_GRAPH, type StepOutputGraph } from '../model/recipeStepOutputs'
 
 /**
  * Read-only lookup data a STEP node needs to display its Action On
@@ -21,6 +22,8 @@ export type RecipeProcessGraphContextValue = {
    * node list down to every card.
    */
   stepOrder: string[]
+  /** The current process's step-output sources and graph reachability — resolves a referenced step's live Expected Output label on each card. */
+  stepOutputGraph: StepOutputGraph
   /**
    * Reports a resize gesture's start/end back to RecipeProcessCanvas so exactly one undo entry is
    * recorded per completed resize (never per intermediate resize tick) — `NodeResizeControl`'s own
@@ -35,6 +38,7 @@ export type RecipeProcessGraphContextValue = {
 const RecipeProcessGraphContext = createContext<RecipeProcessGraphContextValue>({
   availableSubprocesses: [],
   stepOrder: [],
+  stepOutputGraph: EMPTY_STEP_OUTPUT_GRAPH,
 })
 
 export const RecipeProcessGraphProvider = RecipeProcessGraphContext.Provider

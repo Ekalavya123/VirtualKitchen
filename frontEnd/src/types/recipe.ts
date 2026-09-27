@@ -18,8 +18,10 @@ export type UnitType = 'KG' | 'GRAM' | 'LITER' | 'ML' | 'COUNT'
  */
 export interface GeneratedActionOnIngredient {
   ingredientId: string
-  quantity: number
-  unit: string
+  /** Null when no amount applies (e.g. unit "to-taste"). */
+  quantity: number | null
+  /** A catalog unit id (catalog/unitCatalog.ts); legacy UnitType values are still possible. */
+  unit?: string | null
   preparationStyle?: string | null
   customIngredientName?: string | null
 }
@@ -27,17 +29,26 @@ export interface GeneratedActionOnIngredient {
 export interface GeneratedActionOn {
   ingredients: GeneratedActionOnIngredient[]
   processes: string[]
+  /** `stepId`s of earlier steps in the same process whose Expected Output this step uses. */
+  steps?: string[] | null
 }
 
 export interface GeneratedRecipeStep {
   nodeType: 'STEP' | 'CONDITION'
+  /** Generation-scoped slug (e.g. "s1"), unique within its process — mapped to a real node id on conversion. */
+  stepId?: string | null
 
   // STEP-only
   action?: string | null
+  customActionName?: string | null
   actionOn?: GeneratedActionOn | null
+  temperatureValue?: number | null
+  temperatureUnit?: string | null
+  /** Legacy free-text temperature ("180 C"). */
   temperature?: string | null
   flameLevel?: string | null
   duration?: string | null
+  repeatInterval?: string | null
 
   // CONDITION-only
   title?: string | null

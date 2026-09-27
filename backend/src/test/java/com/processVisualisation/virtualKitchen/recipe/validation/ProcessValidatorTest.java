@@ -170,7 +170,118 @@ class ProcessValidatorTest {
         validator.validateOrThrow(process);
     }
 
+    // --- step-output references (data.step.actionOn.steps[].stepId) ---
+
+    @Test
+    void stepOutputReference_toAConnectedPreviousStep_isValid() {
+        Process process = process(1L, ProcessType.MAIN, RECIPE_ID);
+        process.setNodes(List.of(
+                recipeStep("boil", "boiled eggs"),
+                recipeStep("fry", "fried eggs with onions", "boil")));
+        process.setEdges(List.of(edge("e1", "boil", "fry")));
+
+        ProcessValidationResult result = validator.validate(process);
+
+        assertTrue(result.isValid(), "expected no errors, got: " + result.getErrors());
+    }
+
+    @Test
+    void multipleStepOutputReferences_throughAnIntermediateStep_areValid() {
+        Process process = process(1L, ProcessType.MAIN, RECIPE_ID);
+        process.setNodes(List.of(
+                recipeStep("marinate", "marinated chicken"),
+                recipeStep("onions", "fried onions"),
+                recipeStep("fry", "chicken fried with onions", "marinate", "onions")));
+        process.setEdges(List.of(edge("e1", "marinate", "onions"), edge("e2", "onions", "fry")));
+
+        ProcessValidationResult result = validator.validate(process);
+
+        assertTrue(result.isValid(), "expected no errors, got: " + result.getErrors());
+    }
+
+    @Test
+    void stepOutputSelfReference_isInvalid() {
+        Process process = process(1L, ProcessType.MAIN, RECIPE_ID);
+        process.setNodes(List.of(recipeStep("boil", "boiled eggs", "boil")));
+
+        assertStepOutputError(process, "cannot use its own output");
+    }
+
+    @Test
+    void stepOutputReference_toUnknownNode_isInvalid() {
+        Process process = process(1L, ProcessType.MAIN, RECIPE_ID);
+        process.setNodes(List.of(recipeStep("fry", "fried", "does-not-exist")));
+
+        assertStepOutputError(process, "references an unknown node");
+    }
+
+    @Test
+    void stepOutputReference_toConditionNode_isInvalid() {
+        Process process = process(1L, ProcessType.MAIN, RECIPE_ID);
+        process.setNodes(List.of(conditionNode("check"), recipeStep("fry", "fried", "check")));
+        process.setEdges(List.of(edge("e1", "check", "fry")));
+
+        assertStepOutputError(process, "only a STEP's output can be referenced");
+    }
+
+    @Test
+    void stepOutputReference_toStepWithEmptyExpectedOutput_isInvalid() {
+        Process process = process(1L, ProcessType.MAIN, RECIPE_ID);
+        process.setNodes(List.of(recipeStep("boil", "  "), recipeStep("fry", "fried", "boil")));
+        process.setEdges(List.of(edge("e1", "boil", "fry")));
+
+        assertStepOutputError(process, "has no Expected Output");
+    }
+
+    @Test
+    void stepOutputReference_toALaterOrUnconnectedStep_isInvalid() {
+        Process future = process(1L, ProcessType.MAIN, RECIPE_ID);
+        future.setNodes(List.of(recipeStep("boil", "boiled eggs", "fry"), recipeStep("fry", "fried eggs")));
+        future.setEdges(List.of(edge("e1", "boil", "fry")));
+        assertStepOutputError(future, "not connected before");
+
+        Process unconnected = process(2L, ProcessType.SUBPROCESS, RECIPE_ID);
+        unconnected.setNodes(List.of(recipeStep("boil", "boiled eggs"), recipeStep("fry", "fried eggs", "boil")));
+        assertStepOutputError(unconnected, "not connected before");
+    }
+
+    @Test
+    void stepOutputReference_insideALoop_isOnlyValidInNodeOrder() {
+        // boil -> check -> fry -> check (loop): each reaches the other, so node order decides.
+        Process process = process(1L, ProcessType.MAIN, RECIPE_ID);
+        process.setNodes(List.of(recipeStep("boil", "boiled eggs"), conditionNode("check"), recipeStep("fry", "fried eggs", "boil")));
+        process.setEdges(List.of(edge("e1", "boil", "check"), edge("e2", "check", "fry"), edge("e3", "fry", "boil")));
+        assertTrue(validator.validate(process).isValid(), () -> validator.validate(process).getErrors().toString());
+
+        Process backwards = process(2L, ProcessType.SUBPROCESS, RECIPE_ID);
+        backwards.setNodes(List.of(recipeStep("boil", "boiled eggs", "fry"), conditionNode("check"), recipeStep("fry", "fried eggs")));
+        backwards.setEdges(process.getEdges());
+        assertStepOutputError(backwards, "not connected before");
+    }
+
     // --- test fixtures ---
+
+    private void assertStepOutputError(Process process, String expectedFragment) {
+        ProcessValidationResult result = validator.validate(process);
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("step-output reference") && e.contains(expectedFragment)),
+                "expected an error containing '" + expectedFragment + "', got: " + result.getErrors());
+    }
+
+    /** A STEP in the frontend's persisted shape (data.step.expectedOutput / data.step.actionOn.steps). */
+    private static ProcessNode recipeStep(String id, String expectedOutput, String... referencedStepIds) {
+        ProcessNode node = new ProcessNode();
+        node.setId(id);
+        node.setKind(ProcessNodeKind.STEP);
+        List<Map<String, Object>> steps = java.util.Arrays.stream(referencedStepIds)
+                .map(stepId -> Map.<String, Object>of("stepId", stepId))
+                .toList();
+        node.setData(Map.of("step", Map.of(
+                "action", "fry",
+                "expectedOutput", expectedOutput,
+                "actionOn", Map.of("ingredients", List.of(), "processes", List.of(), "steps", steps))));
+        return node;
+    }
 
     private static Process process(Long id, ProcessType type, Long recipeId) {
         Process process = new Process();

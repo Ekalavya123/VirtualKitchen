@@ -7,31 +7,13 @@ import {
   type CatalogInputResolution,
 } from './catalogSelectionUtils'
 
-export const ACTION_CATEGORY_ORDER = [
-  'Ingredient Operations',
-  'Preparation Operations',
-  'Cooking Operations',
-  'Mixing Operations',
-  'Waiting Operations',
-  'Finish Operations',
-  'Custom',
-] as const
+// Ids are plain strings: the catalog (stepCatalogs.data.json, shared with the backend AI
+// validator) is the only list of valid values — a literal union here would be a second copy.
+export type ActionCategory = string
+export type StepActionId = string
 
-export type ActionCategory = (typeof ACTION_CATEGORY_ORDER)[number]
-
-// The precise set of ids is data-driven (see stepCatalogs.data.json), but kept as an explicit
-// literal union here so the rest of the app still gets autocomplete/exhaustiveness checking.
-export type StepActionId =
-  | 'add' | 'remove' | 'pour' | 'season'
-  | 'cut' | 'chop' | 'slice' | 'dice'
-  | 'heat' | 'boil' | 'fry' | 'bake'
-  | 'stir' | 'mix' | 'whisk'
-  | 'wait' | 'rest'
-  | 'serve' | 'garnish'
-  | 'custom'
-
+/** Per-action fields (see the catalog's `fieldDefinitions`): quantity/unitId/preparationStyleId are per Action On ingredient, the rest per step. */
 export type StepSchemaFieldKey =
-  | 'ingredientId'
   | 'quantity'
   | 'unitId'
   | 'preparationStyleId'
@@ -39,41 +21,72 @@ export type StepSchemaFieldKey =
   | 'flameLevelId'
   | 'duration'
   | 'repeatInterval'
-  | 'notes'
+
+export type FieldRequirement = 'required' | 'recommended' | 'optional'
+
+/** What an action may act on: Action On ingredients, subprocess outputs, both, or nothing (e.g. Preheat). */
+export type ActionTarget = 'INGREDIENT' | 'PROCESS' | 'BOTH' | 'NONE'
+
+export type ActionCategoryDefinition = {
+  id: ActionCategory
+  label: string
+  icon: string
+}
 
 export type StepActionDefinition = {
   id: StepActionId
   displayName: string
   icon: string
   category: ActionCategory
+  description: string
+  aliases: readonly string[]
+  actionOn: ActionTarget
+  actionOnRequired: boolean
+  multipleIngredients: boolean
+  fieldRequirements: Readonly<Partial<Record<StepSchemaFieldKey, FieldRequirement>>>
   fields: readonly StepSchemaFieldKey[]
-  amountLabel: string
-  unitLabel: string
+  preparationStyleSets: readonly string[]
+  temperatureContext: string | null
+  visualization: string
 }
-
-const DEFAULT_AMOUNT_LABEL = 'Amount'
-const DEFAULT_UNIT_LABEL = 'Unit'
 
 type RawActionEntry = {
   id: string
   displayName: string
   icon: string
   category: string
-  fields: string[]
-  amountLabel?: string
-  unitLabel?: string
+  description: string
+  aliases?: string[]
+  actionOn: string
+  actionOnRequired: boolean
+  multipleIngredients: boolean
+  fields: Record<string, string>
+  preparationStyleSets: string[]
+  temperatureContext?: string
+  visualization?: string
 }
+
+export const ACTION_CATEGORIES: readonly ActionCategoryDefinition[] = stepCatalogsData.actionCategories
+
+export const ACTION_CATEGORY_ORDER: readonly ActionCategory[] = ACTION_CATEGORIES.map((category) => category.id)
 
 export const STEP_ACTION_CATALOG: readonly StepActionDefinition[] = (
   stepCatalogsData.actions as RawActionEntry[]
 ).map((entry) => ({
-  id: entry.id as StepActionId,
+  id: entry.id,
   displayName: entry.displayName,
   icon: entry.icon,
-  category: entry.category as ActionCategory,
-  fields: entry.fields as StepSchemaFieldKey[],
-  amountLabel: entry.amountLabel ?? DEFAULT_AMOUNT_LABEL,
-  unitLabel: entry.unitLabel ?? DEFAULT_UNIT_LABEL,
+  category: entry.category,
+  description: entry.description,
+  aliases: entry.aliases ?? [],
+  actionOn: entry.actionOn as ActionTarget,
+  actionOnRequired: entry.actionOnRequired,
+  multipleIngredients: entry.multipleIngredients,
+  fieldRequirements: entry.fields as Partial<Record<StepSchemaFieldKey, FieldRequirement>>,
+  fields: Object.keys(entry.fields) as StepSchemaFieldKey[],
+  preparationStyleSets: entry.preparationStyleSets,
+  temperatureContext: entry.temperatureContext ?? null,
+  visualization: entry.visualization ?? '',
 }))
 
 export const CUSTOM_ACTION_ID: StepActionId = 'custom'
@@ -82,8 +95,10 @@ const catalogById = new Map<StepActionId, StepActionDefinition>(
   STEP_ACTION_CATALOG.map((entry) => [entry.id, entry])
 )
 
+const categoryById = new Map<ActionCategory, ActionCategoryDefinition>(ACTION_CATEGORIES.map((category) => [category.id, category]))
+
 const actionAliasLookup = buildAliasLookup(
-  STEP_ACTION_CATALOG.map((action) => ({ id: action.id, aliases: [action.id, action.displayName] }))
+  STEP_ACTION_CATALOG.map((action) => ({ id: action.id, aliases: [action.id, action.displayName, ...action.aliases] }))
 )
 
 export const ACTIONS_BY_CATEGORY: Readonly<Record<ActionCategory, readonly StepActionDefinition[]>> =
@@ -92,8 +107,10 @@ export const ACTIONS_BY_CATEGORY: Readonly<Record<ActionCategory, readonly StepA
     return accumulator
   }, {} as Record<ActionCategory, readonly StepActionDefinition[]>)
 
+export const getActionCategoryLabel = (category: ActionCategory) => categoryById.get(category)?.label ?? category
+
 export const isStepActionId = (value: unknown): value is StepActionId =>
-  typeof value === 'string' && catalogById.has(value as StepActionId)
+  typeof value === 'string' && catalogById.has(value)
 
 // Falls back instead of crashing when `id` doesn't resolve (e.g. an action removed/renamed in
 // stepCatalogs.data.json since a process was saved) — this is looked up during render (canvas node
@@ -102,14 +119,31 @@ const UNKNOWN_ACTION: StepActionDefinition = {
   id: CUSTOM_ACTION_ID,
   displayName: 'Unknown Action',
   icon: '❓',
-  category: 'Custom',
+  category: 'custom',
+  description: '',
+  aliases: [],
+  actionOn: 'BOTH',
+  actionOnRequired: false,
+  multipleIngredients: true,
+  fieldRequirements: {},
   fields: [],
-  amountLabel: DEFAULT_AMOUNT_LABEL,
-  unitLabel: DEFAULT_UNIT_LABEL,
+  preparationStyleSets: [],
+  temperatureContext: null,
+  visualization: '',
 }
 
 export const getStepActionById = (id: StepActionId): StepActionDefinition =>
   catalogById.get(id) ?? UNKNOWN_ACTION
+
+export const actionAllowsIngredients = (id: StepActionId | '') => {
+  const target = getStepActionById(id || CUSTOM_ACTION_ID).actionOn
+  return target === 'INGREDIENT' || target === 'BOTH'
+}
+
+export const actionAllowsProcesses = (id: StepActionId | '') => {
+  const target = getStepActionById(id || CUSTOM_ACTION_ID).actionOn
+  return target === 'PROCESS' || target === 'BOTH'
+}
 
 export const resolveStepActionId = (value: unknown): StepActionId | '' =>
   resolveCatalogId(actionAliasLookup, value)

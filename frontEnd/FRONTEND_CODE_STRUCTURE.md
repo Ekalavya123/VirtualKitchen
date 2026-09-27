@@ -83,7 +83,7 @@ frontEnd/
 
 - The Recipe Tool for one recipe (`RecipeToolPage.tsx`): summary, Ingredients and Nutrition tabs, and the Recipe Process tab.
 - `context/RecipeSessionContext.tsx` holds the unified in-memory recipe snapshot (MAIN + every SUBPROCESS); the recipe-level Save persists all of it at once.
-- `catalog/`: the recipe step catalogs (actions, ingredients, units, preparation styles, flame levels) built from `stepCatalogs.data.json`.
+- `catalog/`: the recipe step catalogs (actions with their per-action field/target/preparation rules, ingredients, units, preparation styles, heat levels, temperature and duration units) built from `stepCatalogs.data.json` — shared with the backend AI prompt and validator. Schema and rationale: [docs/recipe-vocabulary-v2.md](../docs/recipe-vocabulary-v2.md).
 - `styles/recipe-tool.css`: shared tokens and component styles.
 
 #### `features/recipe-tool/process` (Recipe Process)

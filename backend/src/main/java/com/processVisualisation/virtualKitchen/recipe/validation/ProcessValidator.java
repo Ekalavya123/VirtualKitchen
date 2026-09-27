@@ -10,8 +10,12 @@ import com.processVisualisation.virtualKitchen.recipe.repository.ProcessReposito
 import com.processVisualisation.virtualKitchen.recipe.repository.RecipeTemplateRepository;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,6 +30,13 @@ import java.util.Set;
  * references to ingredients/subprocesses live inside its opaque {@code data}
  * field bag and are a frontend concern, not validated here (the same way an
  * ingredientId was never cross-checked against the ingredient catalog).
+ * <p>
+ * The one exception is Action On <em>step-output</em> references
+ * ({@code data.step.actionOn.steps[].stepId}), because they point at other nodes of this same
+ * graph: each must name an existing STEP (not a CONDITION, not itself) that has an Expected Output
+ * and comes before the consuming step — an edge path leads from it to the consumer, with node
+ * order breaking the tie when both reach each other through a loop. This mirrors the frontend's
+ * recipe-tool/process/model/recipeStepOutputs.ts, so a reference the editor offers always saves.
  */
 @Component
 public class ProcessValidator {
@@ -56,6 +67,7 @@ public class ProcessValidator {
         validateRecipeOwnership(process, errors);
         Set<String> nodeIds = validateNodes(process, errors);
         validateEdges(process, nodeIds, errors);
+        validateStepOutputReferences(process, errors);
         validateSingleMainProcess(process, errors);
 
         return new ProcessValidationResult(errors.isEmpty(), errors);
@@ -158,6 +170,81 @@ public class ProcessValidator {
                 errors.add("edge[" + i + "].target references unknown node: " + edge.getTarget());
             }
         }
+    }
+
+    private void validateStepOutputReferences(Process process, List<String> errors) {
+        List<ProcessNode> nodes = process.getNodes() == null ? List.of() : process.getNodes();
+        Map<String, ProcessNode> nodeById = new LinkedHashMap<>();
+        Map<String, Integer> nodeIndex = new HashMap<>();
+        for (int i = 0; i < nodes.size(); i++) {
+            ProcessNode node = nodes.get(i);
+            if (node == null || isBlank(node.getId())) continue;
+            nodeById.putIfAbsent(node.getId(), node);
+            nodeIndex.putIfAbsent(node.getId(), i);
+        }
+
+        Map<String, List<String>> successors = new HashMap<>();
+        for (ProcessEdge edge : process.getEdges() == null ? List.<ProcessEdge>of() : process.getEdges()) {
+            if (edge == null || isBlank(edge.getSource()) || isBlank(edge.getTarget())) continue;
+            successors.computeIfAbsent(edge.getSource(), key -> new ArrayList<>()).add(edge.getTarget());
+        }
+
+        for (ProcessNode consumer : nodeById.values()) {
+            if (consumer.getKind() != ProcessNodeKind.STEP) continue;
+            for (String sourceId : stepOutputReferences(consumer)) {
+                String label = "node " + consumer.getId() + " step-output reference " + sourceId;
+                ProcessNode source = nodeById.get(sourceId);
+                if (sourceId.equals(consumer.getId())) {
+                    errors.add(label + ": a step cannot use its own output");
+                } else if (source == null) {
+                    errors.add(label + ": references an unknown node");
+                } else if (source.getKind() != ProcessNodeKind.STEP) {
+                    errors.add(label + ": only a STEP's output can be referenced, not a " + source.getKind());
+                } else if (isBlank(expectedOutput(source))) {
+                    errors.add(label + ": the referenced step has no Expected Output");
+                } else if (!comesBefore(sourceId, consumer.getId(), successors, nodeIndex)) {
+                    errors.add(label + ": the referenced step is not connected before the consuming step");
+                }
+            }
+        }
+    }
+
+    /** Earlier-than: {@code sourceId} reaches {@code consumerId} along edges, and in a loop (each reaches the other) it is also earlier in node order. */
+    private boolean comesBefore(String sourceId, String consumerId, Map<String, List<String>> successors, Map<String, Integer> nodeIndex) {
+        if (!reaches(sourceId, consumerId, successors)) return false;
+        return !reaches(consumerId, sourceId, successors) || nodeIndex.get(sourceId) < nodeIndex.get(consumerId);
+    }
+
+    private boolean reaches(String from, String to, Map<String, List<String>> successors) {
+        Set<String> seen = new HashSet<>();
+        Deque<String> queue = new ArrayDeque<>(successors.getOrDefault(from, List.of()));
+        while (!queue.isEmpty()) {
+            String current = queue.poll();
+            if (current.equals(to)) return true;
+            if (seen.add(current)) queue.addAll(successors.getOrDefault(current, List.of()));
+        }
+        return false;
+    }
+
+    /** {@code data.step.actionOn.steps[].stepId} — the shape recipe-tool/process/model/recipeStepData.ts writes. */
+    private List<String> stepOutputReferences(ProcessNode node) {
+        List<String> ids = new ArrayList<>();
+        if (!(stepData(node).get("actionOn") instanceof Map<?, ?> actionOn)) return ids;
+        if (!(actionOn.get("steps") instanceof List<?> references)) return ids;
+        for (Object reference : references) {
+            Object stepId = reference instanceof Map<?, ?> entry ? entry.get("stepId") : null;
+            ids.add(stepId == null ? "" : String.valueOf(stepId));
+        }
+        return ids;
+    }
+
+    private String expectedOutput(ProcessNode node) {
+        Object value = stepData(node).get("expectedOutput");
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private Map<?, ?> stepData(ProcessNode node) {
+        return node.getData() != null && node.getData().get("step") instanceof Map<?, ?> step ? step : Map.of();
     }
 
     private void validateSingleMainProcess(Process process, List<String> errors) {
