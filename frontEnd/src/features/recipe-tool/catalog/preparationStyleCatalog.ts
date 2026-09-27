@@ -5,46 +5,52 @@ import {
   resolveCatalogId,
 } from './catalogSelectionUtils'
 
-// The precise set of ids is data-driven (see stepCatalogs.data.json), but kept as an explicit
-// literal union here so the rest of the app still gets autocomplete/exhaustiveness checking.
-export type PreparationStyleId =
-  | 'fine' | 'medium' | 'large' | 'thin-slice' | 'thick-slice' | 'julienne' | 'rough-chop' | 'custom'
+/** A preparation style id from stepCatalogs.data.json (e.g. "finely-chopped"). */
+export type PreparationStyleId = string
 
 export type PreparationStyleDefinition = {
   id: PreparationStyleId
   label: string
+  aliases: readonly string[]
 }
 
-type RawPreparationStyleEntry = {
+/** A named group of styles; actions and ingredient categories each list the sets they can use. */
+export type PreparationStyleSet = {
   id: string
   label: string
+  styles: readonly PreparationStyleId[]
 }
 
-export const PREPARATION_STYLE_CATALOG: readonly PreparationStyleDefinition[] = (
-  stepCatalogsData.preparationStyles as RawPreparationStyleEntry[]
-).map((entry) => ({
-  id: entry.id as PreparationStyleId,
-  label: entry.label,
-}))
+export const PREPARATION_STYLE_CATALOG: readonly PreparationStyleDefinition[] = stepCatalogsData.preparationStyles
+
+export const PREPARATION_STYLE_SETS: readonly PreparationStyleSet[] = stepCatalogsData.preparationStyleSets
 
 export const CUSTOM_PREPARATION_STYLE_ID: PreparationStyleId = 'custom'
-/** Pre-fill for a newly added Action On ingredient, when the current action needs a preparation style at all — see actionSchemaCatalog's `isStepFieldEnabled`. */
+/** Pre-fill for a newly added Action On ingredient — only used when it's actually allowed for that action/ingredient (see actionSchemaCatalog's `getAllowedPreparationStyles`). */
 export const DEFAULT_PREPARATION_STYLE_ID: PreparationStyleId = 'medium'
 
 const styleById = new Map<PreparationStyleId, PreparationStyleDefinition>(
   PREPARATION_STYLE_CATALOG.map((style) => [style.id, style])
 )
 
+const setById = new Map<string, PreparationStyleSet>(PREPARATION_STYLE_SETS.map((set) => [set.id, set]))
+
 const styleAliasLookup = buildAliasLookup(
-  PREPARATION_STYLE_CATALOG.map((style) => ({ id: style.id, aliases: [style.id, style.label] }))
+  PREPARATION_STYLE_CATALOG.map((style) => ({ id: style.id, aliases: [style.id, style.label, ...style.aliases] }))
 )
+
+/** Every style in the given sets, in catalog order, without duplicates. */
+export const getStylesOfSets = (setIds: readonly string[]): PreparationStyleId[] => {
+  const wanted = new Set(setIds.flatMap((setId) => setById.get(setId)?.styles ?? []))
+  return PREPARATION_STYLE_CATALOG.map((style) => style.id).filter((id) => wanted.has(id))
+}
 
 export const resolvePreparationStyleId = (value: unknown): PreparationStyleId | '' =>
   resolveCatalogId(styleAliasLookup, value)
 
 // Falls back instead of crashing when `id` doesn't resolve (e.g. stale/older saved data) — this is
 // looked up during render (canvas node labels, the Action On panel), so it must never throw.
-const UNKNOWN_PREPARATION_STYLE: PreparationStyleDefinition = { id: CUSTOM_PREPARATION_STYLE_ID, label: 'Unknown' }
+const UNKNOWN_PREPARATION_STYLE: PreparationStyleDefinition = { id: CUSTOM_PREPARATION_STYLE_ID, label: 'Unknown', aliases: [] }
 
 export const getPreparationStyleById = (id: PreparationStyleId): PreparationStyleDefinition =>
   styleById.get(id) ?? UNKNOWN_PREPARATION_STYLE

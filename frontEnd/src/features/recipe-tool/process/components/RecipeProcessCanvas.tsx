@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import {
   ReactFlow,
@@ -38,6 +38,7 @@ import {
 } from './recipeProcessCanvas.helpers'
 import { normalizeConditionNodeData } from '../model/recipeConditionData'
 import { type FlowViewport } from '../model/canvasGraph'
+import { buildStepOutputGraph, getStepOutputLabel } from '../model/recipeStepOutputs'
 import {
   buildProcessUpdateRequest,
   createRecipeStepNode,
@@ -45,14 +46,16 @@ import {
 } from '../adapters/recipeProcessCanvasAdapter'
 import {
   applyRecipeStepFieldUpdate,
+  getActionOnIngredientDisplayName,
   getRecipeStepDurationLabel,
+  getRecipeStepTemperatureLabel,
   normalizeRecipeStepNodeData,
   withRecipeStepActionOnIngredients,
   withRecipeStepActionOnProcesses,
+  withRecipeStepActionOnSteps,
   withRecipeStepVisualization,
   type ActionOnIngredient,
 } from '../model/recipeStepData'
-import { getIngredientById } from '../../catalog/ingredientCatalog'
 import { RecipeProcessGraphProvider } from '../context/RecipeProcessGraphContext'
 import { useRecipeSession, type RecipeSessionContextValue } from '../../context/RecipeSessionContext'
 import type { Process } from '../../../../types/process'
@@ -426,7 +429,16 @@ function RecipeProcessCanvasContent({
 
   const deleteNode = useCallback((id: string) => {
     pushHistorySnapshot()
-    setNodes((nds) => nds.filter((node) => node.id !== id))
+    // Also drops other steps' step-output references to the deleted node, which would otherwise
+    // point at nothing (and fail backend validation on save).
+    setNodes((nds) => nds
+      .filter((node) => node.id !== id)
+      .map((node) => {
+        if (!isRecipeStepNode(node)) return node
+        const steps = normalizeRecipeStepNodeData(node.data).step.actionOn.steps
+        if (!steps.some((entry) => entry.stepId === id)) return node
+        return { ...node, data: withRecipeStepActionOnSteps(node.data, steps.map((entry) => entry.stepId).filter((stepId) => stepId !== id)) }
+      }))
     setEdges((eds) => eds.filter((edge) => edge.source !== id && edge.target !== id))
     setSelectedNodeId((current) => (current === id ? null : current))
   }, [setNodes, setEdges, pushHistorySnapshot])
@@ -504,6 +516,14 @@ function RecipeProcessCanvasContent({
   const updateActionOnProcesses = useCallback((nodeId: string, processIds: number[]) => {
     setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnProcesses(node.data, processIds) } : node)))
   }, [setNodes])
+
+  const updateActionOnSteps = useCallback((nodeId: string, stepIds: string[]) => {
+    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnSteps(node.data, stepIds) } : node)))
+  }, [setNodes])
+
+  // Which earlier steps' Expected Outputs each step may reference, and their live labels — derived
+  // from the current nodes/edges (see recipeStepOutputs.ts), never stored.
+  const stepOutputGraph = useMemo(() => buildStepOutputGraph(nodes, edges), [nodes, edges])
 
   const isValidConnection = useCallback<IsValidConnection<Edge>>((connectionOrEdge) => {
     const source = connectionOrEdge.source
@@ -599,7 +619,10 @@ function RecipeProcessCanvasContent({
     return stepNodes.map((node, index) => {
       const normalized = normalizeRecipeStepNodeData(node.data)
       const { step } = normalized
-      const ingredientNames = step.actionOn.ingredients.map((entry) => getIngredientById(entry.ingredientId).name)
+      const ingredientNames = [
+        ...step.actionOn.steps.map((entry) => getStepOutputLabel(stepOutputGraph, entry.stepId)).filter(Boolean),
+        ...step.actionOn.ingredients.map(getActionOnIngredientDisplayName),
+      ]
       const subprocessNames = step.actionOn.processes
         .map((entry) => availableSubprocesses.find((candidate) => candidate.id === entry.processId)?.name)
         .filter((name): name is string => Boolean(name))
@@ -608,7 +631,7 @@ function RecipeProcessCanvasContent({
         ingredientNames.length > 0 ? `On: ${ingredientNames.join(', ')}` : '',
         subprocessNames.length > 0 ? `Using: ${subprocessNames.join(', ')}` : '',
         getRecipeStepDurationLabel(step),
-        step.temperature,
+        getRecipeStepTemperatureLabel(step),
         step.expectedOutput ? `Expected: ${step.expectedOutput}` : '',
       ].filter(Boolean)
 
@@ -620,7 +643,7 @@ function RecipeProcessCanvasContent({
         stepNumber: index + 1,
       }
     })
-  }, [nodes, availableSubprocesses])
+  }, [nodes, availableSubprocesses, stepOutputGraph])
 
   const applyStepVisualization = useCallback((stepResult: RecipeProcessVisualizationStepResult) => {
     if (!stepResult.success || stepResult.visualizationAssetId == null) return
@@ -856,7 +879,7 @@ function RecipeProcessCanvasContent({
                   the brief) — provided via context rather than extra node props, since React Flow's
                   custom node components only receive their own node's data. Ingredient names come
                   from the static catalog module directly, no context needed for those. */}
-              <RecipeProcessGraphProvider value={{ availableSubprocesses, stepOrder, onNodeResizeStart: handleNodeResizeStart, onNodeResizeEnd: handleNodeResizeEnd }}>
+              <RecipeProcessGraphProvider value={{ availableSubprocesses, stepOrder, stepOutputGraph, onNodeResizeStart: handleNodeResizeStart, onNodeResizeEnd: handleNodeResizeEnd }}>
                 <ReactFlow
                   nodes={nodes}
                   edges={edges}
@@ -963,6 +986,8 @@ function RecipeProcessCanvasContent({
                   updateStepField={updateRecipeStepField}
                   updateActionOnIngredients={updateActionOnIngredients}
                   updateActionOnProcesses={updateActionOnProcesses}
+                  updateActionOnSteps={updateActionOnSteps}
+                  stepOutputGraph={stepOutputGraph}
                   onDeleteNode={deleteNode}
                   onDuplicateNode={duplicateNode}
                   onOpenSubprocess={handleOpenSubprocess}

@@ -226,6 +226,7 @@ public class ProcessServiceImpl implements IProcessService {
             }
             Map<String, Object> data = deepCopyMap(node.getData());
             remapActionOnProcessRefs(data, processIdMap);
+            remapActionOnStepRefs(data, nodeIdMap);
             nodeCopy.setData(data);
             copiedNodes.add(nodeCopy);
         }
@@ -277,6 +278,28 @@ public class ProcessServiceImpl implements IProcessService {
         ((Map<String, Object>) actionOn).put("processes", remapped);
     }
 
+    /**
+     * Rewrites a STEP's Action On step-output references ({@code data.step.actionOn.steps[].stepId})
+     * to the copied nodes' new ids, since a copy regenerates every node id. A reference to a node
+     * outside this process is kept as-is, so {@code ProcessValidator} still reports it.
+     */
+    @SuppressWarnings("unchecked")
+    private void remapActionOnStepRefs(Map<String, Object> data, Map<String, String> nodeIdMap) {
+        if (!(data.get("step") instanceof Map<?, ?> step)) return;
+        if (!(step.get("actionOn") instanceof Map<?, ?> actionOn)) return;
+        if (!(actionOn.get("steps") instanceof List<?> references)) return;
+
+        List<Object> remapped = new ArrayList<>();
+        for (Object reference : references) {
+            if (!(reference instanceof Map<?, ?> entry)) continue;
+            Map<String, Object> entryCopy = new LinkedHashMap<>((Map<String, Object>) entry);
+            Object stepId = entry.get("stepId");
+            if (stepId != null) entryCopy.put("stepId", nodeIdMap.getOrDefault(String.valueOf(stepId), String.valueOf(stepId)));
+            remapped.add(entryCopy);
+        }
+        ((Map<String, Object>) actionOn).put("steps", remapped);
+    }
+
     private Long asLong(Object value) {
         if (value instanceof Number number) {
             return number.longValue();
@@ -325,12 +348,19 @@ public class ProcessServiceImpl implements IProcessService {
      */
     private Process copyProcess(Process original) {
         Map<String, String> nodeIdMap = new HashMap<>();
+        for (Process.ProcessNode node : safeNodes(original)) {
+            nodeIdMap.put(node.getId(), UUID.randomUUID().toString());
+        }
+
         List<Process.ProcessNode> copiedNodes = new ArrayList<>();
         for (Process.ProcessNode node : safeNodes(original)) {
             Process.ProcessNode nodeCopy = cloneNode(node);
-            String newNodeId = UUID.randomUUID().toString();
-            nodeIdMap.put(node.getId(), newNodeId);
-            nodeCopy.setId(newNodeId);
+            nodeCopy.setId(nodeIdMap.get(node.getId()));
+            // Deep-copied (cloneNode's copy is shallow) so rewriting step-output references to the
+            // copy's new node ids never touches the source process's own data.
+            Map<String, Object> data = deepCopyMap(node.getData());
+            remapActionOnStepRefs(data, nodeIdMap);
+            nodeCopy.setData(data);
             copiedNodes.add(nodeCopy);
         }
 

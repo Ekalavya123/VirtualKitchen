@@ -24,4 +24,11 @@ public class GeneratedActionOnDTO {
 
     /** Subprocess {@code ref} strings this step's action applies to. */
     private List<String> processes;
+
+    /**
+     * {@code stepId}s of earlier steps in the same process whose Expected Output this step's action
+     * applies to (e.g. "boiled eggs" from step s1). Generation-scoped like {@code ref}; the frontend
+     * maps them to real node ids.
+     */
+    private List<String> steps;
 }

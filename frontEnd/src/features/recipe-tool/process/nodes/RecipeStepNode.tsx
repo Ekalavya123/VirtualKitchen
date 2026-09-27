@@ -2,12 +2,21 @@ import { useCallback, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, NodeResizeControl, useNodeId, useUpdateNodeInternals } from '@xyflow/react'
 import '../../styles/recipe-tool.css'
-import { normalizeRecipeStepNodeData, getRecipeStepDurationLabel, type RecipeStepNodeData } from '../model/recipeStepData'
+import {
+  getActionOnIngredientDisplayName,
+  getRecipeStepActionSummary,
+  getRecipeStepDurationLabel,
+  getRecipeStepRepeatIntervalLabel,
+  getRecipeStepTemperatureLabel,
+  normalizeRecipeStepNodeData,
+  type RecipeStepNodeData,
+} from '../model/recipeStepData'
 import { useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'
+import { getStepOutputLabel, getStepOutputReferenceProblem } from '../model/recipeStepOutputs'
 import { getStepActionById, type ActionCategory, type StepActionId } from '../../catalog/actionCatalog'
-import { getIngredientById } from '../../catalog/ingredientCatalog'
 import { getPreparationStyleDisplayName } from '../../catalog/preparationStyleCatalog'
 import { getFlameLevelDisplayName } from '../../catalog/flameLevelCatalog'
+import { formatQuantityWithUnit } from '../../catalog/unitCatalog'
 
 type CategoryTheme = {
   emoji: string
@@ -17,15 +26,32 @@ type CategoryTheme = {
   border: string
 }
 
-// Per-action-category colors of a recipe step node.
+// Per-action-category colors of a recipe step node, keyed by the catalog's actionCategories ids.
+// Related categories share a palette (all heat-based cooking is orange, all prep is violet, …).
+const HANDLING = { accent: '#2563eb', accentStrong: '#1d4ed8', soft: '#eff6ff', border: '#bfdbfe' }
+const PREPARATION = { accent: '#7c3aed', accentStrong: '#6d28d9', soft: '#f5f3ff', border: '#ddd6fe' }
+const COOKING = { accent: '#ea580c', accentStrong: '#c2410c', soft: '#fff7ed', border: '#fed7aa' }
+const MIXING = { accent: '#0d9488', accentStrong: '#0f766e', soft: '#f0fdfa', border: '#99f6e4' }
+const WAITING = { accent: '#64748b', accentStrong: '#475569', soft: '#f1f5f9', border: '#e2e8f0' }
+const FINISHING = { accent: '#16a34a', accentStrong: '#15803d', soft: '#f0fdf4', border: '#bbf7d0' }
+const NEUTRAL = { accent: '#94a3b8', accentStrong: '#64748b', soft: '#f8fafc', border: '#e2e8f0' }
+
 const CATEGORY_THEMES: Record<ActionCategory, CategoryTheme> = {
-  'Ingredient Operations': { emoji: '🧺', accent: '#2563eb', accentStrong: '#1d4ed8', soft: '#eff6ff', border: '#bfdbfe' },
-  'Preparation Operations': { emoji: '🔪', accent: '#7c3aed', accentStrong: '#6d28d9', soft: '#f5f3ff', border: '#ddd6fe' },
-  'Cooking Operations': { emoji: '🔥', accent: '#ea580c', accentStrong: '#c2410c', soft: '#fff7ed', border: '#fed7aa' },
-  'Mixing Operations': { emoji: '🥣', accent: '#0d9488', accentStrong: '#0f766e', soft: '#f0fdfa', border: '#99f6e4' },
-  'Waiting Operations': { emoji: '⏳', accent: '#64748b', accentStrong: '#475569', soft: '#f1f5f9', border: '#e2e8f0' },
-  'Finish Operations': { emoji: '🍽️', accent: '#16a34a', accentStrong: '#15803d', soft: '#f0fdf4', border: '#bbf7d0' },
-  'Custom': { emoji: '✨', accent: '#94a3b8', accentStrong: '#64748b', soft: '#f8fafc', border: '#e2e8f0' },
+  'handling': { emoji: '🧺', ...HANDLING },
+  'cleaning': { emoji: '🧼', ...PREPARATION },
+  'cutting': { emoji: '🔪', ...PREPARATION },
+  'mixing': { emoji: '🥣', ...MIXING },
+  'coating': { emoji: '🧂', ...MIXING },
+  'heating': { emoji: '♨️', ...COOKING },
+  'moist-heat': { emoji: '🍲', ...COOKING },
+  'frying': { emoji: '🍳', ...COOKING },
+  'dry-heat': { emoji: '🔥', ...COOKING },
+  'sauce': { emoji: '🥄', ...COOKING },
+  'dough': { emoji: '🥖', ...MIXING },
+  'finishing': { emoji: '🍽️', ...FINISHING },
+  'preservation': { emoji: '🫙', ...WAITING },
+  'control': { emoji: '⏳', ...WAITING },
+  'custom': { emoji: '✨', ...NEUTRAL },
 }
 
 const DEFAULT_THEME: CategoryTheme = { emoji: '🍳', accent: '#94a3b8', accentStrong: '#64748b', soft: '#f8fafc', border: '#e2e8f0' }
@@ -60,12 +86,10 @@ const MAX_HEIGHT = 560
 /** Action On lines shown before collapsing into "+N more" (a compact summary, not the full detail — that stays in the Step Properties panel). */
 const COLLAPSED_ACTION_ON_LIMIT = 3
 
-const UNIT_LABELS: Record<string, string> = { COUNT: '', GRAM: 'g', KG: 'kg', ML: 'mL', LITER: 'L' }
-
 export default function RecipeStepNode({ selected, style: nodeStyle, width: nodeWidth, height: nodeHeight, data }: RecipeStepNodeProps) {
   const nodeId = useNodeId()
   const updateNodeInternals = useUpdateNodeInternals()
-  const { availableSubprocesses, stepOrder, onNodeResizeStart, onNodeResizeEnd } = useRecipeProcessGraphContext()
+  const { availableSubprocesses, stepOrder, stepOutputGraph, onNodeResizeStart, onNodeResizeEnd } = useRecipeProcessGraphContext()
   const [expanded, setExpanded] = useState(false)
   const normalized = normalizeRecipeStepNodeData(data)
   const step = normalized.step
@@ -91,50 +115,74 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
   }, [nodeId, updateNodeInternals])
 
   const ingredientLines = step.actionOn.ingredients.map((entry, index) => {
-    const name = getIngredientById(entry.ingredientId).name
-    const unit = UNIT_LABELS[entry.unit] ?? entry.unit.toLowerCase()
-    const quantity = [entry.quantity, unit].filter(Boolean).join(unit ? '' : ' ')
+    const name = getActionOnIngredientDisplayName(entry)
+    const quantity = formatQuantityWithUnit(entry.quantity, entry.unit)
     const prepStyle = getPreparationStyleDisplayName(entry.preparationStyleId ?? '', entry.customPreparationStyle)
     return {
       key: `ingredient-${index}`,
       content: (
         <>
           <span style={{ fontWeight: 700, color: theme.accentStrong }}>{name}</span>
-          {' × '}
-          <span
-            style={{
-              fontWeight: 700, fontSize: 10, color: theme.accentStrong, background: theme.soft,
-              border: `1px solid ${theme.border}`, borderRadius: 999, padding: '0 6px',
-            }}
-          >
-            {quantity}
-          </span>
+          {quantity && (
+            <>
+              {' × '}
+              <span
+                style={{
+                  fontWeight: 700, fontSize: 10, color: theme.accentStrong, background: theme.soft,
+                  border: `1px solid ${theme.border}`, borderRadius: 999, padding: '0 6px',
+                }}
+              >
+                {quantity}
+              </span>
+            </>
+          )}
           {prepStyle && <span style={{ color: 'var(--flow-text-muted)', fontWeight: 500 }}> ({prepStyle})</span>}
         </>
       ),
     }
   })
 
-  const subprocessLines = step.actionOn.processes.map((entry) => {
-    const process = availableSubprocesses.find((candidate) => candidate.id === entry.processId)
-    const name = process ? process.name : `Process #${entry.processId}`
+  const subprocessName = (processId: number) =>
+    availableSubprocesses.find((candidate) => candidate.id === processId)?.name ?? `Process #${processId}`
+
+  const subprocessLines = step.actionOn.processes.map((entry) => ({
+    key: `subprocess-${entry.processId}`,
+    content: <span style={{ fontWeight: 700, color: theme.accentStrong }}>{subprocessName(entry.processId)}</span>,
+  }))
+
+  // Labels are the referenced step's *current* Expected Output, resolved live from the graph.
+  const stepOutputLines = step.actionOn.steps.map((entry) => {
+    const label = getStepOutputLabel(stepOutputGraph, entry.stepId)
+    const available = nodeId != null && getStepOutputReferenceProblem(stepOutputGraph, entry.stepId, nodeId) == null
     return {
-      key: `subprocess-${entry.processId}`,
-      content: <span style={{ fontWeight: 700, color: theme.accentStrong }}>{name}</span>,
+      key: `step-output-${entry.stepId}`,
+      content: (
+        <span style={{ fontWeight: 700, color: available ? theme.accentStrong : '#dc2626' }} title={available ? 'Output of an earlier step' : 'Unavailable step output'}>
+          ↳ {label || 'Unavailable step output'}
+        </span>
+      ),
     }
   })
 
-  const actionOnLines = [...ingredientLines, ...subprocessLines]
+  const actionSummary = getRecipeStepActionSummary(step, {
+    subprocessName,
+    stepOutputLabel: (stepId) => getStepOutputLabel(stepOutputGraph, stepId),
+  })
+
+  const actionOnLines = [...stepOutputLines, ...ingredientLines, ...subprocessLines]
   const visibleLines = expanded ? actionOnLines : actionOnLines.slice(0, COLLAPSED_ACTION_ON_LIMIT)
   const hiddenCount = actionOnLines.length - visibleLines.length
 
   const flameLevel = getFlameLevelDisplayName(step.flameLevelId, step.customFlameLevel)
   const duration = getRecipeStepDurationLabel(step)
+  const temperature = getRecipeStepTemperatureLabel(step)
+  const repeatInterval = getRecipeStepRepeatIntervalLabel(step)
 
   const detailBadges = [
-    step.temperature && { icon: '🌡️', label: step.temperature },
+    temperature && { icon: '🌡️', label: temperature },
     flameLevel && { icon: '🔥', label: flameLevel },
     duration && { icon: '⏱️', label: duration },
+    repeatInterval && { icon: '🔁', label: repeatInterval },
   ].filter((entry): entry is { icon: string; label: string } => Boolean(entry))
 
   return (
@@ -209,8 +257,12 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
           <div style={{ fontWeight: 700, fontSize: 13, color: theme.accentStrong, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {normalized.title}
           </div>
-          <div style={{ fontSize: 9.5, color: 'var(--flow-text-subtle)', fontWeight: 600 }}>
+          <div
+            style={{ fontSize: 9.5, color: 'var(--flow-text-subtle)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            title={actionSummary}
+          >
             {stepNumber != null ? `Step ${stepNumber}` : 'Step'}
+            {step.action && actionSummary !== normalized.title && ` · ${actionSummary}`}
           </div>
         </div>
       </div>

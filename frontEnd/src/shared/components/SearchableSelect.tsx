@@ -6,7 +6,16 @@ export type SearchableSelectOption = {
   label: string
   icon?: string
   category?: string
+  /** Secondary line under the label (e.g. what an action means). */
+  description?: string
+  /** Extra search terms that aren't displayed (e.g. catalog aliases: "dhania" finds Coriander Leaves). */
+  keywords?: readonly string[]
 }
+
+const matchesQuery = (option: SearchableSelectOption, normalizedQuery: string) =>
+  option.label.toLowerCase().includes(normalizedQuery)
+  || (option.category?.toLowerCase().includes(normalizedQuery) ?? false)
+  || (option.keywords?.some((keyword) => keyword.toLowerCase().includes(normalizedQuery)) ?? false)
 
 type SearchableSelectProps = {
   value: string
@@ -35,7 +44,7 @@ export default function SearchableSelect({
   const groupedOptions = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
     const filtered = normalizedQuery
-      ? options.filter(option => option.label.toLowerCase().includes(normalizedQuery))
+      ? options.filter(option => matchesQuery(option, normalizedQuery))
       : options
 
     const groups = new Map<string, SearchableSelectOption[]>()
@@ -108,7 +117,14 @@ export default function SearchableSelect({
                     onClick={() => handleSelect(option.value)}
                   >
                     {option.icon && <span className="searchable-select-option-icon">{option.icon}</span>}
-                    <span>{option.label}</span>
+                    {option.description ? (
+                      <span className="searchable-select-option-text">
+                        <span>{option.label}</span>
+                        <span className="searchable-select-option-description">{option.description}</span>
+                      </span>
+                    ) : (
+                      <span>{option.label}</span>
+                    )}
                   </button>
                 ))}
               </div>

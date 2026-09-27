@@ -48,9 +48,6 @@ public class RecipeProcessVisualizationService {
 
     private static final Logger logger = LoggerFactory.getLogger(RecipeProcessVisualizationService.class);
 
-    private static final Map<String, String> UNIT_LABELS = Map.of(
-            "COUNT", "", "GRAM", "g", "KG", "kg", "ML", "ml", "LITER", "l");
-
     private final ProcessRepository processRepository;
     private final AIVisualizationAssetRepository assetRepository;
     private final SequenceGeneratorService sequenceGeneratorService;
@@ -437,7 +434,7 @@ public class RecipeProcessVisualizationService {
                 subprocessNames,
                 asString(step.get("actionDescription")),
                 asString(step.get("expectedOutput")),
-                asString(step.get("temperature")),
+                temperatureLabel(step),
                 flameLevel,
                 duration,
                 previousExpectedOutput
@@ -458,10 +455,13 @@ public class RecipeProcessVisualizationService {
 
             String ingredientId = asString(ingredient.get("ingredientId"));
             if (!StringUtils.hasText(ingredientId)) continue;
-            String name = vocabularyProvider.ingredientLabel(ingredientId);
+            String customName = asString(ingredient.get("customIngredientName"));
+            String name = "custom".equals(ingredientId) && StringUtils.hasText(customName)
+                    ? customName
+                    : vocabularyProvider.ingredientLabel(ingredientId);
 
             String quantity = formatQuantity(ingredient.get("quantity"));
-            String unit = UNIT_LABELS.getOrDefault(asString(ingredient.get("unit")), "");
+            String unit = vocabularyProvider.unitLabel(asString(ingredient.get("unit")));
 
             String preparationStyleId = asString(ingredient.get("preparationStyleId"));
             String preparationStyle = "custom".equals(preparationStyleId)
@@ -497,6 +497,14 @@ public class RecipeProcessVisualizationService {
 
     private String orBlank(String value) {
         return value == null ? "" : value;
+    }
+
+    /** "180 °C" from temperatureValue/temperatureUnit, else the legacy free-text {@code temperature} field. */
+    private String temperatureLabel(Map<String, Object> step) {
+        String value = asString(step.get("temperatureValue")).trim();
+        if (!StringUtils.hasText(value)) return asString(step.get("temperature"));
+        String unit = asString(step.get("temperatureUnit"));
+        return StringUtils.hasText(unit) ? value + " °" + unit : value;
     }
 
     private String formatQuantity(Object value) {

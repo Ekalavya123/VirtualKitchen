@@ -134,7 +134,7 @@ class RecipeProcessGenerationValidatorTest {
 
     @Test
     void validate_missingOptionalAdvancedProperties_isValid() {
-        GeneratedRecipeStepDTO stepDto = step("cut", actionOn(List.of(ingredient("onion", 1.0, "COUNT", null)), List.of()), "Cut the onion.", "Diced.");
+        GeneratedRecipeStepDTO stepDto = step("chop", actionOn(List.of(ingredient("onion", 1.0, "COUNT", null)), List.of()), "Chop the onion.", "Chopped.");
         // temperature/flameLevel/duration deliberately left null — never set below.
         GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(stepDto));
 
@@ -314,6 +314,296 @@ class RecipeProcessGenerationValidatorTest {
         assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("no steps")));
     }
 
+    // --- catalog-driven per-action rules (docs/recipe-vocabulary-v2.md, sections F/G) ---
+
+    @Test
+    void validate_expandedCatalogUnitsAndIds_areValid() {
+        GeneratedRecipeProcessDTO main = process(null, "Tadka Dal", List.of(
+                step("wash", actionOn(List.of(ingredient("toor-dal", 1.0, "cup", "rinsed")), List.of()), "Rinse the dal.", "Clean dal."),
+                step("temper", actionOn(List.of(
+                        ingredient("ghee", 2.0, "tbsp", null),
+                        ingredient("cumin-seeds", 1.0, "tsp", null),
+                        ingredient("garlic", 4.0, "clove", null),
+                        ingredient("asafoetida", 1.0, "pinch", null)
+                ), List.of()), "Temper the spices in ghee.", "Spices crackle."),
+                step("season", actionOn(List.of(ingredient("salt", null, "to-taste", null)), List.of()), "Season to taste.", "")
+        ));
+
+        ProcessValidationResult result = validator.validate(main, List.of());
+
+        assertTrue(result.isValid(), () -> String.join("; ", result.getErrors()));
+    }
+
+    @Test
+    void validate_ingredientsOnActionWithoutIngredientTargets_isRejected() {
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                step("preheat", actionOn(List.of(ingredient("water", 1.0, "ml", null)), List.of()), "Preheat.", "")
+        ));
+
+        ProcessValidationResult result = validator.validate(main, List.of());
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("cannot act on ingredients")));
+    }
+
+    @Test
+    void validate_subprocessOnIngredientOnlyAction_isRejected() {
+        GeneratedRecipeProcessDTO sauce = process("sauce", "Sauce", List.of(
+                step("simmer", actionOn(List.of(ingredient("tomato", 3.0, "piece", null)), List.of()), "Simmer.", "")
+        ));
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                step("chop", actionOn(List.of(), List.of("sauce")), "Chop the sauce?", "")
+        ));
+
+        ProcessValidationResult result = validator.validate(main, List.of(sauce));
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("cannot act on subprocess outputs")));
+    }
+
+    @Test
+    void validate_multipleIngredientsOnSingleIngredientAction_isRejected() {
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                step("divide", actionOn(List.of(ingredient("dough", 500.0, "g", null), ingredient("butter", 1.0, "tbsp", null)), List.of()), "Divide.", "")
+        ));
+
+        ProcessValidationResult result = validator.validate(main, List.of());
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("at most one ingredient")));
+    }
+
+    @Test
+    void validate_emptyActionOnForActionThatNeedsATarget_isRejected() {
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                step("chop", actionOn(List.of(), List.of()), "Chop.", "")
+        ));
+
+        ProcessValidationResult result = validator.validate(main, List.of());
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("needs at least one")));
+    }
+
+    @Test
+    void validate_targetlessPreheatWithOvenTemperature_isValid() {
+        GeneratedRecipeStepDTO preheat = step("preheat", null, "Preheat the oven.", "Oven is hot.");
+        preheat.setTemperatureValue(180.0);
+        preheat.setTemperatureUnit("C");
+
+        ProcessValidationResult result = validator.validate(process(null, "Recipe", List.of(preheat)), List.of());
+
+        assertTrue(result.isValid(), () -> String.join("; ", result.getErrors()));
+    }
+
+    @Test
+    void validate_stepFieldNotDeclaredByAction_isRejected() {
+        GeneratedRecipeStepDTO chop = step("chop", actionOn(List.of(ingredient("onion", 1.0, "piece", null)), List.of()), "Chop.", "");
+        chop.setDuration("5 minutes");
+        GeneratedRecipeStepDTO stir = step("stir", actionOn(List.of(), List.of()), "Stir.", "");
+        stir.setTemperatureValue(90.0);
+        stir.setTemperatureUnit("C");
+
+        ProcessValidationResult result = validator.validate(process(null, "Recipe", List.of(chop, stir)), List.of());
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("duration does not apply to action chop")));
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("temperatureValue does not apply to action stir")));
+    }
+
+    @Test
+    void validate_temperatureValueWithoutUnit_isRejected() {
+        GeneratedRecipeStepDTO bake = step("bake", actionOn(List.of(ingredient("dough", 500.0, "g", null)), List.of()), "Bake.", "");
+        bake.setTemperatureValue(200.0);
+
+        ProcessValidationResult result = validator.validate(process(null, "Recipe", List.of(bake)), List.of());
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("temperatureUnit")));
+    }
+
+    @Test
+    void validate_heatLevelAndDurationFormats() {
+        GeneratedRecipeStepDTO good = step("saute", actionOn(List.of(ingredient("onion", 2.0, "piece", "thin-slice")), List.of()), "Sauté.", "Soft onions.");
+        good.setFlameLevel("medium-high");
+        good.setDuration("8 minutes");
+        good.setRepeatInterval("1 minute");
+        assertTrue(validator.validate(process(null, "Recipe", List.of(good)), List.of()).isValid());
+
+        GeneratedRecipeStepDTO bad = step("saute", actionOn(List.of(ingredient("onion", 2.0, "piece", null)), List.of()), "Sauté.", "");
+        bad.setFlameLevel("scorching");
+        bad.setDuration("5-7 minutes");
+        ProcessValidationResult result = validator.validate(process(null, "Recipe", List.of(bad)), List.of());
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("flameLevel must be one of")));
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("duration must look like")));
+    }
+
+    @Test
+    void validate_preparationStyleOutsideActionSets_isRejected() {
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                step("slice", actionOn(List.of(ingredient("potato", 2.0, "piece", "cubed")), List.of()), "Slice.", ""),
+                step("stir", actionOn(List.of(ingredient("onion", 1.0, "piece", "chopped")), List.of()), "Stir.", "")
+        ));
+
+        ProcessValidationResult result = validator.validate(main, List.of());
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("cubed is not allowed for action slice")));
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("preparationStyle does not apply to action stir")));
+    }
+
+    @Test
+    void validate_cutRequiresAStyleOnlyWhenTheIngredientCanTakeOne() {
+        ProcessValidationResult onion = validator.validate(process(null, "Recipe", List.of(
+                step("cut", actionOn(List.of(ingredient("onion", 1.0, "piece", null)), List.of()), "Cut.", "")
+        )), List.of());
+        assertFalse(onion.isValid());
+        assertTrue(onion.getErrors().stream().anyMatch(e -> e.contains("preparationStyle is required for action cut")));
+
+        ProcessValidationResult water = validator.validate(process(null, "Recipe", List.of(
+                step("cut", actionOn(List.of(ingredient("water", 100.0, "ml", null)), List.of()), "Cut.", "")
+        )), List.of());
+        assertTrue(water.getErrors().stream().noneMatch(e -> e.contains("preparationStyle")));
+    }
+
+    @Test
+    void validate_quantityRules() {
+        ProcessValidationResult missingForAdd = validator.validate(process(null, "Recipe", List.of(
+                step("add", actionOn(List.of(ingredient("onion", null, "piece", null)), List.of()), "Add.", "")
+        )), List.of());
+        assertTrue(missingForAdd.getErrors().stream().anyMatch(e -> e.contains("quantity is required for action add")));
+
+        ProcessValidationResult numberWithToTaste = validator.validate(process(null, "Recipe", List.of(
+                step("season", actionOn(List.of(ingredient("salt", 1.0, "to-taste", null)), List.of()), "Season.", "")
+        )), List.of());
+        assertTrue(numberWithToTaste.getErrors().stream().anyMatch(e -> e.contains("quantity must be null")));
+
+        ProcessValidationResult optionalMissing = validator.validate(process(null, "Recipe", List.of(
+                step("stir", actionOn(List.of(ingredient("onion", null, null, null)), List.of()), "Stir.", "")
+        )), List.of());
+        assertTrue(optionalMissing.isValid(), () -> String.join("; ", optionalMissing.getErrors()));
+    }
+
+    @Test
+    void validate_customActionRequiresAName() {
+        GeneratedRecipeStepDTO unnamed = step("custom", null, "Do the thing.", "");
+        assertTrue(validator.validate(process(null, "Recipe", List.of(unnamed)), List.of()).getErrors().stream()
+                .anyMatch(e -> e.contains("customActionName")));
+
+        GeneratedRecipeStepDTO named = step("custom", null, "Spherify the juice.", "");
+        named.setCustomActionName("Spherify");
+        assertTrue(validator.validate(process(null, "Recipe", List.of(named)), List.of()).isValid());
+    }
+
+    @Test
+    void validate_aliasInsteadOfId_isRejectedWithTheCanonicalId() {
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                step("garnish", actionOn(List.of(ingredient("dhania", 2.0, "tbsp", null)), List.of()), "Garnish.", "")
+        ));
+
+        ProcessValidationResult result = validator.validate(main, List.of());
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("'cilantro'")));
+    }
+
+    // --- step-output references (actionOn.steps -> earlier stepIds) ---
+
+    @Test
+    void validate_previousStepOutputReferences_areValid() {
+        GeneratedRecipeProcessDTO main = process(null, "Egg Fry", List.of(
+                outputStep("s1", "boil", "boiled eggs", List.of(ingredient("egg", 4.0, "piece", null))),
+                outputStep("s2", "saute", "fried onions", List.of(ingredient("onion", 1.0, "piece", "sliced"))),
+                outputStep("s3", "fry", "eggs fried with onions", List.of(), "s1", "s2")
+        ));
+
+        ProcessValidationResult result = validator.validate(main, List.of());
+
+        assertTrue(result.isValid(), () -> String.join("; ", result.getErrors()));
+    }
+
+    @Test
+    void validate_stepOutputSelfReference_isRejected() {
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                outputStep("s1", "boil", "boiled eggs", List.of(ingredient("egg", 4.0, "piece", null)), "s1")
+        ));
+
+        assertErrorContains(validator.validate(main, List.of()), "self-reference");
+    }
+
+    @Test
+    void validate_stepOutputReferenceToUnknownOrLaterStep_isRejected() {
+        GeneratedRecipeProcessDTO unknown = process(null, "Recipe", List.of(
+                outputStep("s1", "fry", "fried", List.of(ingredient("egg", 1.0, "piece", null)), "s9")
+        ));
+        assertErrorContains(validator.validate(unknown, List.of()), "unknown stepId");
+
+        GeneratedRecipeProcessDTO later = process(null, "Recipe", List.of(
+                outputStep("s1", "fry", "fried eggs", List.of(), "s2"),
+                outputStep("s2", "boil", "boiled eggs", List.of(ingredient("egg", 4.0, "piece", null)))
+        ));
+        assertErrorContains(validator.validate(later, List.of()), "references a later step");
+    }
+
+    @Test
+    void validate_stepOutputReferenceToCondition_isRejected() {
+        GeneratedRecipeStepDTO condition = new GeneratedRecipeStepDTO();
+        condition.setNodeType("CONDITION");
+        condition.setStepId("c1");
+        condition.setTitle("Are the eggs boiled?");
+        condition.setActionDescription("Check the eggs.");
+        condition.setExpectedOutput("Eggs are boiled.");
+
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                condition,
+                outputStep("s2", "fry", "fried eggs", List.of(), "c1")
+        ));
+
+        assertErrorContains(validator.validate(main, List.of()), "only a STEP's output can be used");
+    }
+
+    @Test
+    void validate_stepOutputReferenceToStepWithEmptyExpectedOutput_isRejected() {
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                outputStep("s1", "boil", "", List.of(ingredient("egg", 4.0, "piece", null))),
+                outputStep("s2", "fry", "fried eggs", List.of(), "s1")
+        ));
+
+        assertErrorContains(validator.validate(main, List.of()), "has no expectedOutput");
+    }
+
+    @Test
+    void validate_stepOutputOnIngredientOnlyAction_andDuplicateStepIds_areRejected() {
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                outputStep("s1", "boil", "boiled eggs", List.of(ingredient("egg", 4.0, "piece", null))),
+                outputStep("s1", "chop", "chopped eggs", List.of(), "s1")
+        ));
+
+        ProcessValidationResult result = validator.validate(main, List.of());
+        assertErrorContains(result, "cannot act on step outputs");
+        assertErrorContains(result, "duplicate within this process");
+    }
+
+    @Test
+    void validate_stepOutputAloneSatisfiesARequiredTarget() {
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                outputStep("s1", "boil", "boiled eggs", List.of(ingredient("egg", 4.0, "piece", null))),
+                outputStep("s2", "garnish", "garnished eggs", List.of(), "s1")
+        ));
+
+        ProcessValidationResult result = validator.validate(main, List.of());
+
+        assertTrue(result.isValid(), () -> String.join("; ", result.getErrors()));
+    }
+
+    private static void assertErrorContains(ProcessValidationResult result, String fragment) {
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains(fragment)),
+                () -> "expected an error containing '" + fragment + "', got: " + result.getErrors());
+    }
+
     // --- helpers -------------------------------------------------------
 
     private GeneratedRecipeProcessDTO process(String ref, String name, List<GeneratedRecipeStepDTO> steps) {
@@ -335,7 +625,15 @@ class RecipeProcessGenerationValidatorTest {
     }
 
     private GeneratedActionOnDTO actionOn(List<GeneratedActionOnIngredientDTO> ingredients, List<String> processes) {
-        return new GeneratedActionOnDTO(new ArrayList<>(ingredients), new ArrayList<>(processes));
+        return new GeneratedActionOnDTO(new ArrayList<>(ingredients), new ArrayList<>(processes), new ArrayList<>());
+    }
+
+    /** A STEP with a stepId whose actionOn uses earlier steps' outputs. */
+    private GeneratedRecipeStepDTO outputStep(String stepId, String action, String expectedOutput, List<GeneratedActionOnIngredientDTO> ingredients, String... usesSteps) {
+        GeneratedActionOnDTO on = new GeneratedActionOnDTO(new ArrayList<>(ingredients), new ArrayList<>(), new ArrayList<>(List.of(usesSteps)));
+        GeneratedRecipeStepDTO dto = step(action, on, "Do " + action + ".", expectedOutput);
+        dto.setStepId(stepId);
+        return dto;
     }
 
     private GeneratedActionOnIngredientDTO ingredient(String ingredientId, Double quantity, String unit, String preparationStyle) {

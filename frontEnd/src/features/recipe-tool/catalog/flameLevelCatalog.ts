@@ -5,26 +5,19 @@ import {
   resolveCatalogId,
 } from './catalogSelectionUtils'
 
-// The precise set of ids is data-driven (see stepCatalogs.data.json), but kept as an explicit
-// literal union here so the rest of the app still gets autocomplete/exhaustiveness checking.
-export type FlameLevelId = 'low' | 'medium' | 'high' | 'custom'
+/**
+ * A heat level id from stepCatalogs.data.json ("off" … "very-high"). This is the burner/appliance
+ * setting — a numeric temperature is a separate step field (see stepFieldCatalog's temperature helpers).
+ */
+export type FlameLevelId = string
 
 export type FlameLevelDefinition = {
   id: FlameLevelId
   label: string
+  description?: string
 }
 
-type RawFlameLevelEntry = {
-  id: string
-  label: string
-}
-
-export const FLAME_LEVEL_CATALOG: readonly FlameLevelDefinition[] = (
-  stepCatalogsData.flameLevels as RawFlameLevelEntry[]
-).map((entry) => ({
-  id: entry.id as FlameLevelId,
-  label: entry.label,
-}))
+export const FLAME_LEVEL_CATALOG: readonly FlameLevelDefinition[] = stepCatalogsData.flameLevels
 
 export const CUSTOM_FLAME_LEVEL_ID: FlameLevelId = 'custom'
 

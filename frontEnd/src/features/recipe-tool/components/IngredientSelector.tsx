@@ -6,100 +6,112 @@ import {
   CUSTOM_INGREDIENT_ID,
   INGREDIENTS_BY_CATEGORY,
   INGREDIENT_CATEGORY_ORDER,
-  getIngredientDefaultUnitType,
+  getIngredientCategoryLabel,
+  getIngredientDefaultUnit,
   isIngredientId,
   type IngredientId,
 } from '../catalog/ingredientCatalog'
-import { CUSTOM_PREPARATION_STYLE_ID, DEFAULT_PREPARATION_STYLE_ID, PREPARATION_STYLE_CATALOG } from '../catalog/preparationStyleCatalog'
-import { isStepFieldEnabled } from '../catalog/actionSchemaCatalog'
+import { CUSTOM_PREPARATION_STYLE_ID, DEFAULT_PREPARATION_STYLE_ID } from '../catalog/preparationStyleCatalog'
+import { getAllowedPreparationStyles, isStepFieldEnabled } from '../catalog/actionSchemaCatalog'
+import { isQuantifiableUnit, type UnitId } from '../catalog/unitCatalog'
 import type { StepActionId } from '../catalog/actionCatalog'
 import type { ActionOnIngredient } from '../process/model/recipeStepData'
-import type { UnitType } from '../../../types/recipe'
+import { PreparationStyleSelect, UnitSelect } from './StepFieldInputs'
 
-const UNIT_OPTIONS: { value: UnitType; label: string }[] = [
-  { value: 'COUNT', label: 'count' },
-  { value: 'GRAM', label: 'g' },
-  { value: 'KG', label: 'kg' },
-  { value: 'ML', label: 'mL' },
-  { value: 'LITER', label: 'L' },
-]
-
-const preparationStyleOptions: SearchableSelectOption[] = PREPARATION_STYLE_CATALOG.map((style) => ({ value: style.id, label: style.label }))
+// Built once: the full global catalog, grouped by category, searchable by aliases — never
+// restricted to what the Kitchen inventory currently holds.
+const ALL_INGREDIENT_OPTIONS: SearchableSelectOption[] = INGREDIENT_CATEGORY_ORDER.flatMap((category) =>
+  INGREDIENTS_BY_CATEGORY[category].map((item) => ({
+    value: item.id,
+    label: item.name,
+    icon: item.icon,
+    category: getIngredientCategoryLabel(category),
+    keywords: item.aliases,
+  }))
+)
 
 type IngredientSelectorProps = {
-  /** Ingredient ids already on this step, excluded from the picker so the same ingredient isn't added twice. */
+  /** Ingredient ids already on this step, excluded from the picker so the same ingredient isn't added twice (custom ingredients excepted). */
   excludeIngredientIds: IngredientId[]
-  /** The step's current action — decides whether preparation style is relevant at all (e.g. Cut vs. Boil), reusing the existing action schema rather than a new rule. */
+  /** The step's current action — decides which of quantity/unit/preparation style apply at all (catalog action schema). */
   action: StepActionId | ''
   onAdd: (ingredient: ActionOnIngredient) => void
 }
 
 /**
- * Small "add an ingredient" row for a step's Action On: pick from the app's
- * static UI ingredient catalog (catalog/ingredientCatalog.ts) — not a
- * backend catalog API — then set this step's own quantity/unit/notes
- * /preparation for it. The catalog's "custom" entry isn't offered here:
- * Action On has no free-text ingredient name field.
+ * Small "add an ingredient" row for a step's Action On: pick from the app's shared ingredient
+ * catalog (catalog/ingredientCatalog.ts, the same list the AI generator uses) or name a custom
+ * ingredient, then set this step's own quantity/unit/preparation for it.
  */
 export default function IngredientSelector({ excludeIngredientIds, action, onAdd }: IngredientSelectorProps) {
-  const preparationStyleRelevant = isStepFieldEnabled(action, 'preparationStyleId')
+  const quantityRelevant = isStepFieldEnabled(action, 'quantity')
 
   const [ingredientIdValue, setIngredientIdValue] = useState('')
+  const [customIngredientName, setCustomIngredientName] = useState('')
   const [quantity, setQuantity] = useState('1')
-  const [unit, setUnit] = useState<UnitType>('COUNT')
+  const [unit, setUnit] = useState<UnitId>('piece')
   const [notes, setNotes] = useState('')
   const [preparationStyleId, setPreparationStyleId] = useState('')
   const [customPreparationStyle, setCustomPreparationStyle] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  const options: SearchableSelectOption[] = INGREDIENT_CATEGORY_ORDER.flatMap((category) =>
-    INGREDIENTS_BY_CATEGORY[category]
-      .filter((item) => item.id !== CUSTOM_INGREDIENT_ID && !excludeIngredientIds.includes(item.id))
-      .map((item) => ({ value: item.id, label: item.name, icon: item.icon, category }))
-  )
+  const options = ALL_INGREDIENT_OPTIONS.filter((option) => option.value === CUSTOM_INGREDIENT_ID || !excludeIngredientIds.includes(option.value))
+  const selectedIngredientId: IngredientId | '' = isIngredientId(ingredientIdValue) ? ingredientIdValue : ''
+  const unitQuantifiable = isQuantifiableUnit(unit)
 
-  // Pre-fills the unit from the ingredient's own catalog default (falling back to the existing
-  // COUNT default when the catalog default doesn't map onto the Process model's unit enum) and the
-  // preparation style to `medium` when relevant to the current action — deliberately applied here,
-  // at the moment an ingredient is actually picked, rather than as each field's useState initial
-  // value: this form doesn't remount when the step's action changes (it's the same still-open "add
-  // ingredient" row), so a useState initial value computed from `preparationStyleRelevant` would
-  // only ever reflect whatever the action was when the row first mounted, not its current value.
+  // Pre-fills the unit from the ingredient's own catalog default and the preparation style to
+  // `medium` only when the current action allows it for this ingredient — deliberately applied
+  // here, at the moment an ingredient is actually picked, rather than as each field's useState
+  // initial value: this form doesn't remount when the step's action changes.
   const handleSelectIngredient = (value: string) => {
     setIngredientIdValue(value)
-    const defaultUnit = isIngredientId(value) ? getIngredientDefaultUnitType(value) : null
-    if (defaultUnit) setUnit(defaultUnit)
-    setPreparationStyleId(preparationStyleRelevant ? DEFAULT_PREPARATION_STYLE_ID : '')
+    setUnit(getIngredientDefaultUnit(value))
+    const allowed = getAllowedPreparationStyles(action, value)
+    setPreparationStyleId(allowed.includes(DEFAULT_PREPARATION_STYLE_ID) ? DEFAULT_PREPARATION_STYLE_ID : '')
+    setCustomPreparationStyle('')
+  }
+
+  const reset = () => {
+    setIngredientIdValue('')
+    setCustomIngredientName('')
+    setQuantity('1')
+    setUnit('piece')
+    setNotes('')
+    setPreparationStyleId('')
+    setCustomPreparationStyle('')
+    setError(null)
   }
 
   const handleAdd = () => {
-    if (!isIngredientId(ingredientIdValue) || ingredientIdValue === CUSTOM_INGREDIENT_ID) {
+    if (!selectedIngredientId) {
       setError('Choose an ingredient')
       return
     }
-
-    const quantityNumber = Number(quantity)
-    if (!quantity.trim() || !Number.isFinite(quantityNumber) || quantityNumber < 0) {
-      setError('Enter a valid quantity')
+    if (selectedIngredientId === CUSTOM_INGREDIENT_ID && !customIngredientName.trim()) {
+      setError('Enter a name for the custom ingredient')
       return
     }
 
-    onAdd({
-      ingredientId: ingredientIdValue,
-      quantity: quantityNumber,
-      unit,
-      notes: notes.trim() || undefined,
-      preparationStyleId: preparationStyleRelevant ? (preparationStyleId as ActionOnIngredient['preparationStyleId']) : '',
-      customPreparationStyle: preparationStyleRelevant && preparationStyleId === CUSTOM_PREPARATION_STYLE_ID ? customPreparationStyle.trim() : undefined,
-    })
+    let quantityNumber: number | null = null
+    if (quantityRelevant && unitQuantifiable && quantity.trim()) {
+      quantityNumber = Number(quantity)
+      if (!Number.isFinite(quantityNumber) || quantityNumber < 0) {
+        setError('Enter a valid quantity')
+        return
+      }
+    }
 
-    setIngredientIdValue('')
-    setQuantity('1')
-    setUnit('COUNT')
-    setNotes('')
-    setPreparationStyleId(preparationStyleRelevant ? DEFAULT_PREPARATION_STYLE_ID : '')
-    setCustomPreparationStyle('')
-    setError(null)
+    const preparationRelevant = getAllowedPreparationStyles(action, selectedIngredientId).length > 0
+    onAdd({
+      ingredientId: selectedIngredientId,
+      customIngredientName: selectedIngredientId === CUSTOM_INGREDIENT_ID ? customIngredientName.trim() : undefined,
+      quantity: quantityNumber,
+      unit: quantityRelevant ? unit : '',
+      notes: notes.trim() || undefined,
+      preparationStyleId: preparationRelevant ? preparationStyleId : '',
+      customPreparationStyle: preparationRelevant && preparationStyleId === CUSTOM_PREPARATION_STYLE_ID ? customPreparationStyle.trim() : undefined,
+    })
+    reset()
   }
 
   return (
@@ -111,43 +123,49 @@ export default function IngredientSelector({ excludeIngredientIds, action, onAdd
             value={ingredientIdValue}
             onChange={handleSelectIngredient}
             options={options}
-            placeholder={options.length ? 'Select an ingredient' : 'No more ingredients in the catalog'}
+            placeholder="Search ingredients (name or alias)"
           />
         </div>
-        <div style={{ width: 90 }}>
-          <label className="flow-properties-label">Quantity</label>
-          <input className="flow-properties-input" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="2" />
-        </div>
-        <div style={{ width: 90 }}>
-          <label className="flow-properties-label">Unit</label>
-          <select className="flow-properties-input" value={unit} onChange={(e) => setUnit(e.target.value as UnitType)}>
-            {UNIT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </div>
+        {quantityRelevant && (
+          <>
+            <div style={{ width: 80 }}>
+              <label className="flow-properties-label">Quantity</label>
+              <input
+                className="flow-properties-input"
+                value={unitQuantifiable ? quantity : ''}
+                disabled={!unitQuantifiable}
+                onChange={(e) => setQuantity(e.target.value)}
+                placeholder={unitQuantifiable ? '2' : '—'}
+              />
+            </div>
+            <div style={{ width: 120 }}>
+              <label className="flow-properties-label">Unit</label>
+              <UnitSelect ingredientId={selectedIngredientId} value={unit} onChange={setUnit} />
+            </div>
+          </>
+        )}
       </div>
 
+      {selectedIngredientId === CUSTOM_INGREDIENT_ID && (
+        <input
+          className="flow-properties-input"
+          value={customIngredientName}
+          onChange={(e) => setCustomIngredientName(e.target.value)}
+          placeholder="Custom ingredient name"
+        />
+      )}
+
       <div className="flex flex-wrap gap-2">
-        {preparationStyleRelevant && (
-          <div style={{ flex: 1, minWidth: 160 }}>
-            <SearchableSelect
-              value={preparationStyleId}
-              onChange={setPreparationStyleId}
-              options={preparationStyleOptions}
-              placeholder="Preparation style"
-            />
-          </div>
-        )}
-        {preparationStyleRelevant && preparationStyleId === CUSTOM_PREPARATION_STYLE_ID && (
-          <input
-            className="flow-properties-input"
-            style={{ flex: 1, minWidth: 160 }}
-            value={customPreparationStyle}
-            onChange={(e) => setCustomPreparationStyle(e.target.value)}
-            placeholder="Enter custom preparation style"
-          />
-        )}
+        <PreparationStyleSelect
+          action={action}
+          ingredientId={selectedIngredientId}
+          value={preparationStyleId}
+          customValue={customPreparationStyle}
+          onChange={(styleId, custom) => {
+            setPreparationStyleId(styleId)
+            setCustomPreparationStyle(custom)
+          }}
+        />
         <input
           className="flow-properties-input"
           style={{ flex: 1, minWidth: 160 }}

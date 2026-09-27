@@ -457,6 +457,106 @@ class ProcessServiceImplTest {
         assertTrue(processRepository.findByRecipeId(targetRecipeId).isEmpty());
     }
 
+    // --- step-output references (data.step.actionOn.steps[].stepId) ---
+
+    @Test
+    void update_stepOutputReference_isPersistedAndReloadedUnchanged() {
+        ProcessResponseDTO created = service.create(recipeId, OWNER_ID, request(ProcessType.SUBPROCESS, "Eggs"));
+        ProcessUpdateDTO update = new ProcessUpdateDTO();
+        update.setName("Eggs");
+        update.setNodes(List.of(
+                recipeStepDTO("boil", "boiled eggs"),
+                recipeStepDTO("fry", "fried eggs with onions", "boil")));
+        update.setEdges(List.of(edgeDTO("e1", "boil", "fry")));
+
+        service.update(recipeId, created.getId(), OWNER_ID, update);
+        ProcessResponseDTO reloaded = service.get(recipeId, created.getId(), OWNER_ID);
+
+        ProcessNodeDTO fry = reloaded.getNodes().stream().filter(n -> n.getId().equals("fry")).findFirst().orElseThrow();
+        assertEquals(List.of("boil"), stepOutputRefs(fry.getData()), "the reference is stored by the source step's stable node id");
+    }
+
+    @Test
+    void update_selfOrUnavailableStepOutputReference_isRejected() {
+        ProcessResponseDTO created = service.create(recipeId, OWNER_ID, request(ProcessType.SUBPROCESS, "Eggs"));
+
+        ProcessUpdateDTO self = new ProcessUpdateDTO();
+        self.setName("Eggs");
+        self.setNodes(List.of(recipeStepDTO("boil", "boiled eggs", "boil")));
+        assertThrows(ProcessValidationException.class, () -> service.update(recipeId, created.getId(), OWNER_ID, self));
+
+        ProcessUpdateDTO unconnected = new ProcessUpdateDTO();
+        unconnected.setName("Eggs");
+        unconnected.setNodes(List.of(recipeStepDTO("boil", "boiled eggs"), recipeStepDTO("fry", "fried", "boil")));
+        assertThrows(ProcessValidationException.class, () -> service.update(recipeId, created.getId(), OWNER_ID, unconnected));
+    }
+
+    @Test
+    void copy_remapsStepOutputReferencesToTheCopiedNodes() {
+        ProcessResponseDTO source = service.create(recipeId, OWNER_ID, request(ProcessType.SUBPROCESS, "Eggs"));
+        ProcessUpdateDTO update = new ProcessUpdateDTO();
+        update.setName("Eggs");
+        update.setNodes(List.of(recipeStepDTO("boil", "boiled eggs"), recipeStepDTO("fry", "fried eggs", "boil")));
+        update.setEdges(List.of(edgeDTO("e1", "boil", "fry")));
+        service.update(recipeId, source.getId(), OWNER_ID, update);
+
+        ProcessResponseDTO copy = service.copy(recipeId, source.getId(), OWNER_ID);
+
+        String copiedBoilId = copy.getNodes().get(0).getId();
+        assertNotEquals("boil", copiedBoilId);
+        assertEquals(List.of(copiedBoilId), stepOutputRefs(copy.getNodes().get(1).getData()));
+        assertEquals(List.of("boil"), stepOutputRefs(processStore.get(source.getId()).getNodes().get(1).getData()),
+                "remapping the copy must not touch the source process");
+    }
+
+    @Test
+    void copyAllToRecipe_remapsStepOutputReferencesToTheCopiedNodes() {
+        Long sourceRecipeId = seedRecipe(OWNER_ID, Visibility.PUBLIC);
+        Long targetRecipeId = seedRecipe(OTHER_USER_ID, Visibility.PRIVATE);
+        saveProcess(sourceRecipeId, ProcessType.MAIN, "Main",
+                List.of(stepNode("m1", recipeStepData("marinated chicken")), stepNode("m2", recipeStepData("curry", "m1"))),
+                List.of(edge("e1", "m1", "m2")));
+
+        RecipeProcessCopyResult result = service.copyAllToRecipe(sourceRecipeId, targetRecipeId);
+
+        Process copiedMain = processStore.get(result.mainProcessId());
+        assertEquals(List.of(copiedMain.getNodes().get(0).getId()), stepOutputRefs(copiedMain.getNodes().get(1).getData()));
+    }
+
+    private static Map<String, Object> recipeStepData(String expectedOutput, String... referencedStepIds) {
+        List<Object> steps = new ArrayList<>();
+        for (String stepId : referencedStepIds) steps.add(new java.util.LinkedHashMap<>(Map.of("stepId", stepId)));
+        Map<String, Object> actionOn = new java.util.LinkedHashMap<>();
+        actionOn.put("ingredients", new ArrayList<>());
+        actionOn.put("processes", new ArrayList<>());
+        actionOn.put("steps", steps);
+        Map<String, Object> step = new java.util.LinkedHashMap<>();
+        step.put("action", "fry");
+        step.put("expectedOutput", expectedOutput);
+        step.put("actionOn", actionOn);
+        Map<String, Object> data = new java.util.LinkedHashMap<>();
+        data.put("step", step);
+        return data;
+    }
+
+    private static ProcessNodeDTO recipeStepDTO(String id, String expectedOutput, String... referencedStepIds) {
+        return ProcessNodeDTO.builder().id(id).kind(ProcessNodeKind.STEP).type("processStepNode")
+                .data(recipeStepData(expectedOutput, referencedStepIds)).build();
+    }
+
+    private static com.processVisualisation.virtualKitchen.recipe.dto.ProcessEdgeDTO edgeDTO(String id, String source, String target) {
+        return com.processVisualisation.virtualKitchen.recipe.dto.ProcessEdgeDTO.builder().id(id).source(source).target(target).build();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> stepOutputRefs(Map<String, Object> data) {
+        Map<String, Object> step = (Map<String, Object>) data.get("step");
+        Map<String, Object> actionOn = (Map<String, Object>) step.get("actionOn");
+        return ((List<Map<String, Object>>) actionOn.get("steps")).stream()
+                .map(entry -> String.valueOf(entry.get("stepId")))
+                .collect(Collectors.toList());
+    }
+
     private Process saveProcess(Long ownerRecipeId, ProcessType type, String name,
                                 List<Process.ProcessNode> nodes, List<Process.ProcessEdge> edges) {
         Process process = new Process();
