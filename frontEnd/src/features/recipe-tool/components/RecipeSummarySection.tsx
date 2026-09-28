@@ -12,7 +12,7 @@ type RecipeSummarySectionProps = {
  * the navbar itself covers the common case, this covers "show me
  * everything" (and is what a narrow viewport's collapsed icon button
  * opens). The main-process entry point used to live here (Phase 6); it now
- * lives in the Recipe Process tab itself, which is the tab this same
+ * lives in the Recipe Editor tab itself, which is the tab this same
  * information used to just link out to.
  */
 export default function RecipeSummarySection({ recipe }: RecipeSummarySectionProps) {

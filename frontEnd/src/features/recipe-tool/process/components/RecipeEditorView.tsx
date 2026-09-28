@@ -24,7 +24,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(r
 
 const isTerminalStatus = (status: RecipeProcessGenerationJobStatus) => status === 'COMPLETED' || status === 'FAILED'
 
-type RecipeProcessViewProps = {
+type RecipeEditorViewProps = {
   recipeId: number
   isOwner: boolean
   /** Bumped whenever the MAIN process is created/changes here, so RecipeToolPage's own recipe state (mainProcessId) stays in sync without a second fetch. */
@@ -32,7 +32,7 @@ type RecipeProcessViewProps = {
 }
 
 /**
- * The Recipe Tool's "Recipe Process" tab: a process list (MAIN pinned above
+ * The Recipe Tool's "Recipe Editor" tab: a process list (MAIN pinned above
  * SUBPROCESSes) alongside the actual Recipe Process canvas for whichever
  * process is selected — all inside one tab, no route change on selection or
  * on opening a subprocess. Every process's data comes from the shared
@@ -43,7 +43,7 @@ type RecipeProcessViewProps = {
  * remounted (no `key`) when the selection changes: switching processes is
  * navigation within one recipe editing session, not opening a new flow.
  */
-export default function RecipeProcessView({ recipeId, isOwner, onMainProcessChanged }: RecipeProcessViewProps) {
+export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChanged }: RecipeEditorViewProps) {
   const { notifyError, notifySuccess } = useNotifications()
   const session = useRecipeSession()
   const processes = useMemo(() => session?.getProcesses() ?? [], [session])

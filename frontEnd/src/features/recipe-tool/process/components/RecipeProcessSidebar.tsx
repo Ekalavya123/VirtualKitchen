@@ -16,10 +16,10 @@ type RecipeProcessSidebarProps = {
 }
 
 /**
- * Compact process list for the Recipe Tool's embedded "Recipe Process" tab
+ * Compact process list for the Recipe Tool's embedded "Recipe Editor" tab
  * (distinct from the standalone
  * RecipeProcessListPage, which is a full page). Selecting a process here just
- * updates local state in RecipeProcessView — it never navigates to a
+ * updates local state in RecipeEditorView — it never navigates to a
  * different route, per the brief ("keep the user inside the Recipe Tool").
  * Subprocess creation reuses the existing ProcessApi (via the parent's
  * `onCreateSubprocess`), matching Phase 5's own creation flow.

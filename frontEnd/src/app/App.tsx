@@ -17,6 +17,7 @@ import RecipeHomePage from '../features/recipes/RecipeHomePage'
 import RecipeProcessEditor from '../features/recipe-tool/process/components/RecipeProcessEditor'
 import RecipeProcessListPage from '../features/recipe-tool/process/components/RecipeProcessListPage'
 import RecipeToolPage from '../features/recipe-tool/RecipeToolPage'
+import { isRecipeToolView, recipeToolPath } from '../features/recipe-tool/recipeToolRoutes'
 import { RecipeSessionProvider } from '../features/recipe-tool/context/RecipeSessionContext'
 import HomePage from '../features/HomePage'
 import type { User } from '../types/User'
@@ -49,20 +50,30 @@ function RecipesRoute({ userId }: { userId: number }) {
   return (
     <RecipeHomePage
       userId={userId}
-      onCreateRecipe={(recipeId) => navigate(`/kitchen/recipes/${recipeId}/tool`)}
+      onCreateRecipe={(recipeId) => navigate(recipeToolPath(recipeId))}
     />
   )
 }
 
 function RecipeToolRoute({ currentUserId }: { currentUserId: number }) {
   const navigate = useNavigate()
-  const { recipeId: recipeIdParam } = useParams()
+  const { recipeId: recipeIdParam, view } = useParams()
   const recipeId = Number(recipeIdParam)
 
   if (!Number.isFinite(recipeId)) {
     return (
       <Navigate
         to="/kitchen/recipes"
+        replace
+      />
+    )
+  }
+
+  // An unknown view segment falls back to the bare tool URL, which picks the default view.
+  if (view !== undefined && !isRecipeToolView(view)) {
+    return (
+      <Navigate
+        to={recipeToolPath(recipeId)}
         replace
       />
     )
@@ -75,6 +86,7 @@ function RecipeToolRoute({ currentUserId }: { currentUserId: number }) {
       key={recipeId}
       recipeId={recipeId}
       currentUserId={currentUserId}
+      view={view}
       onBack={() => navigate('/kitchen/recipes')}
     />
   )
@@ -104,7 +116,7 @@ function RecipeProcessListRoute({ currentUserId }: { currentUserId: number }) {
       recipeId={recipeId}
       currentUserId={currentUserId}
       onOpenProcess={(processId) => navigate(`/kitchen/recipes/${recipeId}/process/${processId}`)}
-      onBack={() => navigate(`/kitchen/recipes/${recipeId}/tool`)}
+      onBack={() => navigate(recipeToolPath(recipeId, 'editor'))}
     />
   )
 }
@@ -340,9 +352,9 @@ function App() {
             element={<Navigate to="tool" replace />}
           />
 
-          {/* Recipe Tool: recipe summary/ingredients/nutrition plus the Recipe Process editor. */}
+          {/* Recipe Tool: the Recipe Editor (tool/editor) and the Recipe Process (tool/process). */}
           <Route
-            path="recipes/:recipeId/tool"
+            path="recipes/:recipeId/tool/:view?"
             element={
               currentUser ? (
                 <RecipeToolRoute currentUserId={currentUser.id} />

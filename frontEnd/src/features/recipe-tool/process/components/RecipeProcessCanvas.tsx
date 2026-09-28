@@ -87,7 +87,7 @@ type RecipeProcessCanvasProps = {
   onOpenSubprocess: (subprocessId: number, currentProcessName: string) => void
   onBack?: () => void
   /**
-   * The Recipe Tool's process list (see RecipeProcessView), rendered as this component's whole
+   * The Recipe Tool's process list (see RecipeEditorView), rendered as this component's whole
    * left column when present — filling it entirely, not split with anything else, now that node
    * add/navigation live in RecipeProcessTopBar and the old Tool Options panel has nothing left to show.
    * Omitted for the standalone `/process/:processId` route, where there's no sibling process list;
@@ -305,7 +305,7 @@ function RecipeProcessCanvasContent({
   }, [selectedNodeId, setPropsCollapsed])
 
   // Publishes this process's current nodes/edges/viewport into the shared recipe session on every
-  // *real* change — not just on Save — so switching to a different process (or the Ingredients tab)
+  // *real* change — not just on Save — so switching to a different process (or the Recipe Process view)
   // always sees this process's latest unsaved edits. Must not push the data this instance was merely
   // seeded with (not a real edit): a naive "skip the first effect firing" ref flag is not safe here,
   // because React StrictMode's dev-only double-invoke of effects (mount -> cleanup -> mount, with no
