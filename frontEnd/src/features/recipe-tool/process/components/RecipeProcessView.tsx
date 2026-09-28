@@ -53,6 +53,7 @@ export default function RecipeProcessView({ recipeId, isOwner, onMainProcessChan
   const [showGenerationModal, setShowGenerationModal] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [generationProgress, setGenerationProgress] = useState<{ percent: number; stageLabel: string } | null>(null)
+  const [editorRevision, setEditorRevision] = useState(0)
 
   // Defaults the selection to MAIN (or the first process) once the session has loaded, and keeps
   // it pinned to whatever's currently selected otherwise — including across every later session
@@ -128,6 +129,9 @@ export default function RecipeProcessView({ recipeId, isOwner, onMainProcessChan
       generated.forEach((process) => session.addProcess(process))
       setAncestorTrail([])
       setSelectedProcessId(mainProcessId)
+      // Re-seed React Flow when generation replaces an existing MAIN process without changing its
+      // id. Normal edits must stay mounted so their local selection and history are preserved.
+      setEditorRevision((revision) => revision + 1)
       if (!existingMain) onMainProcessChanged(mainProcessId)
 
       setShowGenerationModal(false)
@@ -237,6 +241,7 @@ export default function RecipeProcessView({ recipeId, isOwner, onMainProcessChan
   return (
     <>
       <RecipeProcessEditor
+        key={`${selectedProcessId}-${editorRevision}`}
         recipeId={recipeId}
         processId={selectedProcessId}
         breadcrumbAncestors={ancestorTrail}
