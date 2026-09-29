@@ -47,35 +47,44 @@ public class RecipeProcessGenerationPromptBuilder {
 
     private final String vocabularyBlock;
 
+    /**
+     * Everything that is identical for every request (instructions, schema, rules, vocabulary). It is sent as
+     * the system prompt and never varies, so providers with prefix caching (Ollama's KV cache, Gemini/OpenAI
+     * implicit caching) only have to process it once — each request then only adds the recipe itself.
+     */
+    private final String systemPrompt;
+
     public RecipeProcessGenerationPromptBuilder(RecipeStepVocabularyProvider recipeStepVocabularyProvider) {
         this.vocabularyBlock = buildVocabularyBlock(recipeStepVocabularyProvider);
-    }
-
-    public String buildSystemPrompt() {
-        return """
+        this.systemPrompt = """
                 Convert recipe text into a semantic recipe process structure.
 
                 Return ONLY valid JSON.
                 Do not return markdown, explanations, comments, or code fences.
                 Do not include node ids, edge ids, positions, width, height, handles, or any other
                 React Flow or UI presentation field. Only semantic recipe/process data.
-                """;
+
+                """ + buildSchemaAndRulesBlock();
+    }
+
+    public String buildSystemPrompt() {
+        return systemPrompt;
     }
 
     public String buildInitialPrompt(String recipeText) {
-        return buildSchemaAndRulesBlock()
-                + "\nRECIPE:\n"
+        return "RECIPE:\n"
                 + recipeText
                 + "\n\nReturn the JSON process structure only.";
     }
 
     public String buildRetryPrompt(String recipeText, String previousOutput, List<String> validationErrors) {
-        return buildSchemaAndRulesBlock()
-                + "\nRECIPE:\n"
+        return "RECIPE:\n"
                 + recipeText
-                + "\n\nVALIDATION ERRORS:\n"
+                + "\n\nYOUR PREVIOUS OUTPUT:\n"
+                + (previousOutput == null || previousOutput.isBlank() ? "(empty)" : previousOutput)
+                + "\n\nVALIDATION ERRORS IN THAT OUTPUT:\n"
                 + String.join("; ", validationErrors)
-                + "\n\nReturn corrected JSON only.";
+                + "\n\nFix only these errors and return the complete corrected JSON only.";
     }
 
     private String buildSchemaAndRulesBlock() {

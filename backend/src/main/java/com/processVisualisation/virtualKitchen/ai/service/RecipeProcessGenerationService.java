@@ -132,6 +132,7 @@ public class RecipeProcessGenerationService {
                 .userPrompt(refinedPrompt)
                 .temperature(0.1d)
                 .maxTokens(10000)
+                .responseFormat("json_object")
                 .build();
 
         long startNs = System.nanoTime();
