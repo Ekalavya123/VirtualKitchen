@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Map;
+
 /**
  * Models an outbound chat/completion request sent to any AIClient
  * provider (Gemini, OpenAI, Ollama), carrying the system/user prompts,
@@ -23,4 +25,11 @@ public class AIRequest {
     private Double temperature;
     private Integer maxTokens;
     private String responseFormat;
+    /**
+     * Optional JSON Schema the response must follow. When set, clients request structured output
+     * (Ollama {@code format}, OpenAI {@code json_schema}, Gemini {@code responseJsonSchema}) instead of plain JSON mode.
+     */
+    private Map<String, Object> responseSchema;
+    /** Name reported alongside {@link #responseSchema} where the provider requires one (OpenAI). */
+    private String responseSchemaName;
 }

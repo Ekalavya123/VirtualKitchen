@@ -22,7 +22,7 @@ import static com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocab
 /**
  * Builds the system and user prompts used to convert free-form recipe text
  * into a semantic Process structure (MAIN process + subprocesses, each a
- * flat list of STEP/CONDITION nodes). No React Flow field (id, position,
+ * flat list of STEP/CONDITION nodes) whose shape is defined by {@link RecipeProcessOutputSchema}. No React Flow field (id, position,
  * dimensions, handles) is ever requested — the application generates those
  * when converting the result into the Process working snapshot.
  * <p>
@@ -54,7 +54,9 @@ public class RecipeProcessGenerationPromptBuilder {
      */
     private final String systemPrompt;
 
-    public RecipeProcessGenerationPromptBuilder(RecipeStepVocabularyProvider recipeStepVocabularyProvider) {
+    public RecipeProcessGenerationPromptBuilder(
+            RecipeStepVocabularyProvider recipeStepVocabularyProvider, RecipeProcessOutputSchema outputSchema
+    ) {
         this.vocabularyBlock = buildVocabularyBlock(recipeStepVocabularyProvider);
         this.systemPrompt = """
                 Convert recipe text into a semantic recipe process structure.
@@ -64,7 +66,7 @@ public class RecipeProcessGenerationPromptBuilder {
                 Do not include node ids, edge ids, positions, width, height, handles, or any other
                 React Flow or UI presentation field. Only semantic recipe/process data.
 
-                """ + buildSchemaAndRulesBlock();
+                """ + buildSchemaAndRulesBlock(outputSchema);
     }
 
     public String buildSystemPrompt() {
@@ -87,16 +89,8 @@ public class RecipeProcessGenerationPromptBuilder {
                 + "\n\nFix only these errors and return the complete corrected JSON only.";
     }
 
-    private String buildSchemaAndRulesBlock() {
-        return """
-                OUTPUT
-                Return exactly this shape:
-                {
-                  "mainProcess": { "name": "", "steps": [] },
-                  "subprocesses": [
-                    { "ref": "short_unique_slug", "name": "", "steps": [] }
-                  ]
-                }
+    private String buildSchemaAndRulesBlock(RecipeProcessOutputSchema outputSchema) {
+        return outputSchema.promptBlock() + """
 
                 PROCESS MODEL
                 - A recipe has exactly one MAIN process and zero or more SUBPROCESSes.
@@ -104,12 +98,12 @@ public class RecipeProcessGenerationPromptBuilder {
                 - Do not create a subprocess inside another subprocess. Only MAIN and top-level subprocesses exist.
                 - Create a subprocess only for a meaningful intermediate preparation that stands on its own
                   (e.g. "Marinate Chicken", "Prepare Sauce"). Do not decompose the recipe into many tiny subprocesses.
-                - "subprocesses" may be an empty array when the recipe has no meaningful separate preparation stage.
-                - A subprocess is referenced from a STEP's own actionOn.processes — NEVER as its own node. There is
+                - Omit "subprocesses" when the recipe has no meaningful separate preparation stage.
+                - A subprocess is referenced from a STEP's own "processes" list — NEVER as its own node. There is
                   no node type for "run this subprocess"; the step whose action uses the subprocess's result
                   references it there instead.
                 - "ref" is a short, unique, lowercase snake_case slug (e.g. "marinate_chicken") used only to let a
-                  STEP's actionOn.processes point at that subprocess within this same response. It is not a
+                  STEP's "processes" point at that subprocess within this same response. It is not a
                   database id and the MAIN process itself has no ref (nothing can reference MAIN).
 
                 STEPS ARE ORDERED
@@ -119,92 +113,63 @@ public class RecipeProcessGenerationPromptBuilder {
                   sentence into separate steps; do not split one atomic action into multiple steps.
 
                 NODE TYPES
-
-                1. STEP — a concrete cooking action.
-                {
-                  "nodeType": "STEP",
-                  "stepId": "s1",
-                  "action": "",
-                  "customActionName": "",
-                  "actionOn": {
-                    "ingredients": [
-                      { "ingredientId": "", "quantity": 1, "unit": "", "preparationStyle": "", "customIngredientName": "" }
-                    ],
-                    "processes": [],
-                    "steps": []
-                  },
-                  "actionDescription": "",
-                  "expectedOutput": "",
-                  "temperatureValue": null,
-                  "temperatureUnit": "",
-                  "flameLevel": "",
-                  "duration": "",
-                  "repeatInterval": ""
-                }
-
-                2. CONDITION — a decision/check/repetition (if, otherwise, until, unless, check, verify, repeat until).
-                {
-                  "nodeType": "CONDITION",
-                  "title": "",
-                  "expectedResult": "success",
-                  "actionDescription": "",
-                  "expectedOutput": ""
-                }
-                Do not create a condition for an ordinary cooking instruction that isn't actually a check.
+                - STEP: a concrete cooking action.
+                - CONDITION: a decision/check/repetition (if, otherwise, until, unless, check, verify, repeat until).
+                  Do not create a condition for an ordinary cooking instruction that isn't actually a check.
 
                 CHOOSING THE ACTION
                 - action must be an id from ACTIONS below. Use the most specific action that fits
                   (e.g. "saute", "simmer", "deep-fry" rather than "cook"; "mince" rather than "cut").
                 - Use "cook" only when the recipe names no technique at all.
                 - Use "custom" only when no listed action can represent the operation, and then always set
-                  "customActionName" to a short verb phrase. Leave customActionName empty otherwise.
+                  "customActionName" to a short verb phrase. Omit customActionName otherwise.
                 - Respect each action's "on" targets: never put ingredients on an action that only acts on
                   subprocesses, never reference subprocesses from an ingredient-only action, and never give a
                   single-ingredient action ("1I") more than one ingredient.
 
-                ACTION ON — INGREDIENT-SPECIFIC PROPERTIES
-                - actionOn.ingredients is a list; a step's action can apply to multiple ingredients at once
+                INGREDIENTS OF A STEP
+                - "ingredients" is a list; a step's action can apply to multiple ingredients at once
                   (e.g. Chop applied to onion, tomato, and chilli, each with its own style).
                 - EACH ingredient entry has its OWN quantity/unit/preparationStyle. Never put quantity, unit, or
                   preparation style at the step level — only inside that ingredient's own entry.
-                - quantity: the number the recipe states for that ingredient in this step. Use null when the recipe
+                - quantity: the number the recipe states for that ingredient in this step. Omit it when the recipe
                   gives no amount (and for units that carry no number: to-taste, as-needed). When an action marks
                   quantity as required ("quantity!") and the recipe gives no amount, use 1 with the ingredient's
                   default unit.
                 - unit: the recipe's unit mapped to a unit id below (e.g. "2 cloves garlic" -> quantity 2, unit
-                  "clove"; "salt to taste" -> quantity null, unit "to-taste"). When no unit is stated, use the
+                  "clove"; "salt to taste" -> no quantity, unit "to-taste"). When no unit is stated, use the
                   ingredient's default unit shown in parentheses.
                 - preparationStyle: only when the action lists "preparationStyle" and the recipe states or clearly
                   implies it (e.g. "finely chopped" -> "finely-chopped"). It must come from that action's
                   preparation style sets. Never invent one. An ingredient's state as it is added
                   (e.g. "500 g boneless chicken", "2 onions, sliced") belongs on that ingredient entry.
-                - actionOn.processes lists the "ref" of any subprocess this step's action uses the result of
-                  (e.g. a "saute" step referencing "prepare_masala"). Leave it empty when the step doesn't use a
-                  subprocess's output.
+                - "processes" lists the "ref" of any subprocess this step's action uses the result of
+                  (e.g. a "saute" step referencing "prepare_masala").
                 - A step can have ingredients, subprocess references, step-output references, any combination of
                   them, or — only for actions whose target is optional — none.
 
                 STEP OUTPUTS (REUSING AN EARLIER STEP'S RESULT)
-                - Give every STEP a "stepId": a short slug unique within its own process ("s1", "s2", ...).
-                - actionOn.steps lists the stepIds of EARLIER STEPs in the SAME process whose expectedOutput this
-                  step acts on. Example: s1 boils eggs (expectedOutput "boiled eggs"); s2 fries them with onions ->
-                  s2.actionOn.steps = ["s1"], s2.actionOn.ingredients = [onion]. Do not list the eggs again as an
-                  ingredient in s2 — the step output already stands for them.
+                - "fromSteps" lists the stepIds of EARLIER STEPs in the SAME process whose expectedOutput this
+                  step acts on. Example: a step boils eggs ({"stepId":"s1",...,"expectedOutput":"boiled eggs"}); a
+                  later step fries them with onions -> "fromSteps":["s1"], "ingredients":[onion]. Do not list the
+                  eggs again as an ingredient — the step output already stands for them.
+                - Set "stepId" ONLY on a step that a later step lists in "fromSteps", as a short slug unique within
+                  its own process ("s1", "s2", ...). Omit stepId on every other step.
                 - Only reference a step that comes before this one in the "steps" array, is a STEP (never a
                   CONDITION), is not this step itself, and has a non-empty expectedOutput.
                 - Step outputs count as prepared components, so only actions whose targets include S may use them.
-                - Use actionOn.processes (not steps) for the result of a whole subprocess.
+                - Use "processes" (not fromSteps) for the result of a whole subprocess.
 
                 CORE STEP FIELDS
                 - actionDescription: a short natural-language description of what this step does. Always include it.
                 - expectedOutput: the expected result/state after this step. Include it whenever it can be
-                  reasonably inferred from the recipe (e.g. "onions turn golden brown"); leave it as an empty
-                  string only when the recipe gives no basis for it. Do not invent specific, unstated outcomes.
+                  reasonably inferred from the recipe (e.g. "onions turn golden brown"); omit it only when the
+                  recipe gives no basis for it. Do not invent specific, unstated outcomes.
 
                 ADVANCED PROPERTIES (OPTIONAL, ACTION-SPECIFIC)
                 - Only use temperatureValue/temperatureUnit, flameLevel, duration, repeatInterval when the chosen
-                  action lists that field AND the recipe states it or it can be determined reliably. Otherwise use
-                  null/empty strings. Never invent a temperature, heat level or duration.
+                  action lists that field AND the recipe states it or it can be determined reliably. Otherwise omit
+                  them. Never invent a temperature, heat level or duration.
                 - temperatureValue is a number and temperatureUnit is "C" or "F" (both or neither). What the number
                   means is given by the action's temperature context (oven/oil/liquid/surface/ambient) — an oven
                   temperature is not a heat level.
@@ -227,7 +192,7 @@ public class RecipeProcessGenerationPromptBuilder {
                 - Keep quantities, units, durations, temperatures, and cooking details faithful to the recipe text.
                 - Do not invent ingredients, quantities, timings, or temperatures the recipe doesn't state.
                 - Keep the recipe's meaning unchanged.
-                - Return ONLY JSON, matching the OUTPUT shape exactly.
+                - Return ONLY minified JSON matching the OUTPUT shape, with every empty/default field omitted.
                 """;
     }
 

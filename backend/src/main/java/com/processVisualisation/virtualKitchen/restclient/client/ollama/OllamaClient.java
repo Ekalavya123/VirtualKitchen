@@ -218,8 +218,10 @@ public class OllamaClient implements AIClient {
             payload.put("keep_alive", properties.getKeepAlive());
         }
 
-        // Constrains decoding to syntactically valid JSON.
-        if (isJsonResponseFormat(request.getResponseFormat())) {
+        // Constrains decoding to the given JSON Schema, or else to syntactically valid JSON.
+        if (request.getResponseSchema() != null) {
+            payload.put("format", request.getResponseSchema());
+        } else if (isJsonResponseFormat(request.getResponseFormat())) {
             payload.put("format", "json");
         }
         payload.put("think", false);

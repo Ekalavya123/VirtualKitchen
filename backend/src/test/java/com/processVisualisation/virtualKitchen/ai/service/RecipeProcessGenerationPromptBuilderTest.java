@@ -14,8 +14,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RecipeProcessGenerationPromptBuilderTest {
 
+    private static final RecipeStepVocabularyProvider VOCABULARY = new RecipeStepVocabularyProvider();
+
     private final RecipeProcessGenerationPromptBuilder builder =
-            new RecipeProcessGenerationPromptBuilder(new RecipeStepVocabularyProvider());
+            new RecipeProcessGenerationPromptBuilder(VOCABULARY, new RecipeProcessOutputSchema(VOCABULARY));
 
     private final String prompt = builder.buildSystemPrompt();
 
@@ -58,16 +60,20 @@ class RecipeProcessGenerationPromptBuilderTest {
     }
 
     @Test
-    void asksForStructuredTemperatureAndCustomActionName() {
-        assertTrue(prompt.contains("\"temperatureValue\""));
-        assertTrue(prompt.contains("\"customActionName\""));
-        assertTrue(prompt.contains("\"repeatInterval\""));
+    void outputSectionComesFromTheSchemaAndAsksForCompactJson() {
+        assertTrue(prompt.contains(new RecipeProcessOutputSchema(VOCABULARY).promptBlock()));
+        assertTrue(prompt.contains("minified JSON"));
+        assertTrue(prompt.contains("OMIT every optional field"));
+        assertTrue(prompt.contains("STEP {stepId, action!, customActionName, ingredients, processes, fromSteps, actionDescription!,"));
+        assertTrue(prompt.contains("CONDITION {nodeType!, title!, expectedResult, actionDescription!, expectedOutput}"));
+        assertFalse(prompt.contains("\"actionOn\""), "actionOn is flattened onto the step");
+        assertFalse(prompt.contains(": \"\""), "the prompt must not show empty-string placeholders the model would echo");
     }
 
     @Test
-    void describesStepIdsAndStepOutputReferences() {
-        assertTrue(prompt.contains("\"stepId\": \"s1\""));
-        assertTrue(prompt.contains("\"steps\": []"));
+    void describesStepIdsOnlyForReferencedStepsAndFromSteps() {
         assertTrue(prompt.contains("STEP OUTPUTS"));
+        assertTrue(prompt.contains("\"fromSteps\":[\"s1\"]"));
+        assertTrue(prompt.contains("Set \"stepId\" ONLY on a step that a later step lists in \"fromSteps\""));
     }
 }

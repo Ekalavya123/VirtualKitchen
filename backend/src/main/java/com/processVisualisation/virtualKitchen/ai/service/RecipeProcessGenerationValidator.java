@@ -202,7 +202,8 @@ public class RecipeProcessGenerationValidator {
             }
         }
 
-        validateActionOn(step.getActionOn(), definition, label + ".actionOn", declaredRefs, ownRef, scope, errors);
+        // actionOn is flattened onto the step in the model's output, so its errors are labelled at step level.
+        validateActionOn(step.getActionOn(), definition, label, declaredRefs, ownRef, scope, errors);
         if (definition != null) {
             validateStepFields(step, definition, label, errors);
         }
@@ -265,18 +266,18 @@ public class RecipeProcessGenerationValidator {
             }
             // A step output is a prepared intermediate, like a subprocess output — same catalog rule.
             if (!stepRefs.isEmpty() && !action.actionOn().allowsProcesses()) {
-                errors.add(label + ".steps: action " + action.id() + " cannot act on step outputs (allowed targets: " + action.actionOn() + ")");
+                errors.add(label + ".fromSteps: action " + action.id() + " cannot act on step outputs (allowed targets: " + action.actionOn() + ")");
             }
             if (ingredients.size() > 1 && !action.multipleIngredients()) {
                 errors.add(label + ".ingredients: action " + action.id() + " takes at most one ingredient per step, got " + ingredients.size());
             }
             if (ingredients.isEmpty() && processes.isEmpty() && stepRefs.isEmpty() && action.actionOnRequired()) {
-                errors.add(label + " is empty but action " + action.id() + " needs at least one ingredient, subprocess or step-output target");
+                errors.add(label + " has no ingredients, processes or fromSteps but action " + action.id() + " needs at least one target");
             }
         }
 
         for (int i = 0; i < stepRefs.size(); i++) {
-            validateStepOutputReference(stepRefs.get(i), scope, label + ".steps[" + i + "]", errors);
+            validateStepOutputReference(stepRefs.get(i), scope, label + ".fromSteps[" + i + "]", errors);
         }
 
         for (int i = 0; i < ingredients.size(); i++) {

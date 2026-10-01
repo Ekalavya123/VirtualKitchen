@@ -165,7 +165,17 @@ public class OpenAIClient implements AIClient {
         if (request.getMaxTokens() != null) {
             payload.put("max_tokens", request.getMaxTokens());
         }
-        if (StringUtils.hasText(request.getResponseFormat())) {
+        if (request.getResponseSchema() != null) {
+            // Non-strict: strict mode would force every property to be present, defeating omit-when-empty schemas.
+            payload.put("response_format", Map.of(
+                    "type", "json_schema",
+                    "json_schema", Map.of(
+                            "name", StringUtils.hasText(request.getResponseSchemaName()) ? request.getResponseSchemaName() : "response",
+                            "schema", request.getResponseSchema(),
+                            "strict", false
+                    )
+            ));
+        } else if (StringUtils.hasText(request.getResponseFormat())) {
             payload.put("response_format", Map.of("type", request.getResponseFormat()));
         }
         return payload;
