@@ -1,6 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.processVisualisation.virtualKitchen.ai.dispatch.AiClientResolver;
@@ -47,20 +48,28 @@ public class RecipeProcessGenerationService {
     private final RecipeProcessGenerationPromptBuilder promptBuilder;
     private final RecipeProcessGenerationValidator validator;
     private final IAIResponseService aiResponseService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RecipeProcessOutputSchema outputSchema;
+    private final RecipeProcessOutputNormalizer outputNormalizer;
+    /** Lenient on unknown keys: a harmless extra field must not cost a full regeneration retry. */
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     public RecipeProcessGenerationService(
             AiRequestQueueService queueService,
             AiClientResolver clientResolver,
             RecipeProcessGenerationPromptBuilder promptBuilder,
             RecipeProcessGenerationValidator validator,
-            IAIResponseService aiResponseService
+            IAIResponseService aiResponseService,
+            RecipeProcessOutputSchema outputSchema,
+            RecipeProcessOutputNormalizer outputNormalizer
     ) {
         this.queueService = queueService;
         this.clientResolver = clientResolver;
         this.promptBuilder = promptBuilder;
         this.validator = validator;
         this.aiResponseService = aiResponseService;
+        this.outputSchema = outputSchema;
+        this.outputNormalizer = outputNormalizer;
     }
 
     public RecipeProcessGenerationResultDTO generate(Long userId, String recipeText, String clientRequestId) {
@@ -132,6 +141,9 @@ public class RecipeProcessGenerationService {
                 .userPrompt(refinedPrompt)
                 .temperature(0.1d)
                 .maxTokens(10000)
+                .responseFormat("json_object")
+                .responseSchema(outputSchema.jsonSchema())
+                .responseSchemaName(RecipeProcessOutputSchema.SCHEMA_NAME)
                 .build();
 
         long startNs = System.nanoTime();
@@ -146,11 +158,9 @@ public class RecipeProcessGenerationService {
         }
 
         try {
-            JsonNode root = parseJson(content);
-            GeneratedRecipeProcessDTO mainProcess = objectMapper.treeToValue(root.path("mainProcess"), GeneratedRecipeProcessDTO.class);
-            List<GeneratedRecipeProcessDTO> subprocesses = root.path("subprocesses").isMissingNode()
-                    ? List.of()
-                    : objectMapper.convertValue(root.path("subprocesses"), objectMapper.getTypeFactory().constructCollectionType(List.class, GeneratedRecipeProcessDTO.class));
+            RecipeProcessOutput output = objectMapper.treeToValue(parseJson(content), RecipeProcessOutput.class);
+            GeneratedRecipeProcessDTO mainProcess = outputNormalizer.toProcess(output.mainProcess());
+            List<GeneratedRecipeProcessDTO> subprocesses = outputNormalizer.toSubprocesses(output.subprocesses());
 
             ProcessValidationResult validationResult = validator.validate(mainProcess, subprocesses);
             if (!validationResult.isValid()) {

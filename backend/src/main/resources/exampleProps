@@ -54,6 +54,10 @@ ai.ollama.baseUrl=http://localhost:11434
 ai.ollama.chatEndpoint=/api/chat
 ai.ollama.defaultModel=qwen3:8b
 ai.ollama.timeoutMs=300000
+# Context window: the process-generation system prompt alone is ~12K tokens. Keep this constant so the prompt cache survives.
+ai.ollama.numCtx=32768
+# Keeps the model (and its cached system prompt) loaded between requests.
+ai.ollama.keepAlive=30m
 
 ai.image.provider=drawthings
 ai.drawthings.baseUrl=http://localhost:7860

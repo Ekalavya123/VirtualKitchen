@@ -38,7 +38,7 @@ const remapActionOnProcessRefs = (nodes: ProcessNode[], idMap: Map<number, numbe
  * nutrition, the MAIN process, and every SUBPROCESS are different views of
  * the same editing session, not independent flows. This context is that
  * session's process-data half (recipe metadata/ingredients/nutrition keep
- * their own already-working save flows — see RecipeToolPage/NutritionSection
+ * their own already-working save flows — see RecipeToolPage/NutritionEditor
  * — this covers what was previously the *independent-per-process* part:
  * loading every process once, keeping every process's current in-memory
  * edits regardless of which one is currently displayed, and saving all of
@@ -49,10 +49,10 @@ const remapActionOnProcessRefs = (nodes: ProcessNode[], idMap: Map<number, numbe
  * process individually just to open/display it). Process content lives in a
  * ref (not reactive state) so that RecipeProcessCanvas can write to it on every
  * keystroke without forcing every consumer (the process list sidebar, the
- * Ingredients view) to re-render on every keystroke via prop/array identity
+ * Recipe Process view) to re-render on every keystroke via prop/array identity
  * churn; the exposed getters are stable functions that always read the
  * latest ref content. Consumers that need to *react* to changes (sidebar,
- * Ingredients) depend on `version`, which is bumped on every mutation —
+ * Recipe Process) depend on `version`, which is bumped on every mutation —
  * mirrors the same ref+version pattern the now-superseded
  * ProcessLiveGraphContext used.
  */

@@ -1,34 +1,31 @@
 import { useState } from 'react'
+import { NavLink } from 'react-router-dom'
 import '../styles/recipe-tool.css'
 import type { RecipeDetail } from '../../../types/recipe'
+import { recipeToolPath, type RecipeToolView } from '../recipeToolRoutes'
 import RecipeSummarySection from './RecipeSummarySection'
 
-export type RecipeToolView = 'RECIPE_PROCESS' | 'INGREDIENTS' | 'NUTRITION'
-
 const TABS: { id: RecipeToolView; label: string; icon: string }[] = [
-  { id: 'RECIPE_PROCESS', label: 'Recipe Process', icon: '🧩' },
-  { id: 'INGREDIENTS', label: 'Ingredients', icon: '🥕' },
-  { id: 'NUTRITION', label: 'Nutritions', icon: '📊' },
+  { id: 'editor', label: 'Recipe Editor', icon: '🧩' },
+  { id: 'process', label: 'Recipe Process', icon: '📖' },
 ]
 
 type RecipeToolNavbarProps = {
   recipe: RecipeDetail
-  activeView: RecipeToolView
-  onChangeView: (view: RecipeToolView) => void
   onBack: () => void
 }
 
 /**
  * The Recipe Tool's own internal top navbar: compact recipe metadata on the
  * left (collapsing to just an icon button on narrow viewports, via Tailwind
- * responsive classes rather than a resize listener) and the three tool tabs
- * on the right. Switching tabs is local state owned by RecipeToolPage — this
- * component only reports the intent upward, it doesn't own `activeView`.
+ * responsive classes rather than a resize listener) and the two tool tabs
+ * on the right. Each tab is its own route (see recipeToolRoutes.ts), so the
+ * active tab is whichever route is current — NavLink marks it.
  * There is no recipe-level image in the current backend model (only
  * ingredients have one), so the compact metadata uses a plain icon rather
  * than fabricating a thumbnail.
  */
-export default function RecipeToolNavbar({ recipe, activeView, onChangeView, onBack }: RecipeToolNavbarProps) {
+export default function RecipeToolNavbar({ recipe, onBack }: RecipeToolNavbarProps) {
   const [showDetails, setShowDetails] = useState(false)
 
   return (
@@ -89,31 +86,27 @@ export default function RecipeToolNavbar({ recipe, activeView, onChangeView, onB
       </div>
 
       <div className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[var(--flow-border)] bg-[var(--flow-surface-muted)] p-1">
-        {TABS.map((tab) => {
-          const active = tab.id === activeView
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => onChangeView(tab.id)}
-              style={{
-                padding: '7px 12px',
-                borderRadius: 7,
-                border: 'none',
-                background: active ? 'var(--flow-surface)' : 'transparent',
-                boxShadow: active ? '0 1px 3px rgba(15,23,42,0.12)' : 'none',
-                color: active ? 'var(--flow-text)' : 'var(--flow-text-muted)',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              <span className="hidden sm:inline">{tab.icon} {tab.label}</span>
-              <span className="sm:hidden" aria-label={tab.label}>{tab.icon}</span>
-            </button>
-          )
-        })}
+        {TABS.map((tab) => (
+          <NavLink
+            key={tab.id}
+            to={recipeToolPath(recipe.id, tab.id)}
+            replace
+            style={({ isActive }) => ({
+              padding: '7px 12px',
+              borderRadius: 7,
+              background: isActive ? 'var(--flow-surface)' : 'transparent',
+              boxShadow: isActive ? '0 1px 3px rgba(15,23,42,0.12)' : 'none',
+              color: isActive ? 'var(--flow-accent-strong)' : 'var(--flow-text-muted)',
+              fontSize: 12,
+              fontWeight: 700,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            })}
+          >
+            <span className="hidden sm:inline">{tab.icon} {tab.label}</span>
+            <span className="sm:hidden" aria-label={tab.label}>{tab.icon}</span>
+          </NavLink>
+        ))}
       </div>
 
       {showDetails && (

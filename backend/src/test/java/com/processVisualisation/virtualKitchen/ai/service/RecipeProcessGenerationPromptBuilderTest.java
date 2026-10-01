@@ -2,6 +2,9 @@ package com.processVisualisation.virtualKitchen.ai.service;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,8 +14,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class RecipeProcessGenerationPromptBuilderTest {
 
-    private final String prompt = new RecipeProcessGenerationPromptBuilder(new RecipeStepVocabularyProvider())
-            .buildInitialPrompt("Boil pasta.");
+    private static final RecipeStepVocabularyProvider VOCABULARY = new RecipeStepVocabularyProvider();
+
+    private final RecipeProcessGenerationPromptBuilder builder =
+            new RecipeProcessGenerationPromptBuilder(VOCABULARY, new RecipeProcessOutputSchema(VOCABULARY));
+
+    private final String prompt = builder.buildSystemPrompt();
+
+    @Test
+    void keepsAllStaticContentInTheSystemPromptSoItCanBeCached() {
+        assertEquals(prompt, builder.buildSystemPrompt(), "the system prompt must be identical on every call");
+        assertTrue(prompt.contains("VOCABULARY"));
+
+        String userPrompt = builder.buildInitialPrompt("Boil pasta.");
+        assertTrue(userPrompt.contains("Boil pasta."));
+        assertFalse(userPrompt.contains("VOCABULARY"), "the per-request prompt carries only the recipe");
+    }
+
+    @Test
+    void retryPromptIncludesThePreviousOutputAndItsErrors() {
+        String retry = builder.buildRetryPrompt("Boil pasta.", "{\"mainProcess\":{}}", List.of("mainProcess.name is empty"));
+        assertTrue(retry.contains("{\"mainProcess\":{}}"));
+        assertTrue(retry.contains("mainProcess.name is empty"));
+    }
 
     @Test
     void rendersActionsWithTargetsAndFields() {
@@ -36,16 +60,20 @@ class RecipeProcessGenerationPromptBuilderTest {
     }
 
     @Test
-    void asksForStructuredTemperatureAndCustomActionName() {
-        assertTrue(prompt.contains("\"temperatureValue\""));
-        assertTrue(prompt.contains("\"customActionName\""));
-        assertTrue(prompt.contains("\"repeatInterval\""));
+    void outputSectionComesFromTheSchemaAndAsksForCompactJson() {
+        assertTrue(prompt.contains(new RecipeProcessOutputSchema(VOCABULARY).promptBlock()));
+        assertTrue(prompt.contains("minified JSON"));
+        assertTrue(prompt.contains("OMIT every optional field"));
+        assertTrue(prompt.contains("STEP {stepId, action!, customActionName, ingredients, processes, fromSteps, actionDescription!,"));
+        assertTrue(prompt.contains("CONDITION {nodeType!, title!, expectedResult, actionDescription!, expectedOutput}"));
+        assertFalse(prompt.contains("\"actionOn\""), "actionOn is flattened onto the step");
+        assertFalse(prompt.contains(": \"\""), "the prompt must not show empty-string placeholders the model would echo");
     }
 
     @Test
-    void describesStepIdsAndStepOutputReferences() {
-        assertTrue(prompt.contains("\"stepId\": \"s1\""));
-        assertTrue(prompt.contains("\"steps\": []"));
+    void describesStepIdsOnlyForReferencedStepsAndFromSteps() {
         assertTrue(prompt.contains("STEP OUTPUTS"));
+        assertTrue(prompt.contains("\"fromSteps\":[\"s1\"]"));
+        assertTrue(prompt.contains("Set \"stepId\" ONLY on a step that a later step lists in \"fromSteps\""));
     }
 }

@@ -1,33 +1,42 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import { RecipeDetailApi } from '../../api'
 import type { NutritionInfo, RecipeDetail } from '../../types/recipe'
 import { RecipeSessionProvider } from './context/RecipeSessionContext'
 import './process/styles/RecipeProcessCanvas.css'
-import RecipeToolNavbar, { type RecipeToolView } from './components/RecipeToolNavbar'
-import IngredientsSection from './components/IngredientsSection'
-import NutritionSection from './components/NutritionSection'
-import RecipeProcessView from './process/components/RecipeProcessView'
+import RecipeToolNavbar from './components/RecipeToolNavbar'
+import RecipeEditorView from './process/components/RecipeEditorView'
+import RecipeProcessPage from './presentation/components/RecipeProcessPage'
+import { recipeToolPath, type RecipeToolView } from './recipeToolRoutes'
 
 type RecipeToolPageProps = {
   recipeId: number
   currentUserId: number
+  /** From the route; undefined on the bare `/tool` URL, which lands on the owner's editor or a reader's Recipe Process. */
+  view?: RecipeToolView
   onBack: () => void
 }
 
 /**
  * The Recipe Tool page: an internal navbar (compact recipe metadata + the
- * three tool tabs) above a full-height content area that swaps between
- * Recipe Process / Ingredients / Nutrition — a single route, local view
- * state, no per-tab page navigation (see RecipeToolNavbar). Recipe Process
- * is the default and primary authoring surface; Ingredients is a read-only
- * view derived from it (see IngredientsSection); Nutrition stays its own,
- * independently editable model, unchanged from Phase 6.
+ * two tool tabs) above a full-height content area showing one of two views
+ * of the same recipe, each its own route (see recipeToolRoutes.ts):
+ * - Recipe Editor — the React Flow process editor (RecipeEditorView), where
+ *   the recipe is built and saved;
+ * - Recipe Process — the human-readable recipe (ingredients, steps,
+ *   nutrition) derived from that same process data (RecipeProcessPage).
+ * Both read the one RecipeSessionProvider below, so there's a single source
+ * of truth and the Recipe Process always reflects the editor's latest content.
  */
-export default function RecipeToolPage({ recipeId, currentUserId, onBack }: RecipeToolPageProps) {
+export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }: RecipeToolPageProps) {
   const [recipe, setRecipe] = useState<RecipeDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [activeView, setActiveView] = useState<RecipeToolView>('RECIPE_PROCESS')
+  // The editor mounts on first visit and then stays mounted (hidden while reading the Recipe
+  // Process), so switching tabs never loses its canvas state — undo history, selection, the open
+  // process. Not mounted up front: React Flow shouldn't initialise inside a hidden container.
+  const [editorMounted, setEditorMounted] = useState(view === 'editor')
+  if (view === 'editor' && !editorMounted) setEditorMounted(true)
 
   useEffect(() => {
     let cancelled = false
@@ -46,7 +55,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, onBack }: Reci
             const main = await RecipeDetailApi.createMainProcess(recipeId)
             return { ...result, mainProcessId: main.id }
           } catch (error) {
-            // Not fatal: the Recipe Process tab still offers "Create Main Process" / AI generation.
+            // Not fatal: the Recipe Editor tab still offers "Create Main Process" / AI generation.
             console.error('Unable to prepare this recipe\'s main process:', error)
           }
         }
@@ -103,39 +112,27 @@ export default function RecipeToolPage({ recipeId, currentUserId, onBack }: Reci
     )
   }
 
+  if (!view) {
+    return <Navigate to={recipeToolPath(recipeId, isOwner ? 'editor' : 'process')} replace />
+  }
+
   return (
     <RecipeSessionProvider recipeId={recipeId}>
       {/* `flow-canvas-container` strips .kitchen-body's ambient page padding/scroll (see
-          KitchenPage.css) so the Recipe Process tab's RecipeProcessCanvas can use the full available
-          area edge-to-edge — applied unconditionally (not only while that
-          tab is active) since Ingredients/Nutrition already manage their own padding/scroll below
-          and all three tabs stay mounted together (see the display:none toggling below). */}
+          KitchenPage.css) so the editor's canvas can use the full available area edge-to-edge;
+          the Recipe Process manages its own padding/scroll. */}
       <div className="flow-canvas-container flex h-full w-full flex-col" style={{ background: 'var(--flow-surface-muted)' }}>
-        <RecipeToolNavbar recipe={recipe} activeView={activeView} onChangeView={setActiveView} onBack={onBack} />
+        <RecipeToolNavbar recipe={recipe} onBack={onBack} />
 
-        {/* All three views stay mounted the whole time (visibility toggled, not conditional
-            rendering) — switching tabs must not lose an in-progress canvas edit or an unsaved
-            nutrition/ingredient edit (verification requirement: switching tabs preserves state).
-            The shared RecipeSessionProvider above is what makes MAIN + every SUBPROCESS one
-            unified in-memory recipe snapshot — Ingredients reads it directly, and Recipe Process
-            (RecipeProcessView/RecipeProcessCanvas) reads and writes the same processes, so switching
-            between processes or tabs never loses an unsaved edit or re-fetches what's already
-            loaded. */}
-        <div className="min-h-0 flex-1" style={{ display: activeView === 'RECIPE_PROCESS' ? 'flex' : 'none', flexDirection: 'column' }}>
-          <RecipeProcessView recipeId={recipeId} isOwner={isOwner} onMainProcessChanged={handleMainProcessChanged} />
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-5" style={{ display: activeView === 'INGREDIENTS' ? 'block' : 'none' }}>
-          <div className="mx-auto w-full max-w-3xl">
-            <IngredientsSection />
+        {editorMounted && (
+          <div className="min-h-0 flex-1" style={{ display: view === 'editor' ? 'flex' : 'none', flexDirection: 'column' }}>
+            <RecipeEditorView recipeId={recipeId} isOwner={isOwner} onMainProcessChanged={handleMainProcessChanged} />
           </div>
-        </div>
+        )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-5" style={{ display: activeView === 'NUTRITION' ? 'block' : 'none' }}>
-          <div className="mx-auto w-full max-w-3xl">
-            <NutritionSection recipeId={recipeId} nutrition={recipe.nutrition} isOwner={isOwner} onSaved={handleNutritionSaved} />
-          </div>
-        </div>
+        {view === 'process' && (
+          <RecipeProcessPage recipe={recipe} isOwner={isOwner} onNutritionSaved={handleNutritionSaved} />
+        )}
       </div>
     </RecipeSessionProvider>
   )

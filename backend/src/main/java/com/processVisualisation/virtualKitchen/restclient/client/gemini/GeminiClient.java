@@ -177,7 +177,10 @@ public class GeminiClient implements AIClient {
         if (request.getMaxTokens() != null) {
             generationConfig.put("maxOutputTokens", request.getMaxTokens());
         }
-        if (StringUtils.hasText(request.getResponseFormat())) {
+        if (request.getResponseSchema() != null) {
+            generationConfig.put("responseMimeType", MediaType.APPLICATION_JSON_VALUE);
+            generationConfig.put("responseJsonSchema", request.getResponseSchema());
+        } else if (StringUtils.hasText(request.getResponseFormat())) {
             generationConfig.put("responseMimeType", mapResponseMimeType(request.getResponseFormat()));
         }
 

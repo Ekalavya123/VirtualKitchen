@@ -5,11 +5,11 @@ import { RecipeDetailApi } from '../../../api'
 import type { NutritionInfo } from '../../../types/recipe'
 import { useNotifications } from '../../../shared/components/notifications/NotificationProvider'
 
-type NutritionSectionProps = {
+type NutritionEditorProps = {
   recipeId: number
   nutrition: NutritionInfo | null | undefined
-  isOwner: boolean
   onSaved: (nutrition: NutritionInfo | null) => void
+  onCancel: () => void
 }
 
 type NutritionFormState = {
@@ -52,22 +52,17 @@ const toNutritionPayload = (form: NutritionFormState): NutritionInfo => ({
   servings: form.servings.trim() ? Number(form.servings) : undefined,
 })
 
-export default function NutritionSection({ recipeId, nutrition, isOwner, onSaved }: NutritionSectionProps) {
+/**
+ * The recipe owner's nutrition form, opened from the Recipe Process's Nutrition section. Nutrition
+ * is its own recipe-level model (not derived from the process), saved independently of the
+ * Recipe Editor's process save.
+ */
+export default function NutritionEditor({ recipeId, nutrition, onSaved, onCancel }: NutritionEditorProps) {
   const { notifySuccess, notifyError } = useNotifications()
   const [form, setForm] = useState<NutritionFormState>(() => toFormState(nutrition))
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-
-  // No effect re-syncing `form` from the `nutrition` prop: the initial useState(...) above already
-  // covers first mount, and handleSave below re-derives `form` from the server's response the moment
-  // save succeeds — the only other time `nutrition` changes.
-
-  const hasAnyNutrition = FIELDS.some(({ key }) => nutrition?.[key] != null)
-
-  if (!isOwner && !hasAnyNutrition) {
-    return <div style={{ fontSize: 13, color: 'var(--flow-text-subtle)' }}>No nutrition information has been provided for this recipe.</div>
-  }
 
   const handleChange = (key: keyof NutritionFormState, value: string) => {
     setForm((current) => ({ ...current, [key]: value }))
@@ -79,9 +74,7 @@ export default function NutritionSection({ recipeId, nutrition, isOwner, onSaved
     setSaveError(null)
     try {
       const updated = await RecipeDetailApi.updateNutrition(recipeId, toNutritionPayload(form))
-      setForm(toFormState(updated.nutrition))
       onSaved(updated.nutrition ?? null)
-      setDirty(false)
       notifySuccess('Nutrition saved')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to save nutrition'
@@ -97,43 +90,48 @@ export default function NutritionSection({ recipeId, nutrition, isOwner, onSaved
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {FIELDS.map(({ key, label, unit }) => (
           <div key={key} className="flow-properties-field">
-            <label className="flow-properties-label">{label}{unit ? ` (${unit})` : ''}</label>
-            {isOwner ? (
-              <input
-                className="flow-properties-input"
-                value={form[key]}
-                onChange={(e) => handleChange(key, e.target.value)}
-                placeholder="—"
-                inputMode="decimal"
-              />
-            ) : (
-              <div style={{ fontSize: 13, color: 'var(--flow-text)', fontWeight: 600 }}>
-                {nutrition?.[key] != null ? String(nutrition[key]) : '—'}
-              </div>
-            )}
+            <label className="flow-properties-label" htmlFor={`nutrition-${key}`}>{label}{unit ? ` (${unit})` : ''}</label>
+            <input
+              id={`nutrition-${key}`}
+              className="flow-properties-input"
+              value={form[key]}
+              onChange={(e) => handleChange(key, e.target.value)}
+              placeholder="—"
+              inputMode="decimal"
+            />
           </div>
         ))}
       </div>
 
-      {isOwner && (
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!dirty || saving}
-            style={{
-              padding: '7px 16px', borderRadius: 8, border: '1px solid var(--flow-accent)',
-              background: dirty ? 'var(--flow-accent)' : 'var(--flow-surface-muted)',
-              color: dirty ? 'white' : 'var(--flow-text-muted)',
-              fontSize: 12, fontWeight: 700, cursor: !dirty || saving ? 'default' : 'pointer',
-            }}
-          >
-            {saving ? 'Saving…' : 'Save Nutrition'}
-          </button>
-          {dirty && !saving && <span style={{ fontSize: 11, color: 'var(--flow-warning)', fontWeight: 600 }}>● Unsaved changes</span>}
-          {saveError && <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>{saveError}</span>}
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={!dirty || saving}
+          style={{
+            padding: '7px 16px', borderRadius: 8, border: '1px solid var(--flow-accent)',
+            background: dirty ? 'var(--flow-accent)' : 'var(--flow-surface-muted)',
+            color: dirty ? 'white' : 'var(--flow-text-muted)',
+            fontSize: 12, fontWeight: 700, cursor: !dirty || saving ? 'default' : 'pointer',
+          }}
+        >
+          {saving ? 'Saving…' : 'Save Nutrition'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          style={{
+            padding: '7px 16px', borderRadius: 8, border: '1px solid var(--flow-border)',
+            background: 'var(--flow-surface)', color: 'var(--flow-text-muted)',
+            fontSize: 12, fontWeight: 700, cursor: saving ? 'default' : 'pointer',
+          }}
+        >
+          Cancel
+        </button>
+        {dirty && !saving && <span style={{ fontSize: 11, color: 'var(--flow-warning)', fontWeight: 600 }}>● Unsaved changes</span>}
+        {saveError && <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>{saveError}</span>}
+      </div>
     </div>
   )
 }

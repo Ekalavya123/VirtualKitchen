@@ -206,12 +206,35 @@ public class OllamaClient implements AIClient {
             options.put("num_predict", request.getMaxTokens());
         }
 
+        if (properties.getNumCtx() != null) {
+            options.put("num_ctx", properties.getNumCtx());
+        }
+
         if (!options.isEmpty()) {
             payload.put("options", options);
+        }
+
+        if (StringUtils.hasText(properties.getKeepAlive())) {
+            payload.put("keep_alive", properties.getKeepAlive());
+        }
+
+        // Constrains decoding to the given JSON Schema, or else to syntactically valid JSON.
+        if (request.getResponseSchema() != null) {
+            payload.put("format", request.getResponseSchema());
+        } else if (isJsonResponseFormat(request.getResponseFormat())) {
+            payload.put("format", "json");
         }
         payload.put("think", false);
 
         return payload;
+    }
+
+    private boolean isJsonResponseFormat(String responseFormat) {
+        if (!StringUtils.hasText(responseFormat)) return false;
+        String normalized = responseFormat.trim();
+        return "json".equalsIgnoreCase(normalized)
+                || "json_object".equalsIgnoreCase(normalized)
+                || MediaType.APPLICATION_JSON_VALUE.equalsIgnoreCase(normalized);
     }
 
     private AIResponse parseResponse(
