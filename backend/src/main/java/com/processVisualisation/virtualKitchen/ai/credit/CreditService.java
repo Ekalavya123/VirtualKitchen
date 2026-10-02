@@ -1,6 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.credit;
 
 import com.processVisualisation.virtualKitchen.ai.registry.AiCapability;
+import com.processVisualisation.virtualKitchen.ai.usage.AiUsageSummary;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
@@ -72,12 +73,16 @@ public class CreditService {
         }
 
         String txId = appendLedger(userId, CreditTransactionType.RESERVE, -cost, updated.getAvailableBalance(),
-                capability, modelKey, null);
+                capability, modelKey, null, null);
         return Optional.of(new CreditReservation(txId, cost, capability, modelKey));
     }
 
-    /** Finalizes a reservation as a permanent charge once the request completed successfully. */
-    public void consume(Long userId, CreditReservation reservation, String requestId) {
+    /**
+     * Finalizes a reservation as a permanent charge once the request completed successfully.
+     *
+     * @param usage the request's provider token usage and estimated cost, recorded on the ledger entry (may be null)
+     */
+    public void consume(Long userId, CreditReservation reservation, String requestId, AiUsageSummary usage) {
         if (reservation == null || reservation.cost() <= 0) {
             return;
         }
@@ -86,11 +91,15 @@ public class CreditService {
                 new Update().inc("reservedBalance", -reservation.cost()),
                 UserAiCredit.class);
         appendLedger(userId, CreditTransactionType.CONSUME, 0, currentBalance(userId),
-                reservation.capability(), reservation.modelKey(), requestId);
+                reservation.capability(), reservation.modelKey(), requestId, usage);
     }
 
-    /** Refunds a reservation when the request failed, timed out, or was cancelled before finishing. */
-    public void release(Long userId, CreditReservation reservation, String requestId) {
+    /**
+     * Refunds a reservation when the request failed, timed out, or was cancelled before finishing.
+     *
+     * @param usage tokens the failed request still spent with the provider, recorded on the ledger entry (may be null)
+     */
+    public void release(Long userId, CreditReservation reservation, String requestId, AiUsageSummary usage) {
         if (reservation == null || reservation.cost() <= 0) {
             return;
         }
@@ -101,7 +110,7 @@ public class CreditService {
                 UserAiCredit.class);
         int balanceAfter = updated != null ? updated.getAvailableBalance() : currentBalance(userId);
         appendLedger(userId, CreditTransactionType.RELEASE, reservation.cost(), balanceAfter,
-                reservation.capability(), reservation.modelKey(), requestId);
+                reservation.capability(), reservation.modelKey(), requestId, usage);
     }
 
     /** Reads the current balance, lazily provisioning a default account if none exists yet. */
@@ -133,7 +142,7 @@ public class CreditService {
         if (updated == null) {
             return Optional.empty();
         }
-        appendLedger(userId, CreditTransactionType.ADMIN_ADJUSTMENT, amount, updated.getAvailableBalance(), null, null, null);
+        appendLedger(userId, CreditTransactionType.ADMIN_ADJUSTMENT, amount, updated.getAvailableBalance(), null, null, null, null);
         return Optional.of(updated);
     }
 
@@ -172,7 +181,7 @@ public class CreditService {
     }
 
     private String appendLedger(Long userId, CreditTransactionType type, int amount, int balanceAfter,
-                                 AiCapability capability, String modelKey, String requestId) {
+                                 AiCapability capability, String modelKey, String requestId, AiUsageSummary usage) {
         AiCreditTransaction tx = new AiCreditTransaction();
         tx.setUserId(userId);
         tx.setRequestId(requestId);
@@ -181,6 +190,8 @@ public class CreditService {
         tx.setBalanceAfter(balanceAfter);
         tx.setCapability(capability);
         tx.setModelKey(modelKey);
+        tx.setUsage(usage);
+        tx.setEstimatedCostUsd(usage != null ? usage.estimatedCostUsd() : null);
         tx.setCreatedAt(LocalDateTime.now());
         return transactionRepository.save(tx).getId();
     }

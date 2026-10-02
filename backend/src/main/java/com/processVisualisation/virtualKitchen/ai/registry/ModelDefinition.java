@@ -34,6 +34,15 @@ public class ModelDefinition {
     /** Registry key of the model to fall back to when this one's credits are exhausted, or {@code null}. */
     private String fallbackModelKey;
 
+    /**
+     * Provider list prices in USD per 1M tokens, used only to estimate what a request cost (providers return token
+     * counts, never a price). Null leaves the estimate unknown; set them to 0 for a local/free model.
+     */
+    private Double inputUsdPerMillion;
+    private Double outputUsdPerMillion;
+    /** Price of prompt tokens served from the provider's context cache; falls back to the input price when null. */
+    private Double cachedInputUsdPerMillion;
+
     /** Operator kill-switch; a disabled model is never selected. */
     private boolean enabled = true;
 }

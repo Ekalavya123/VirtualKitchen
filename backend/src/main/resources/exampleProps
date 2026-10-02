@@ -45,9 +45,11 @@ supabase.timeoutMs=300000
 #ai.gemini.apiKey=${AI_GEMINI_API_KEY:REPLACE_WITH_GEMINI_API_KEY}
 #ai.gemini.baseUrl=https://generativelanguage.googleapis.com
 #ai.gemini.chatEndpoint=/v1beta/models/{model}:generateContent
-#ai.gemini.defaultModel=gemini-3.5-flash
+#ai.gemini.defaultModel=gemini-3.1-flash-lite
 #ai.gemini.imageModel=gemini-2.5-flash-image
-#ai.gemini.timeoutMs=30000
+#ai.gemini.timeoutMs=120000
+#ai.gemini.cache.enabled=true
+#ai.gemini.cache.ttlSeconds=3600
 
 ai.provider=ollama
 ai.ollama.baseUrl=http://localhost:11434

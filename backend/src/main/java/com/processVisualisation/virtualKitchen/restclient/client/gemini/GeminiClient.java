@@ -40,20 +40,34 @@ public class GeminiClient implements AIClient {
 
     private final RestClient restClient;
     private final GeminiProperties properties;
+    private final GeminiPromptCacheService promptCacheService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /** Signals that Gemini refused the referenced {@code cachedContent}, so the call is retried with the prompt inline. */
+    private static final class CachedContentRejectedException extends RuntimeException {
+        private final int status;
+
+        private CachedContentRejectedException(int status) {
+            super(null, null, false, false);
+            this.status = status;
+        }
+    }
 
     /**
      * Creates a client bound to the Gemini REST client and configuration.
      *
      * @param restClient the pre-configured REST client used to call the Gemini API
      * @param properties the configured Gemini API key, endpoints, and default model
+     * @param promptCacheService explicit context caches for requests that set {@code cacheSystemPrompt}
      */
     public GeminiClient(
             @Qualifier("geminiRestClient") RestClient restClient,
-            GeminiProperties properties
+            GeminiProperties properties,
+            GeminiPromptCacheService promptCacheService
     ) {
         this.restClient = restClient;
         this.properties = properties;
+        this.promptCacheService = promptCacheService;
     }
 
     /**
@@ -75,12 +89,29 @@ public class GeminiClient implements AIClient {
         validateRequest(request);
 
         String model = StringUtils.hasText(request.getModel()) ? request.getModel() : properties.getDefaultModel();
-        long startedAt = System.nanoTime();
-
-        System.out.println("[AI] Request start. provider=gemini model=" + model);
+        String cacheName = request.isCacheSystemPrompt()
+                ? promptCacheService.cacheNameFor(model, request.getSystemPrompt()).orElse(null)
+                : null;
 
         try {
-            String body = objectMapper.writeValueAsString(buildRequestPayload(request));
+            return execute(request, model, cacheName);
+        } catch (CachedContentRejectedException ex) {
+            // The cache expired early, was deleted, or is otherwise unusable: forget it and send the prompt inline.
+            System.out.println("[AI] Prompt cache rejected. provider=gemini cache=" + cacheName
+                    + " status=" + ex.status + "; retrying without cache");
+            promptCacheService.evict(model, request.getSystemPrompt());
+            return execute(request, model, null);
+        }
+    }
+
+    private AIResponse execute(AIRequest request, String model, String cacheName) {
+        long startedAt = System.nanoTime();
+
+        System.out.println("[AI] Request start. provider=gemini model=" + model
+                + (cacheName != null ? " cache=" + cacheName : ""));
+
+        try {
+            String body = objectMapper.writeValueAsString(buildRequestPayload(request, cacheName));
 
             String rawResponse = restClient.post()
                     .uri(uriBuilder -> uriBuilder
@@ -107,12 +138,18 @@ public class GeminiClient implements AIClient {
                             + " promptTokens=" + safeInt(parsed.getPromptTokens())
                             + " completionTokens=" + safeInt(parsed.getCompletionTokens())
                             + " totalTokens=" + safeInt(parsed.getTotalTokens())
+                            + " cachedTokens=" + safeInt(parsed.getCachedTokens())
+                            + " thoughtsTokens=" + safeInt(parsed.getThoughtsTokens())
             );
             return parsed;
         } catch (RestClientResponseException ex) {
             long latencyMs = elapsedMs(startedAt);
             int status = ex.getStatusCode().value();
             String responseBody = ex.getResponseBodyAsString();
+            if (cacheName != null && (status == 400 || status == 403 || status == 404)) {
+                // Most likely the referenced cache, not the request; a genuine error resurfaces on the uncached retry.
+                throw new CachedContentRejectedException(status);
+            }
             if (status == 401 || status == 403) {
                 System.out.println("[AI] Failure. provider=gemini reason=authentication_failed latencyMs=" + latencyMs);
                 throw new AIAuthenticationException("Gemini authentication failed", ex);
@@ -155,7 +192,11 @@ public class GeminiClient implements AIClient {
         }
     }
 
-    private Map<String, Object> buildRequestPayload(AIRequest request) {
+    /**
+     * @param cacheName a {@code cachedContents/...} name holding the system prompt, or null to send it inline.
+     *                  Gemini rejects {@code systemInstruction} alongside {@code cachedContent}, so it's one or the other.
+     */
+    Map<String, Object> buildRequestPayload(AIRequest request, String cacheName) {
         Map<String, Object> payload = new HashMap<>();
         List<Map<String, Object>> contents = new ArrayList<>();
         contents.add(Map.of(
@@ -164,7 +205,9 @@ public class GeminiClient implements AIClient {
         ));
         payload.put("contents", contents);
 
-        if (StringUtils.hasText(request.getSystemPrompt())) {
+        if (cacheName != null) {
+            payload.put("cachedContent", cacheName);
+        } else if (StringUtils.hasText(request.getSystemPrompt())) {
             payload.put("systemInstruction", Map.of(
                     "parts", List.of(Map.of("text", request.getSystemPrompt()))
             ));
@@ -208,6 +251,8 @@ public class GeminiClient implements AIClient {
                 .promptTokens(readInt(usage, "promptTokenCount"))
                 .completionTokens(readInt(usage, "candidatesTokenCount"))
                 .totalTokens(readInt(usage, "totalTokenCount"))
+                .cachedTokens(readInt(usage, "cachedContentTokenCount"))
+                .thoughtsTokens(readInt(usage, "thoughtsTokenCount"))
                 .finishReason(firstCandidate.path("finishReason").asText(null))
                 .rawResponse(rawResponse)
                 .build();

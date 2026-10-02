@@ -138,6 +138,7 @@ public class RecipeProcessGenerationService {
         AIRequest request = AIRequest.builder()
                 .model(modelId)
                 .systemPrompt(promptBuilder.buildSystemPrompt())
+                .cacheSystemPrompt(true)
                 .userPrompt(refinedPrompt)
                 .temperature(0.1d)
                 .maxTokens(10000)
@@ -194,6 +195,8 @@ public class RecipeProcessGenerationService {
             respData.put("promptTokens", response == null ? null : response.getPromptTokens());
             respData.put("completionTokens", response == null ? null : response.getCompletionTokens());
             respData.put("totalTokens", response == null ? null : response.getTotalTokens());
+            respData.put("cachedTokens", response == null ? null : response.getCachedTokens());
+            respData.put("thoughtsTokens", response == null ? null : response.getThoughtsTokens());
             respData.put("finishReason", response == null ? null : response.getFinishReason());
             respData.put("rawResponse", response == null ? null : response.getRawResponse());
             respData.put("durationMs", durationMs);

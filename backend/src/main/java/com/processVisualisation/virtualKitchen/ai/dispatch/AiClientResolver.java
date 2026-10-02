@@ -33,7 +33,7 @@ public class AiClientResolver {
             throw new IllegalStateException(
                     "No AIClient bean named '" + model.getProviderBean() + "' for model '" + model.getKey() + "'");
         }
-        return client;
+        return new MeteredAIClient(client);
     }
 
     public ImageGenerationClient resolveImageClient(ModelDefinition model) {

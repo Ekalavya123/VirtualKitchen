@@ -142,7 +142,7 @@ class AiRequestQueueServiceArtifactTest {
         assertTrue(outcome.reused());
         assertEquals(0, providerCalls.get(), "a hit must not call the provider");
         verify(creditService, never()).reserve(any(), anyInt(), any(), anyString());
-        verify(creditService, never()).consume(any(), any(), anyString());
+        verify(creditService, never()).consume(any(), any(), anyString(), any());
         verify(jobRepository, never()).save(any());
         assertNull(outcome.selection().reservation(),
                 "a reused payload must carry no reservation, so nothing downstream can bill for it");
@@ -179,7 +179,7 @@ class AiRequestQueueServiceArtifactTest {
 
         // The payload must be durable before the caller — and therefore any dependent work — sees it.
         InOrder order = inOrder(creditService, artifactService);
-        order.verify(creditService).consume(any(), any(), anyString());
+        order.verify(creditService).consume(any(), any(), anyString(), any());
         order.verify(artifactService).stage(eq(7L), eq(AiCapability.TEXT_TO_IMAGE), eq("visualization-image"),
                 eq("recipe-1::step-1"), any(), eq("fresh-payload"), any(), anyString());
     }

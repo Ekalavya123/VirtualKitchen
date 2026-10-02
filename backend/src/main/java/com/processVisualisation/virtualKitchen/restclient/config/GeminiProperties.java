@@ -22,4 +22,22 @@ public class GeminiProperties {
     private String defaultModel;
     private String imageModel;
     private Long timeoutMs;
+    private Cache cache = new Cache();
+
+    /**
+     * Explicit context caching ({@code cachedContents}) for requests that opt in via
+     * {@code AIRequest.cacheSystemPrompt}: the system prompt is stored once on Gemini's side and
+     * referenced by name instead of being re-sent and re-billed at the full input rate.
+     */
+    @Data
+    public static class Cache {
+        private boolean enabled = false;
+        private String endpoint = "/v1beta/cachedContents";
+        /** Lifetime of a created cache; storage is billed per token-hour while it lives. */
+        private long ttlSeconds = 3600;
+        /** A cache this close to expiry is treated as expired, so a request never races its deletion. */
+        private long refreshMarginSeconds = 120;
+        /** After a failed creation, how long to send the system prompt inline before trying again. */
+        private long failureBackoffSeconds = 300;
+    }
 }

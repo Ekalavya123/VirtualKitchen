@@ -2,6 +2,7 @@ package com.processVisualisation.virtualKitchen.ai.queue;
 
 import com.processVisualisation.virtualKitchen.ai.registry.AiCapability;
 import com.processVisualisation.virtualKitchen.ai.registry.ModelTier;
+import com.processVisualisation.virtualKitchen.ai.usage.AiUsageSummary;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
@@ -64,4 +65,7 @@ public class AiRequestJob {
     private Instant completedAt;
 
     private String errorMessage;
+
+    /** Token usage and estimated cost over all provider calls of this job — recorded for every tier, free or paid. */
+    private AiUsageSummary usage;
 }
