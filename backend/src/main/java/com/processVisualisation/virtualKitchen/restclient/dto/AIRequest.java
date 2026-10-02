@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.Map;
 
@@ -19,7 +20,10 @@ import java.util.Map;
 @AllArgsConstructor
 public class AIRequest {
 
+    // Prompts are excluded from toString() so a stray log of the request can never dump them.
+    @ToString.Exclude
     private String systemPrompt;
+    @ToString.Exclude
     private String userPrompt;
     private String model;
     private Double temperature;
@@ -38,4 +42,9 @@ public class AIRequest {
      * Providers that cache prefixes automatically (Ollama, OpenAI) ignore it.
      */
     private boolean cacheSystemPrompt;
+    /**
+     * What this call is for (e.g. {@code RECIPE_TO_FLOW}); used only for logging and observability, and
+     * ignored by providers. Optional.
+     */
+    private String operation;
 }

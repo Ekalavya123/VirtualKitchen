@@ -100,7 +100,7 @@ public class DummyDataLoader implements CommandLineRunner {
         resolveOrCreateKitchenInventory(kitchen.getId(), kettleInventory.getId());
         resolveOrCreateKitchenInventory(kitchen.getId(), panInventory.getId());
 
-        logger.info("Dummy data loader completed for user {} with kitchen {}", user.getEmail(), kitchen.getName());
+        logger.info("event=dummy_data_loaded userId={} kitchenId={}", user.getId(), kitchen.getId());
     }
 
     private User resolveTargetUser(Long targetUserId, String targetUserEmail, String targetUserName) {

@@ -9,9 +9,12 @@ import com.processVisualisation.virtualKitchen.common.concurrent.NamedTask;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskPool;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskResult;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeProcessAiException;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
+import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
 import com.processVisualisation.virtualKitchen.recipe.dto.VisualizationJobResponseDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Update;
@@ -77,6 +80,8 @@ public class RecipeProcessVisualizationJobService {
         job.setCreatedAt(Instant.now());
         job.setUpdatedAt(Instant.now());
         visualizationJobRepository.save(job);
+        log.info("event=visualization_job_started jobId={} recipeId={} processId={} steps={}",
+                job.getId(), recipeId, processId, job.getTotalSteps());
 
         visualizationOrchestratorTaskPool.submit(new NamedTask<>(job.getId(), () -> {
             runPipeline(userId, recipeId, job.getId(), preparation);
@@ -98,6 +103,9 @@ public class RecipeProcessVisualizationJobService {
     }
 
     private void runPipeline(Long userId, Long recipeId, String jobId, RecipeProcessVisualizationService.ProcessStepPreparation preparation) {
+        // Runs on the orchestrator pool; set before submitAll so every step task inherits the job ID.
+        MDC.put(MdcKeys.JOB_ID, jobId);
+        long startedAt = System.nanoTime();
         markStatus(jobId, VisualizationJobStatus.IN_PROGRESS, Map.of("startedAt", Instant.now()));
         try {
             List<NamedTask<VisualizationAsset>> tasks = preparation.steps().stream()
@@ -126,11 +134,19 @@ public class RecipeProcessVisualizationJobService {
                     ? VisualizationJobStatus.COMPLETED_WITH_ERRORS
                     : VisualizationJobStatus.COMPLETED;
             markStatus(jobId, finalStatus, Map.of("completedAt", Instant.now()));
+            long failedSteps = batch.results().stream().filter(result -> !isEffectivelySuccessful(result)).count();
+            if (anyStepFailed) {
+                log.warn("event=visualization_job_completed status={} steps={} failedSteps={} durationMs={}",
+                        finalStatus, batch.results().size(), failedSteps, (System.nanoTime() - startedAt) / 1_000_000L);
+            } else {
+                log.info("event=visualization_job_completed status={} steps={} failedSteps=0 durationMs={}",
+                        finalStatus, batch.results().size(), (System.nanoTime() - startedAt) / 1_000_000L);
+            }
         } catch (Exception e) {
             // Anything outside the per-step task boundary (e.g. the final save itself throwing)
             // must still terminate the job — otherwise a polling client would spin forever on a
             // job stuck IN_PROGRESS with no writer left to unstick it.
-            log.error("Process visualization job {} failed", jobId, e);
+            FailureLogger.logFailure(log, "visualization_job_failed", e);
             Update update = new Update()
                     .set("status", VisualizationJobStatus.FAILED)
                     .set("errorMessage", safeMessage(e))

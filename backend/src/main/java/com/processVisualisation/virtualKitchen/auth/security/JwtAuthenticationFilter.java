@@ -2,10 +2,14 @@ package com.processVisualisation.virtualKitchen.auth.security;
 
 import com.processVisualisation.virtualKitchen.auth.model.UserType;
 import com.processVisualisation.virtualKitchen.auth.service.JwtService;
+import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.lang.NonNull;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -27,6 +31,8 @@ import java.util.List;
  */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
 
     private final JwtService jwtService;
 
@@ -70,7 +76,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 var authentication = new UsernamePasswordAuthenticationToken(userId, null, authorities);
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-            } catch (Exception ignored) {
+                // Cleared with the rest of the request's MDC by RequestIdFilter.
+                MDC.put(MdcKeys.USER_ID, String.valueOf(userId));
+            } catch (Exception e) {
+                // Never log the token itself; the exception type (expired, malformed, bad signature) is enough.
+                log.debug("event=auth_token_rejected errorType={}", e.getClass().getSimpleName());
                 SecurityContextHolder.clearContext();
             }
         }

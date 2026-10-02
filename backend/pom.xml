@@ -171,6 +171,14 @@
 				</includes>
 				<filtering>true</filtering>
 			</resource>
+			<!-- Logging config is copied unfiltered so Logback's own ${...} variables are left intact. -->
+			<resource>
+				<directory>src/main/resources</directory>
+				<includes>
+					<include>logback-spring.xml</include>
+				</includes>
+				<filtering>false</filtering>
+			</resource>
 			<!-- Shares the frontend's step-property catalog (actions/ingredients/units/etc.) as the
 			     single source of truth for the recipe AI prompt vocabulary (RecipeStepVocabularyProvider),
 			     instead of hand-duplicating it in Java where it can silently drift out of sync. -->

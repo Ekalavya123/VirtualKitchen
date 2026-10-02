@@ -7,10 +7,13 @@ import com.processVisualisation.virtualKitchen.ai.repository.RecipeProcessGenera
 import com.processVisualisation.virtualKitchen.common.concurrent.NamedTask;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskPool;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeProcessAiException;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
+import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationJobResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationResultDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Update;
@@ -63,6 +66,7 @@ public class RecipeProcessGenerationJobService {
         if (StringUtils.hasText(clientRequestId)) {
             var existing = jobRepository.findByUserIdAndClientRequestId(userId, clientRequestId);
             if (existing.isPresent()) {
+                log.info("event=process_generation_job_reused jobId={} recipeId={}", existing.get().getId(), recipeId);
                 return toDto(existing.get());
             }
         }
@@ -77,6 +81,8 @@ public class RecipeProcessGenerationJobService {
         job.setCreatedAt(Instant.now());
         job.setUpdatedAt(Instant.now());
         jobRepository.save(job);
+        log.info("event=process_generation_job_started jobId={} recipeId={} inputChars={}",
+                job.getId(), recipeId, recipeText == null ? 0 : recipeText.length());
 
         flowGenerationOrchestratorTaskPool.submit(new NamedTask<>(job.getId(), () -> {
             runPipeline(userId, job.getId(), recipeText, clientRequestId);
@@ -98,6 +104,9 @@ public class RecipeProcessGenerationJobService {
     }
 
     private void runPipeline(Long userId, String jobId, String recipeText, String clientRequestId) {
+        // Runs on the orchestrator pool; the pool restores the thread's MDC afterwards.
+        MDC.put(MdcKeys.JOB_ID, jobId);
+        long startedAt = System.nanoTime();
         markStatus(jobId, RecipeProcessGenerationJobStatus.IN_PROGRESS, RecipeProcessGenerationStage.QUEUED,
                 Map.of("startedAt", Instant.now()));
         try {
@@ -111,11 +120,14 @@ public class RecipeProcessGenerationJobService {
                     .set("completedAt", Instant.now())
                     .set("updatedAt", Instant.now());
             mongoTemplate.updateFirst(query(where("_id").is(jobId)), update, RecipeProcessGenerationJob.class);
+            log.info("event=process_generation_job_completed modelKey={} usedFallback={} subprocesses={} durationMs={}",
+                    result.getModelUsed(), result.isUsedFallback(),
+                    result.getSubprocesses() == null ? 0 : result.getSubprocesses().size(), elapsedMs(startedAt));
         } catch (Exception e) {
             // Anything the pipeline throws (validation failure after retry, AI timeout, an
             // unexpected error) must still terminate the job — otherwise a polling client would
             // spin forever on a job stuck IN_PROGRESS with no writer left to unstick it.
-            log.error("Process generation job {} failed", jobId, e);
+            FailureLogger.logFailure(log, "process_generation_job_failed", e);
             Update update = new Update()
                     .set("status", RecipeProcessGenerationJobStatus.FAILED)
                     .set("errorMessage", safeMessage(e))
@@ -125,7 +137,12 @@ public class RecipeProcessGenerationJobService {
         }
     }
 
+    private static long elapsedMs(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
+    }
+
     private void updateStage(String jobId, RecipeProcessGenerationStage stage) {
+        log.debug("event=process_generation_stage_changed stage={}", stage);
         Update update = new Update().set("stage", stage).set("updatedAt", Instant.now());
         mongoTemplate.updateFirst(query(where("_id").is(jobId)), update, RecipeProcessGenerationJob.class);
     }

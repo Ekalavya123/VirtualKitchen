@@ -1,7 +1,9 @@
 package com.processVisualisation.virtualKitchen.ai.credit;
 
+import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
@@ -42,6 +44,13 @@ public class CreditCycleResetJob {
 
     @Scheduled(cron = "${ai.credits.cycle-reset-cron:0 0 2 * * *}")
     public void resetExpiredCycles() {
+        try (MDC.MDCCloseable ignored = MDC.putCloseable(MdcKeys.JOB_ID,
+                "credit-reset-" + Long.toHexString(System.currentTimeMillis()))) {
+            resetCycles();
+        }
+    }
+
+    private void resetCycles() {
         LocalDate today = LocalDate.now();
         int allocation = creditProperties.getDefaultMonthlyAllocation();
         LocalDate newCycleStart = today.withDayOfMonth(1);
@@ -72,7 +81,7 @@ public class CreditCycleResetJob {
         }
 
         if (resetCount > 0) {
-            log.info("Reset AI credit cycle for {} user(s)", resetCount);
+            log.info("event=ai_credit_cycle_reset_completed users={} allocation={}", resetCount, allocation);
         }
     }
 }

@@ -17,6 +17,7 @@ import com.processVisualisation.virtualKitchen.ai.model.VisualizationAssetType;
 import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationAssetRepository;
 import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeProcessAiException;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.common.utils.VisualizationKeyBuilder;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessNodeKind;
@@ -185,6 +186,7 @@ public class RecipeProcessVisualizationService {
                                 .userPrompt(promptBuilder.buildUserPrompt(input))
                                 .temperature(0.4d)
                                 .maxTokens(2000)
+                                .operation("VISUALIZATION_PROMPT")
                                 .build();
                         AIResponse response = client.chat(request);
                         return parseImagePrompt(response == null ? null : response.getContent());
@@ -200,7 +202,7 @@ public class RecipeProcessVisualizationService {
             asset.setVideoUrl(null);
             return assetRepository.save(asset);
         } catch (Exception e) {
-            logger.error("Failed to generate process visualization prompt for key {}", visualizationKey, e);
+            FailureLogger.logFailure(logger, "visualization_prompt_failed", e, "visualizationKey=" + visualizationKey);
         }
         return null;
     }
@@ -251,8 +253,9 @@ public class RecipeProcessVisualizationService {
         } catch (Exception e) {
             asset.setImageUrl(null);
             asset.setImageFailureReason(describeFailure(e));
-            logger.error("Failed to generate or upload image for visualizationKey: {} "
-                            + "(any generated payload is retained for recovery)", visualizationKey, e);
+            // Any generated payload is retained in the artifact store for recovery.
+            FailureLogger.logFailure(logger, "visualization_image_failed", e,
+                    "visualizationKey=" + visualizationKey + " payloadRetained=true");
         }
         asset.setVideoUrl(null);
         return assetRepository.save(asset);
@@ -302,7 +305,8 @@ public class RecipeProcessVisualizationService {
             JsonNode root = objectMapper.readTree(stripCodeFences(content));
             return root.path("imagePrompt").asText("");
         } catch (Exception ex) {
-            logger.warn("Failed to parse process visualization prompt JSON, falling back to raw content", ex);
+            logger.warn("event=visualization_prompt_unparsed fallback=raw_content contentChars={} errorType={}",
+                    content.length(), ex.getClass().getSimpleName());
             return content.trim();
         }
     }

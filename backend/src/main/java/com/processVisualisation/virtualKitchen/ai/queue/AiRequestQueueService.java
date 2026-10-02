@@ -260,8 +260,8 @@ public class AiRequestQueueService {
                     artifactSpec, outcome.value(), outcome.selection(), outcome.jobId());
             return AiRequestOutcome.fresh(outcome.jobId(), outcome.value(), outcome.selection(), artifact);
         } catch (Exception e) {
-            log.error("Could not stage AI artifact for job {} (key={}); the payload is not retained",
-                    outcome.jobId(), artifactSpec.artifactKey(), e);
+            log.error("event=ai_artifact_stage_failed aiRequestId={} artifactKey={} payloadRetained=false errorType={}",
+                    outcome.jobId(), artifactSpec.artifactKey(), e.getClass().getSimpleName(), e);
             return outcome;
         }
     }
@@ -273,6 +273,8 @@ public class AiRequestQueueService {
 
         if (counter.incrementAndGet() > maxDepth) {
             counter.decrementAndGet();
+            log.warn("event=ai_request_rejected reason=queue_full pool={} capability={} maxDepth={}",
+                    poolName, capability, maxDepth);
             throw new AiQueueFullException(capability);
         }
         try {
@@ -314,6 +316,14 @@ public class AiRequestQueueService {
             throw ex;
         }
 
+        if (selection.usedFallback()) {
+            log.warn("event=ai_model_fallback_used aiRequestId={} capability={} requestedModelKey={} modelKey={} fallbackReason={}",
+                    job.getId(), capability, preferredModelKey, selection.model().getKey(), selection.fallbackReason());
+        } else {
+            log.debug("event=ai_model_selected aiRequestId={} capability={} modelKey={} tier={}",
+                    job.getId(), capability, selection.model().getKey(), selection.model().getTier());
+        }
+
         job.setResolvedModelKey(selection.model().getKey());
         job.setResolvedTier(selection.model().getTier());
         job.setUsedFallback(selection.usedFallback());
@@ -348,6 +358,7 @@ public class AiRequestQueueService {
                 job.setStatus(AiRequestStatus.COMPLETED);
                 job.setCompletedAt(Instant.now());
                 jobRepository.save(job);
+                logOutcome("ai_request_completed", job, selection, summary, null);
                 return AiRequestOutcome.fresh(job.getId(), value, selection, null);
             } catch (TimeoutException te) {
                 lastError = te;
@@ -358,7 +369,8 @@ public class AiRequestQueueService {
             if (!isRetryable(lastError) || i == maxAttempts) {
                 break;
             }
-            log.warn("AI request {} attempt {} failed transiently, retrying: {}", job.getId(), i, lastError.getMessage());
+            log.warn("event=ai_request_retrying aiRequestId={} attempt={} maxAttempts={} errorType={} error={}",
+                    job.getId(), i, maxAttempts, lastError.getClass().getSimpleName(), lastError.getMessage());
             sleepBackoff();
         }
 
@@ -370,6 +382,8 @@ public class AiRequestQueueService {
         job.setErrorMessage(lastError != null ? lastError.getMessage() : "Unknown failure");
         job.setCompletedAt(Instant.now());
         jobRepository.save(job);
+        // WARN, no stack: the exception is rethrown and logged once by whichever boundary handles it.
+        logOutcome("ai_request_failed", job, selection, summary, lastError);
 
         if (lastError instanceof RuntimeException re) {
             throw re;
@@ -380,13 +394,27 @@ public class AiRequestQueueService {
     private AiUsageSummary recordUsage(AiRequestJob job, ModelSelectionOutcome selection, AiUsage usage) {
         AiUsageSummary summary = usage.summarize(selection.model());
         job.setUsage(summary);
-        Double costUsd = summary.estimatedCostUsd();
-        log.info("AI request {} usage: model={} calls={} promptTokens={} cachedTokens={} outputTokens={} thoughtsTokens={} estimatedCostUsd={} estimatedCostInr={}",
-                job.getId(), selection.model().getProviderModelId(), summary.providerCalls(), summary.promptTokens(),
-                summary.cachedTokens(), summary.completionTokens(), summary.thoughtsTokens(),
-                costUsd == null ? "NA" : String.format("%.6f", costUsd),
-                costUsd == null ? "NA" : String.format("%.4f", costUsd * requestProperties.getUsdToInr()));
         return summary;
+    }
+
+    /** One line per AI request job (across all its attempts and provider calls), with its usage and estimated cost. */
+    private void logOutcome(String event, AiRequestJob job, ModelSelectionOutcome selection,
+                            AiUsageSummary summary, Exception error) {
+        Double costUsd = summary.estimatedCostUsd();
+        String costUsdText = costUsd == null ? "NA" : String.format("%.6f", costUsd);
+        String costInrText = costUsd == null ? "NA" : String.format("%.4f", costUsd * requestProperties.getUsdToInr());
+        String format = "event={} aiRequestId={} capability={} correlationType={} modelKey={} model={} tier={} "
+                + "usedFallback={} attempts={} calls={} inputTokens={} cachedTokens={} outputTokens={} thoughtsTokens={} "
+                + "estimatedCostUsd={} estimatedCostInr={}";
+        Object[] args = {event, job.getId(), job.getCapability(), job.getCorrelationType(), selection.model().getKey(),
+                selection.model().getProviderModelId(), selection.model().getTier(), selection.usedFallback(),
+                job.getAttempt(), summary.providerCalls(), summary.promptTokens(), summary.cachedTokens(),
+                summary.completionTokens(), summary.thoughtsTokens(), costUsdText, costInrText};
+        if (error == null) {
+            log.info(format, args);
+        } else {
+            log.warn(format + " errorType=" + error.getClass().getSimpleName(), args);
+        }
     }
 
     private boolean isRetryable(Throwable error) {

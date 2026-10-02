@@ -64,7 +64,7 @@ public class AIController {
             aiResponseService.save(record);
         } catch (Exception ex) {
             // Don't fail the request if persistent storage fails; just log.
-            logger.error("Failed to persist AI response", ex);
+            logger.warn("event=ai_response_persist_failed context=chat errorType={}", ex.getClass().getSimpleName(), ex);
         }
 
         return new AIChatResponseDTO(response.getContent());

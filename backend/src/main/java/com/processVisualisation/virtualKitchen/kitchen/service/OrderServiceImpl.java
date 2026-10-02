@@ -116,7 +116,8 @@ public class OrderServiceImpl implements IOrderService {
             }
         } catch (Exception ex) {
             // Log and continue - order creation should not fail because inventory update failed
-            logger.error("Failed to add ordered items to user inventory for orderId={}", saved.getOrderId(), ex);
+            logger.error("event=order_inventory_update_failed orderId={} errorType={}",
+                    saved.getOrderId(), ex.getClass().getSimpleName(), ex);
             // if the exception is due to missing kitchen we rethrow as requested
             if (ex instanceof IllegalStateException && ex.getMessage().startsWith("Kitchen not found")) {
                 throw ex;

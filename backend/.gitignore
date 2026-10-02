@@ -34,3 +34,6 @@ build/
 
 # Custom sensitive properties
 application.properties
+
+### Logs ###
+logs/
