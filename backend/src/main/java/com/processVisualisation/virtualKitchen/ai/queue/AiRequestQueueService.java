@@ -10,6 +10,9 @@ import com.processVisualisation.virtualKitchen.ai.routing.FallbackReason;
 import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionOutcome;
 import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionService;
 import com.processVisualisation.virtualKitchen.ai.credit.CreditService;
+import com.processVisualisation.virtualKitchen.ai.usage.AiUsage;
+import com.processVisualisation.virtualKitchen.ai.usage.AiUsageMeter;
+import com.processVisualisation.virtualKitchen.ai.usage.AiUsageSummary;
 import com.processVisualisation.virtualKitchen.common.concurrent.NamedTask;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskPool;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskResult;
@@ -128,10 +131,12 @@ public class AiRequestQueueService {
             AiRequestJob job = createJob(userId, capability, preferredModelKey, idempotencyKey, correlationType, correlationId);
             ModelSelectionOutcome selection = beginProcessing(job, capability, preferredModelKey);
             long timeoutMs = requestProperties.timeoutFor(capability, 30_000L);
+            AiUsage usage = new AiUsage();
 
-            AiRequestOutcome<R> outcome = runWithRetries(job, selection, () -> {
-                CompletableFuture<TaskResult<R>> future =
-                        aiTextTaskPool.submit(new NamedTask<>(job.getId(), () -> work.run(selection)));
+            AiRequestOutcome<R> outcome = runWithRetries(job, selection, usage, () -> {
+                // Bound on the pool thread, where the provider calls actually happen.
+                CompletableFuture<TaskResult<R>> future = aiTextTaskPool.submit(new NamedTask<>(job.getId(),
+                        () -> AiUsageMeter.measure(usage, () -> work.run(selection))));
                 TaskResult<R> result;
                 try {
                     result = future.get(timeoutMs, TimeUnit.MILLISECONDS);
@@ -179,7 +184,9 @@ public class AiRequestQueueService {
             AiRequestJob job = createJob(userId, capability, preferredModelKey, idempotencyKey, correlationType, correlationId);
             ModelSelectionOutcome selection = beginProcessing(job, capability, preferredModelKey);
 
-            AiRequestOutcome<R> outcome = runWithRetries(job, selection, () -> work.run(selection));
+            AiUsage usage = new AiUsage();
+            AiRequestOutcome<R> outcome = runWithRetries(job, selection, usage,
+                    () -> AiUsageMeter.measure(usage, () -> work.run(selection)));
             return withStagedArtifact(userId, capability, correlationType, correlationId, artifactSpec, outcome);
         });
     }
@@ -320,7 +327,13 @@ public class AiRequestQueueService {
         return selection;
     }
 
-    private <R> AiRequestOutcome<R> runWithRetries(AiRequestJob job, ModelSelectionOutcome selection, Attempt<R> attempt) {
+    /**
+     * @param usage collects the token usage of every provider call across all attempts; it is recorded on the job,
+     *              logged, and attached to the CONSUME (success) or RELEASE (failure) ledger entry
+     */
+    private <R> AiRequestOutcome<R> runWithRetries(
+            AiRequestJob job, ModelSelectionOutcome selection, AiUsage usage, Attempt<R> attempt
+    ) {
         int maxAttempts = job.getMaxAttempts();
         Exception lastError = null;
 
@@ -328,8 +341,9 @@ public class AiRequestQueueService {
             job.setAttempt(i);
             try {
                 R value = attempt.run();
+                AiUsageSummary summary = recordUsage(job, selection, usage);
                 if (selection.reservation() != null) {
-                    creditService.consume(job.getUserId(), selection.reservation(), job.getId());
+                    creditService.consume(job.getUserId(), selection.reservation(), job.getId(), summary);
                 }
                 job.setStatus(AiRequestStatus.COMPLETED);
                 job.setCompletedAt(Instant.now());
@@ -348,8 +362,9 @@ public class AiRequestQueueService {
             sleepBackoff();
         }
 
+        AiUsageSummary summary = recordUsage(job, selection, usage);
         if (selection.reservation() != null) {
-            creditService.release(job.getUserId(), selection.reservation(), job.getId());
+            creditService.release(job.getUserId(), selection.reservation(), job.getId(), summary);
         }
         job.setStatus(AiRequestStatus.FAILED);
         job.setErrorMessage(lastError != null ? lastError.getMessage() : "Unknown failure");
@@ -360,6 +375,18 @@ public class AiRequestQueueService {
             throw re;
         }
         throw new AiRequestTimeoutException(job.getId());
+    }
+
+    private AiUsageSummary recordUsage(AiRequestJob job, ModelSelectionOutcome selection, AiUsage usage) {
+        AiUsageSummary summary = usage.summarize(selection.model());
+        job.setUsage(summary);
+        Double costUsd = summary.estimatedCostUsd();
+        log.info("AI request {} usage: model={} calls={} promptTokens={} cachedTokens={} outputTokens={} thoughtsTokens={} estimatedCostUsd={} estimatedCostInr={}",
+                job.getId(), selection.model().getProviderModelId(), summary.providerCalls(), summary.promptTokens(),
+                summary.cachedTokens(), summary.completionTokens(), summary.thoughtsTokens(),
+                costUsd == null ? "NA" : String.format("%.6f", costUsd),
+                costUsd == null ? "NA" : String.format("%.4f", costUsd * requestProperties.getUsdToInr()));
+        return summary;
     }
 
     private boolean isRetryable(Throwable error) {

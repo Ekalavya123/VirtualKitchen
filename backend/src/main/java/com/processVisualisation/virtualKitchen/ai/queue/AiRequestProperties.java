@@ -21,6 +21,9 @@ public class AiRequestProperties {
 
     private long retryBackoffMs = 500;
 
+    /** USD -> INR rate used only to show request cost in INR in the logs; costs are always stored in USD. */
+    private double usdToInr = 88.0;
+
     public long timeoutFor(AiCapability capability, long defaultValue) {
         Long configured = timeoutMs.get(capability.name());
         return configured != null ? configured : defaultValue;

@@ -2,6 +2,7 @@ package com.processVisualisation.virtualKitchen.ai.credit;
 
 import com.processVisualisation.virtualKitchen.ai.registry.AiCapability;
 import com.processVisualisation.virtualKitchen.ai.registry.ModelTier;
+import com.processVisualisation.virtualKitchen.ai.usage.AiUsageSummary;
 import lombok.Data;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -40,6 +41,15 @@ public class AiCreditTransaction {
     private AiCapability capability;
     private String modelKey;
     private ModelTier tier;
+
+    /**
+     * Provider token usage of the request this CONSUME/RELEASE settles (a released request still spent tokens with
+     * the provider). Null for entries not tied to a provider call (RESERVE, grants, adjustments).
+     */
+    private AiUsageSummary usage;
+
+    /** Estimated provider cost in USD of that request (same value as {@code usage.estimatedCostUsd}), for direct querying. */
+    private Double estimatedCostUsd;
 
     @CreatedDate
     private LocalDateTime createdAt;

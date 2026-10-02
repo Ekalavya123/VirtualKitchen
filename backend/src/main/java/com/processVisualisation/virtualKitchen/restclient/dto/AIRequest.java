@@ -32,4 +32,10 @@ public class AIRequest {
     private Map<String, Object> responseSchema;
     /** Name reported alongside {@link #responseSchema} where the provider requires one (OpenAI). */
     private String responseSchemaName;
+    /**
+     * Hint that {@link #systemPrompt} is static and reused across many requests, so a provider with explicit
+     * context caching (Gemini {@code cachedContents}) may store it once and reference it instead of re-sending it.
+     * Providers that cache prefixes automatically (Ollama, OpenAI) ignore it.
+     */
+    private boolean cacheSystemPrompt;
 }
