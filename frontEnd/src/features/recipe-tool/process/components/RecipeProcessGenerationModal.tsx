@@ -52,7 +52,7 @@ export default function RecipeProcessGenerationModal({ onClose, onGenerate, isGe
           <div>
             <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--flow-text)' }}>✨ Generate Recipe with AI</div>
             <div style={{ fontSize: 11, color: 'var(--flow-text-subtle)', marginTop: 2 }}>
-              Creates a MAIN process (and subprocesses where meaningful) from your description — nothing is saved until you click Save.
+              Creates a MAIN process (and subprocesses where meaningful) from your description. The result is saved automatically, and Undo brings back your previous version.
             </div>
           </div>
           <button
@@ -68,7 +68,7 @@ export default function RecipeProcessGenerationModal({ onClose, onGenerate, isGe
         <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
           {willReplaceMain && (
             <div style={{ fontSize: 11.5, color: 'var(--flow-warning)', background: 'var(--flow-warning-soft)', border: '1px solid var(--flow-warning-border)', borderRadius: 8, padding: '8px 10px' }}>
-              ⚠ This recipe already has a MAIN process. Generating will replace its content (existing subprocesses are kept; new ones may be added). Nothing is saved until you click Save.
+              ⚠ This recipe already has a MAIN process. Generating will replace its content (existing subprocesses are kept; new ones may be added). You can Undo it afterwards.
             </div>
           )}
 

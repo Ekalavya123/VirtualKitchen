@@ -3,6 +3,8 @@ package com.processVisualisation.virtualKitchen.recipe.repository;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
 import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.mongodb.repository.Query;
+import org.springframework.data.mongodb.repository.Update;
 
 import java.util.List;
 
@@ -29,4 +31,16 @@ public interface ProcessRepository extends MongoRepository<Process, Long> {
      * @return the matching processes
      */
     List<Process> findByRecipeIdAndType(Long recipeId, ProcessType type);
+
+    /**
+     * Atomically writes one STEP node's generated visualization fields in place (positional
+     * update on the node whose {@code id} matches), without rewriting the rest of the process
+     * document — so an editor save landing while a visuals job finishes is never overwritten, and
+     * a process deleted meanwhile is not re-created (no upsert).
+     *
+     * @return the number of processes updated: 0 if the process or the node no longer exists
+     */
+    @Query("{ '_id': ?0, 'nodes.id': ?1 }")
+    @Update("{ '$set': { 'nodes.$.data.visualizationAssetId': ?2, 'nodes.$.data.imagePrompt': ?3, 'nodes.$.data.imageUrl': ?4 } }")
+    long setStepVisualization(Long processId, String nodeId, Long visualizationAssetId, String imagePrompt, String imageUrl);
 }

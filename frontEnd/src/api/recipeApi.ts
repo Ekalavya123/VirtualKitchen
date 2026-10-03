@@ -6,7 +6,7 @@
 
 import { apiGet, apiPost, apiDelete, apiPut } from './client'
 import { API } from './endpoints'
-import type { Process, ProcessBatchUpdateItem, ProcessCreateRequest, ProcessUpdateRequest } from '../types/process'
+import type { Process, ProcessBatchUpdateItem, ProcessBatchUpdateResult, ProcessCreateRequest, ProcessUpdateRequest } from '../types/process'
 import type { NutritionInfo, RecipeActiveJobsResponse, RecipeProcessGenerationJobResponse, RecipeProcessGenerationRequest, RecipeProcessVisualizationJobResponse, RecipeDetail, RecipeIngredient, UnitType } from '../types/recipe'
 
 export type RecipeVisibility = 'PUBLIC' | 'PRIVATE'
@@ -168,10 +168,12 @@ export const ProcessApi = {
    * one call — the Recipe Tool's single "Save" action for its unified editing session (MAIN plus
    * every loaded SUBPROCESS), instead of one independent save per process. The backend validates
    * every item before persisting any of them, so one invalid process rejects the whole batch.
+   * `baseRevision` is the recipe process revision the snapshot was based on: if the recipe was saved
+   * elsewhere since, the save is rejected with 409. Resolves with the recipe's new revision.
    * Requires ownership.
    */
-  async updateAll(recipeId: number, items: ProcessBatchUpdateItem[]): Promise<Process[]> {
-    return apiPut<Process[]>(API.processes.list(recipeId), { processes: items })
+  async updateAll(recipeId: number, items: ProcessBatchUpdateItem[], baseRevision?: number): Promise<ProcessBatchUpdateResult> {
+    return apiPut<ProcessBatchUpdateResult>(API.processes.list(recipeId), { processes: items, baseRevision })
   },
 
   /**

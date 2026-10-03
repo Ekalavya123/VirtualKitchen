@@ -1,6 +1,7 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchItemDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchUpdateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessUpdateDTO;
@@ -76,10 +77,16 @@ public interface IProcessService {
      *
      * @param recipeId the id of the recipe every listed process is expected to belong to
      * @param userId   the id of the user requesting the update, used for ownership verification
-     * @param items    the replacement content for each process, keyed by its own {@code processId}
-     * @return the updated processes, in the same order as {@code items}
+     * <p>
+     * Optimistic concurrency: when {@code baseRevision} is given, the save only goes through if the
+     * recipe's process revision still equals it (otherwise {@code RecipeRevisionConflictException},
+     * HTTP 409, and nothing is persisted); either way every successful save bumps the revision.</p>
+     *
+     * @param items        the replacement content for each process, keyed by its own {@code processId}
+     * @param baseRevision the recipe process revision the client's snapshot was based on, or null to skip the check
+     * @return the updated processes, in the same order as {@code items}, plus the recipe's new revision
      */
-    List<ProcessResponseDTO> updateAll(Long recipeId, Long userId, List<ProcessBatchItemDTO> items);
+    ProcessBatchUpdateResponseDTO updateAll(Long recipeId, Long userId, List<ProcessBatchItemDTO> items, Long baseRevision);
 
     /**
      * Deletes a process, after verifying the requesting user owns the

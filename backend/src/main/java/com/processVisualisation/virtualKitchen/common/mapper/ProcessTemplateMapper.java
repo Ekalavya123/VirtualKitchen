@@ -79,6 +79,7 @@ public class ProcessTemplateMapper {
                 .ingredients(toIngredientDTOs(pt.getIngredients()))
                 .nutrition(toNutritionDTO(pt.getNutrition()))
                 .mainProcessId(pt.getMainProcessId())
+                .processRevision(pt.getProcessRevision() != null ? pt.getProcessRevision() : 0L)
                 .createdAt(pt.getCreatedAt())
                 .updatedAt(pt.getUpdatedAt())
                 .build();

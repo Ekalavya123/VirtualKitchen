@@ -3,8 +3,10 @@ package com.processVisualisation.virtualKitchen.recipe.service;
 import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.common.exception.ProcessValidationException;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException;
+import com.processVisualisation.virtualKitchen.common.exception.RecipeRevisionConflictException;
 import com.processVisualisation.virtualKitchen.common.mapper.ProcessMapper;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchItemDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchUpdateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessNodeDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
@@ -38,8 +40,10 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -114,6 +118,17 @@ class ProcessServiceImplTest {
 
         when(recipeTemplateRepository.findById(anyLong()))
                 .thenAnswer(inv -> Optional.ofNullable(recipeStore.get(inv.<Long>getArgument(0))));
+        // Revision claims: same conditional semantics as the real @Query/@Update methods, over recipeStore.
+        when(recipeTemplateRepository.claimProcessRevision(anyLong(), anyLong())).thenAnswer(inv ->
+                compareAndBumpRevision(inv.getArgument(0), inv.<Long>getArgument(1), 1));
+        when(recipeTemplateRepository.claimInitialProcessRevision(anyLong())).thenAnswer(inv ->
+                compareAndBumpRevision(inv.getArgument(0), 0L, 1));
+        when(recipeTemplateRepository.releaseProcessRevision(anyLong(), anyLong())).thenAnswer(inv ->
+                compareAndBumpRevision(inv.getArgument(0), inv.<Long>getArgument(1), -1));
+        when(recipeTemplateRepository.incrementProcessRevision(anyLong())).thenAnswer(inv -> {
+            RecipeTemplate recipe = recipeStore.get(inv.<Long>getArgument(0));
+            return compareAndBumpRevision(recipe.getId(), revisionOf(recipe), 1);
+        });
 
         ProcessValidator validator = new ProcessValidator(processRepository, recipeTemplateRepository);
         ProcessMapper mapper = new ProcessMapper();
@@ -261,7 +276,7 @@ class ProcessServiceImplTest {
         List<ProcessResponseDTO> updated = service.updateAll(recipeId, OWNER_ID, List.of(
                 batchItem(main.getId(), "Main", List.of(stepNodeDTO("n1"))),
                 batchItem(sub.getId(), "Cut Vegetables v2", List.of(stepNodeDTO("n2")))
-        ));
+        ), null).getProcesses();
 
         assertEquals(2, updated.size());
         assertEquals("Main", processStore.get(main.getId()).getName());
@@ -281,7 +296,7 @@ class ProcessServiceImplTest {
                 batchItem(sub.getId(), "Cut Vegetables v2", List.of(invalidNode))
         );
 
-        assertThrows(ProcessValidationException.class, () -> service.updateAll(recipeId, OWNER_ID, items));
+        assertThrows(ProcessValidationException.class, () -> service.updateAll(recipeId, OWNER_ID, items, null));
         // The fake repository's findById returns the same live object instance rather than a fresh
         // copy (unlike real Spring Data Mongo), so an in-place field mutation is visible even before
         // any save call — asserting on that would test an artifact of the fake, not real behavior.
@@ -294,7 +309,7 @@ class ProcessServiceImplTest {
         ProcessResponseDTO sub = service.create(recipeId, OWNER_ID, request(ProcessType.SUBPROCESS, "Prep"));
         List<ProcessBatchItemDTO> items = List.of(batchItem(sub.getId(), "hijacked", null));
 
-        assertThrows(RecipeAccessDeniedException.class, () -> service.updateAll(recipeId, OTHER_USER_ID, items));
+        assertThrows(RecipeAccessDeniedException.class, () -> service.updateAll(recipeId, OTHER_USER_ID, items, null));
     }
 
     @Test
@@ -302,7 +317,79 @@ class ProcessServiceImplTest {
         ProcessResponseDTO otherRecipeProcess = service.create(otherRecipeId, OTHER_USER_ID, request(ProcessType.SUBPROCESS, "Prep"));
         List<ProcessBatchItemDTO> items = List.of(batchItem(otherRecipeProcess.getId(), "hijacked", null));
 
-        assertThrows(NoSuchElementException.class, () -> service.updateAll(recipeId, OWNER_ID, items));
+        assertThrows(NoSuchElementException.class, () -> service.updateAll(recipeId, OWNER_ID, items, null));
+    }
+
+    @Test
+    void updateAll_withCurrentBaseRevision_savesAndBumpsRevision() {
+        ProcessResponseDTO main = service.create(recipeId, OWNER_ID, request(ProcessType.MAIN, "Main"));
+        ProcessResponseDTO sub = service.create(recipeId, OWNER_ID, request(ProcessType.SUBPROCESS, "Sauce"));
+
+        ProcessBatchUpdateResponseDTO first = service.updateAll(recipeId, OWNER_ID, List.of(
+                batchItem(main.getId(), "Main", List.of(stepNodeDTO("n1"))),
+                batchItem(sub.getId(), "Sauce", List.of(stepNodeDTO("n2")))
+        ), 0L);
+        ProcessBatchUpdateResponseDTO second = service.updateAll(recipeId, OWNER_ID, List.of(
+                batchItem(main.getId(), "Main v2", List.of(stepNodeDTO("n1"))),
+                batchItem(sub.getId(), "Sauce v2", List.of(stepNodeDTO("n2"), stepNodeDTO("n3")))
+        ), first.getRevision());
+
+        assertEquals(1L, first.getRevision());
+        assertEquals(2L, second.getRevision());
+        assertEquals(2L, recipeStore.get(recipeId).getProcessRevision());
+        // The complete multi-process snapshot landed in one save.
+        assertEquals("Main v2", processStore.get(main.getId()).getName());
+        assertEquals(2, processStore.get(sub.getId()).getNodes().size());
+        assertEquals(2, second.getProcesses().size());
+    }
+
+    @Test
+    void updateAll_withStaleBaseRevision_isRejectedAsConflictWithoutPersisting() {
+        ProcessResponseDTO main = service.create(recipeId, OWNER_ID, request(ProcessType.MAIN, "Main"));
+        // Device A saves revision 0 -> 1.
+        service.updateAll(recipeId, OWNER_ID, List.of(batchItem(main.getId(), "Main (A)", List.of(stepNodeDTO("n1")))), 0L);
+
+        // Device B still holds revision 0.
+        List<ProcessBatchItemDTO> stale = List.of(batchItem(main.getId(), "Main (B)", List.of(stepNodeDTO("n1"))));
+        assertThrows(RecipeRevisionConflictException.class, () -> service.updateAll(recipeId, OWNER_ID, stale, 0L));
+
+        assertEquals(1L, recipeStore.get(recipeId).getProcessRevision());
+        verify(processRepository, times(1)).saveAll(any());
+    }
+
+    @Test
+    void updateAll_withoutBaseRevision_keepsLastWriteWinsButStillBumpsRevision() {
+        ProcessResponseDTO main = service.create(recipeId, OWNER_ID, request(ProcessType.MAIN, "Main"));
+        recipeStore.get(recipeId).setProcessRevision(5L);
+
+        ProcessBatchUpdateResponseDTO saved = service.updateAll(recipeId, OWNER_ID,
+                List.of(batchItem(main.getId(), "Main", List.of(stepNodeDTO("n1")))), null);
+
+        assertEquals(6L, saved.getRevision());
+    }
+
+    @Test
+    void updateAll_invalidBatch_doesNotClaimARevision() {
+        ProcessResponseDTO main = service.create(recipeId, OWNER_ID, request(ProcessType.MAIN, "Main"));
+        ProcessNodeDTO invalidNode = ProcessNodeDTO.builder().id("n1").kind(ProcessNodeKind.STEP).build();
+
+        assertThrows(ProcessValidationException.class, () -> service.updateAll(recipeId, OWNER_ID,
+                List.of(batchItem(main.getId(), "Main", List.of(invalidNode))), 0L));
+
+        assertEquals(0L, revisionOf(recipeStore.get(recipeId)));
+    }
+
+    @Test
+    void updateAll_saveFailureAfterClaim_releasesRevisionSoTheRetrySucceeds() {
+        ProcessResponseDTO main = service.create(recipeId, OWNER_ID, request(ProcessType.MAIN, "Main"));
+        List<ProcessBatchItemDTO> items = List.of(batchItem(main.getId(), "Main", List.of(stepNodeDTO("n1"))));
+        doThrow(new IllegalStateException("mongo down")).when(processRepository).saveAll(any());
+
+        assertThrows(IllegalStateException.class, () -> service.updateAll(recipeId, OWNER_ID, items, 0L));
+        assertEquals(0L, revisionOf(recipeStore.get(recipeId)));
+
+        doAnswer(inv -> inv.getArgument(0)).when(processRepository).saveAll(any());
+        assertEquals(1L, service.updateAll(recipeId, OWNER_ID, items, 0L).getRevision());
     }
 
     @Test
@@ -640,5 +727,18 @@ class ProcessServiceImplTest {
         item.setName(name);
         item.setNodes(nodes);
         return item;
+    }
+
+    private static long revisionOf(RecipeTemplate recipe) {
+        return recipe.getProcessRevision() != null ? recipe.getProcessRevision() : 0L;
+    }
+
+    private long compareAndBumpRevision(Long id, Long expected, long delta) {
+        RecipeTemplate recipe = recipeStore.get(id);
+        if (recipe == null || revisionOf(recipe) != expected) {
+            return 0L;
+        }
+        recipe.setProcessRevision(revisionOf(recipe) + delta);
+        return 1L;
     }
 }

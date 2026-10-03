@@ -64,6 +64,18 @@ class GlobalExceptionHandlerLoggingTest {
     }
 
     @Test
+    void revisionConflictIsAnswered409AndLoggedAsRejected() {
+        try (LogCapture logs = LogCapture.of(GlobalExceptionHandler.class)) {
+            ResponseEntity<ErrorResponse> response = handler.handleRecipeRevisionConflict(
+                    new RecipeRevisionConflictException("changed elsewhere"));
+
+            assertThat(response.getStatusCode().value()).isEqualTo(409);
+            assertThat(response.getBody().getMessage()).isEqualTo("changed elsewhere");
+            assertThat(single(logs).getLevel()).isEqualTo(Level.WARN);
+        }
+    }
+
+    @Test
     void notFoundIsDebugOnly() {
         try (LogCapture logs = LogCapture.of(GlobalExceptionHandler.class)) {
             handler.handleNotFound(new NoSuchElementException("recipe 9"));

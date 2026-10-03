@@ -3,6 +3,7 @@ import { RecipeApi, type Recipe } from '../../api'
 import { useNotifications } from '../../shared/components/notifications/NotificationProvider'
 import '../recipe-tool/styles/recipe-tool.css'
 import recipeIcon from '../../assets/kitchen/recipeIcon.png'
+import { browserStorage, clearRecovery } from '../recipe-tool/persistence/recoveryStore'
 
 type RecipeTab = 'mine' | 'global'
 
@@ -704,6 +705,8 @@ export default function RecipeHomePage({
   const handleDeleteRecipe = async (recipeId: number) => {
     try {
       await RecipeApi.deleteRecipe(recipeId, userId)
+      // Unsaved Recipe Tool changes left on this device for a deleted recipe can never be recovered.
+      clearRecovery(browserStorage(), recipeId)
 
       setRecipes(current =>
         current.filter(recipe => recipe.id !== recipeId),

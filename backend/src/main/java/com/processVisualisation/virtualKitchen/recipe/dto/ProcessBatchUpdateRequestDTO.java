@@ -14,6 +14,10 @@ import java.util.List;
  * is validated (via {@code ProcessValidator}, same as the single-process
  * update) before any of them are persisted, so a single invalid process
  * rejects the whole batch rather than leaving the recipe half-saved.
+ * <p>
+ * {@link #baseRevision} is the recipe's process revision the client's snapshot was based on; when
+ * present, the save is rejected with 409 if the recipe has been saved since (optimistic
+ * concurrency). Omitted by older clients, which then get the previous last-write-wins behavior.</p>
  */
 @Data
 public class ProcessBatchUpdateRequestDTO {
@@ -21,4 +25,6 @@ public class ProcessBatchUpdateRequestDTO {
     @NotEmpty
     @Valid
     private List<ProcessBatchItemDTO> processes;
+
+    private Long baseRevision;
 }

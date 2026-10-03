@@ -3,8 +3,10 @@ package com.processVisualisation.virtualKitchen.recipe.service;
 import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.common.exception.ProcessValidationException;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException;
+import com.processVisualisation.virtualKitchen.common.exception.RecipeRevisionConflictException;
 import com.processVisualisation.virtualKitchen.common.mapper.ProcessMapper;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchItemDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchUpdateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessUpdateDTO;
@@ -116,7 +118,7 @@ public class ProcessServiceImpl implements IProcessService {
     }
 
     @Override
-    public List<ProcessResponseDTO> updateAll(Long recipeId, Long userId, List<ProcessBatchItemDTO> items) {
+    public ProcessBatchUpdateResponseDTO updateAll(Long recipeId, Long userId, List<ProcessBatchItemDTO> items, Long baseRevision) {
         requireOwnedRecipe(recipeId, userId);
 
         List<Process> toSave = new ArrayList<>();
@@ -142,8 +144,47 @@ public class ProcessServiceImpl implements IProcessService {
             toSave.add(process);
         }
 
-        List<Process> saved = processRepository.saveAll(toSave);
-        return saved.stream().map(processMapper::toDTO).collect(Collectors.toList());
+        // Claimed only once every item is known to be valid, so a rejected batch never moves the revision.
+        Long revision = claimRevision(recipeId, baseRevision);
+        List<Process> saved;
+        try {
+            saved = processRepository.saveAll(toSave);
+        } catch (RuntimeException e) {
+            // No Mongo transactions here: give the claimed revision back (if nobody claimed a newer
+            // one meanwhile) so the client's retry from the same base isn't a conflict with itself.
+            // Resending the full snapshot then repairs any process this partial saveAll did write.
+            if (baseRevision != null) {
+                recipeTemplateRepository.releaseProcessRevision(recipeId, revision);
+            }
+            throw e;
+        }
+        return new ProcessBatchUpdateResponseDTO(
+                revision,
+                saved.stream().map(processMapper::toDTO).collect(Collectors.toList()));
+    }
+
+    /**
+     * Atomically advances the recipe's process revision from {@code baseRevision} (see
+     * {@code RecipeTemplateRepository.claimProcessRevision}), failing with a 409 if another save got
+     * there first. A null base (older clients) bumps it unconditionally.
+     *
+     * @return the recipe's new revision
+     */
+    private Long claimRevision(Long recipeId, Long baseRevision) {
+        if (baseRevision == null) {
+            recipeTemplateRepository.incrementProcessRevision(recipeId);
+            return recipeTemplateRepository.findById(recipeId)
+                    .map(RecipeTemplate::getProcessRevision)
+                    .orElse(null);
+        }
+        long claimed = baseRevision == 0L
+                ? recipeTemplateRepository.claimInitialProcessRevision(recipeId)
+                : recipeTemplateRepository.claimProcessRevision(recipeId, baseRevision);
+        if (claimed == 0) {
+            throw new RecipeRevisionConflictException(
+                    "This recipe was changed elsewhere (another tab or device) since it was opened here");
+        }
+        return baseRevision + 1;
     }
 
     @Override

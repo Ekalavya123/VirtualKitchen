@@ -117,7 +117,8 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
   }
 
   return (
-    <RecipeSessionProvider recipeId={recipeId}>
+    // Readers can look around the editor, but only the owner's edits are autosaved/kept for recovery.
+    <RecipeSessionProvider recipeId={recipeId} canEdit={isOwner}>
       {/* `flow-canvas-container` strips .kitchen-body's ambient page padding/scroll (see
           KitchenPage.css) so the editor's canvas can use the full available area edge-to-edge;
           the Recipe Process manages its own padding/scroll. */}

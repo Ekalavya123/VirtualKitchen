@@ -3,6 +3,7 @@ package com.processVisualisation.virtualKitchen.recipe.controller;
 import com.processVisualisation.virtualKitchen.common.exception.AuthException;
 import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchUpdateRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchUpdateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessUpdateDTO;
@@ -96,15 +97,16 @@ public class ProcessController {
      * request body in one call — the Recipe Tool's single "Save" action for its unified editing
      * session (MAIN + every loaded SUBPROCESS), rather than one independent save per process.
      * Requires the caller to own the recipe. Every process is validated before any of them are
-     * persisted, so an invalid process rejects the whole batch.
+     * persisted, so an invalid process rejects the whole batch. When the body carries a
+     * {@code baseRevision} that is no longer the recipe's current one, the save is rejected with 409.
      *
      * @param recipeId the id of the recipe every listed process is expected to belong to
      * @param dto      the replacement content for each process, keyed by its own processId
-     * @return an ApiResponse wrapping the updated processes
+     * @return an ApiResponse wrapping the updated processes and the recipe's new process revision
      */
     @PutMapping
-    public ApiResponse<List<ProcessResponseDTO>> updateAll(@PathVariable Long recipeId, @Valid @RequestBody ProcessBatchUpdateRequestDTO dto) {
-        return build(processService.updateAll(recipeId, currentUserId(), dto.getProcesses()), "updated");
+    public ApiResponse<ProcessBatchUpdateResponseDTO> updateAll(@PathVariable Long recipeId, @Valid @RequestBody ProcessBatchUpdateRequestDTO dto) {
+        return build(processService.updateAll(recipeId, currentUserId(), dto.getProcesses(), dto.getBaseRevision()), "updated");
     }
 
     /**

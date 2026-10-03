@@ -166,7 +166,7 @@ function RecipeProcessEditorRoute() {
     // handles switching which process is displayed without losing another process's unsaved edits or
     // re-fetching what's already loaded. A different recipe id (a real route change) still gets a
     // fresh session; the same recipeId across a process-to-process navigation does not remount.
-    <RecipeSessionProvider recipeId={recipeId}>
+    <RecipeSessionProvider key={recipeId} recipeId={recipeId}>
       <RecipeProcessEditor
         recipeId={recipeId}
         processId={processId}

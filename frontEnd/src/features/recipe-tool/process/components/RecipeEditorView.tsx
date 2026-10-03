@@ -64,28 +64,42 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
   const generationError = generationJob && !isTrackedJobActive(generationJob)
     ? (generationJob.pollError ?? (generationJob.job.status === 'FAILED' ? (generationJob.job.errorMessage || 'Unable to generate this recipe right now.') : null))
     : null
-  const [editorRevision, setEditorRevision] = useState(0)
 
   // Defaults the selection to MAIN (or the first process) once the session has loaded, and keeps
   // it pinned to whatever's currently selected otherwise — including across every later session
   // mutation (edits, saves), since this only actually changes state when the current selection no
-  // longer resolves (e.g. it was just deleted).
+  // longer resolves: a save gave a pending process its real id (follow it), or it's gone (an undo
+  // removed it — fall back to MAIN).
   useEffect(() => {
     if (!session || session.loading) return
     setSelectedProcessId((current) => {
       if (current != null && session.getProcess(current)) return current
+      if (current != null && session.getProcess(session.resolveProcessId(current))) return session.resolveProcessId(current)
       const list = session.getProcesses()
       const main = list.find((process) => process.type === 'MAIN')
       return main ? main.id : (list[0]?.id ?? null)
     })
   }, [session])
 
+  // Undo/redo of a change made in another process brings that process into view — adjusted while
+  // rendering (not in an effect), so the canvas never renders a frame for a process the undo removed.
+  const focusRequest = session?.focusRequest ?? null
+  const [handledFocusToken, setHandledFocusToken] = useState<number | null>(null)
+  if (focusRequest && focusRequest.token !== handledFocusToken) {
+    setHandledFocusToken(focusRequest.token)
+    if (focusRequest.processId !== selectedProcessId && session?.getProcess(focusRequest.processId)) {
+      setAncestorTrail([])
+      setSelectedProcessId(focusRequest.processId)
+    }
+  }
+
   const handleCreateMainProcess = useCallback(async () => {
     if (!session) return
     setCreatingMainProcess(true)
     try {
       const created = await RecipeDetailApi.createMainProcess(recipeId)
-      session.addProcess(created)
+      session.recordHistory({ focusProcessId: selectedProcessId })
+      session.addProcess(created, { persisted: true })
       setSelectedProcessId(created.id)
       onMainProcessChanged(created.id)
       notifySuccess('Main process created')
@@ -94,15 +108,17 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
     } finally {
       setCreatingMainProcess(false)
     }
-  }, [recipeId, session, onMainProcessChanged, notifySuccess, notifyError])
+  }, [recipeId, session, selectedProcessId, onMainProcessChanged, notifySuccess, notifyError])
 
   const handleCreateSubprocess = useCallback(async (name: string, description: string) => {
     if (!session) return
     const created = await ProcessApi.create(recipeId, { type: 'SUBPROCESS', name, description: description || undefined })
-    session.addProcess(created)
+    // Undoable like any edit: undo removes it from the session and autosave deletes it again.
+    session.recordHistory({ focusProcessId: selectedProcessId })
+    session.addProcess(created, { persisted: true })
     setSelectedProcessId(created.id)
     notifySuccess('Subprocess created')
-  }, [recipeId, session, notifySuccess])
+  }, [recipeId, session, selectedProcessId, notifySuccess])
 
   const existingMain = processes.find((process) => process.type === 'MAIN') ?? null
 
@@ -123,13 +139,14 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
   }, [generating, jobTracker, recipeId])
 
   /**
-   * Loads a completed generation's result straight into the current in-memory Recipe session —
-   * never persisted until the user explicitly Saves (see RecipeSessionContext.saveAll, which creates
-   * any still-pending generated process for real at that point). Replaces the recipe's existing
-   * MAIN content in place (same real id, so its own unsaved edits are what get overwritten,
-   * deliberately, since the user confirmed this in the modal) rather than adding a second MAIN;
-   * every generated subprocess is new and simply added alongside whatever subprocesses already
-   * existed. Also covers a job that finished while the user was away (rediscovered on load).
+   * Loads a completed generation's result into the current in-memory Recipe session as one
+   * undoable editor operation: the recipe as it was is recorded first, so Undo brings it back
+   * (including removing the generated subprocesses). Autosave then persists the result like any
+   * other edit (RecipeSessionContext creates the still-pending generated processes for real).
+   * Replaces the recipe's existing MAIN content in place (same real id — the canvas re-seeds from
+   * the session) rather than adding a second MAIN; every generated subprocess is new and simply
+   * added alongside whatever subprocesses already existed. Also covers a job that finished while
+   * the user was away (rediscovered on load).
    */
   const appliedGenerationJobIdsRef = useRef(new Set<string>())
   useEffect(() => {
@@ -141,19 +158,17 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
     const { processes: generated, mainProcessId } = convertGeneratedResultToProcesses(
       recipeId, job.result, existingMain, session.getProcesses().map((process) => process.id))
 
+    session.recordHistory({ focusProcessId: mainProcessId })
     generated.forEach((process) => session.addProcess(process))
     setAncestorTrail([])
     setSelectedProcessId(mainProcessId)
-    // Re-seed React Flow when generation replaces an existing MAIN process without changing its
-    // id. Normal edits must stay mounted so their local selection and history are preserved.
-    setEditorRevision((revision) => revision + 1)
     if (!existingMain) onMainProcessChanged(mainProcessId)
 
     setShowGenerationModal(false)
     jobTracker.dismiss(generationJobKey(recipeId))
     RecipeProcessGenerationApi.markApplied(recipeId, job.jobId)
       .catch((error) => console.error('Unable to mark the generated recipe as applied:', error))
-    notifySuccess('AI recipe process ready — review it, then Save when you\'re happy with it.')
+    notifySuccess('AI recipe process ready — it\'s saved automatically. Use Undo to go back to your previous version.')
   }, [session, generationJob, recipeId, existingMain, onMainProcessChanged, jobTracker, notifySuccess])
 
   const handleSelectFromSidebar = useCallback((processId: number) => {
@@ -172,10 +187,10 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
   const handleNavigateToAncestor = useCallback((index: number) => {
     setAncestorTrail((trail) => {
       const target = trail[index]
-      if (target) setSelectedProcessId(target.processId)
+      if (target) setSelectedProcessId(session ? session.resolveProcessId(target.processId) : target.processId)
       return trail.slice(0, index)
     })
-  }, [])
+  }, [session])
 
   const handleOpenSubprocess = useCallback((subprocessId: number, currentProcessName: string) => {
     setSelectedProcessId((current) => {
@@ -256,8 +271,9 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
 
   return (
     <>
+      {/* Not keyed by the selection: switching processes is navigation within one editing session —
+          the canvas content itself remounts per process, the panel layout around it stays. */}
       <RecipeProcessEditor
-        key={`${selectedProcessId}-${editorRevision}`}
         recipeId={recipeId}
         processId={selectedProcessId}
         breadcrumbAncestors={ancestorTrail}

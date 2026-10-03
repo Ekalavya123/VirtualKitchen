@@ -178,6 +178,8 @@ export interface RecipeDetail {
   ingredients: RecipeIngredient[]
   nutrition?: NutritionInfo | null
   mainProcessId?: number | null
+  /** Optimistic-concurrency counter of the recipe-level process save (0 until first saved). */
+  processRevision?: number
   createdAt?: string
   updatedAt?: string
 }

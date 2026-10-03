@@ -51,8 +51,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -240,6 +243,27 @@ class RecipeProcessVisualizationServiceTest {
         RecipeProcessVisualizationService.ProcessStepPreparation preparation = service.prepareStepContexts(4L);
 
         assertEquals(List.of("Marinate Chicken"), preparation.steps().get(0).input().subprocessNames());
+    }
+
+    @Test
+    void attachResultsAndSave_writesEachStepAtomicallyWithoutResavingTheWholeProcess() {
+        Process stale = new Process();
+        stale.setId(5L);
+        VisualizationAsset onion = new VisualizationAsset();
+        onion.setId(70L);
+        onion.setImagePrompt("chopped onion");
+        onion.setImageUrl("https://cdn.example/onion.png");
+        VisualizationAsset failed = new VisualizationAsset();
+        failed.setId(71L);
+
+        service.attachResultsAndSave(stale, Map.of("s1", onion, "s2", failed));
+
+        verify(processRepository).setStepVisualization(5L, "s1", 70L, "chopped onion", "https://cdn.example/onion.png");
+        verify(processRepository).setStepVisualization(5L, "s2", 71L, null, null);
+        // Never a read-modify-save of the whole document: that would overwrite an editor save that
+        // landed while the job ran, and re-create a process deleted meanwhile.
+        verify(processRepository, never()).save(any());
+        verify(processRepository, never()).findById(anyLong());
     }
 
     @Test

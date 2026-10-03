@@ -237,6 +237,25 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Catches a recipe-level process save made from a stale revision (the recipe was saved
+     * elsewhere since the client loaded it).
+     *
+     * @param ex the revision conflict exception
+     * @return an {@link ErrorResponse} with {@code ex}'s message, at HTTP 409 Conflict
+     */
+    @ExceptionHandler(RecipeRevisionConflictException.class)
+    public ResponseEntity<ErrorResponse> handleRecipeRevisionConflict(RecipeRevisionConflictException ex) {
+        logRejected(ex);
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.CONFLICT.value(),
+                "Conflict",
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, HttpStatus.CONFLICT);
+    }
+
+    /**
      * Catches an authentication/authorization failure raised by the auth
      * flows. Unlike the other handlers, the response status and reason
      * phrase are taken dynamically from {@code ex.getStatus()} rather than a
