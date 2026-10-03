@@ -7,6 +7,7 @@ import com.processVisualisation.virtualKitchen.ai.credit.AiCreditTransactionRepo
 import com.processVisualisation.virtualKitchen.ai.credit.CreditService;
 import com.processVisualisation.virtualKitchen.ai.dispatch.AiClientResolver;
 import com.processVisualisation.virtualKitchen.ai.model.VisualizationAsset;
+import com.processVisualisation.virtualKitchen.ai.model.VisualizationJob;
 import com.processVisualisation.virtualKitchen.ai.model.VisualizationJobStatus;
 import com.processVisualisation.virtualKitchen.ai.queue.AiQueueProperties;
 import com.processVisualisation.virtualKitchen.ai.queue.AiRequestJobRepository;
@@ -41,6 +42,7 @@ import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
@@ -49,6 +51,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -212,6 +215,104 @@ class RecipeProcessVisualizationJobServiceTest {
         assertThrows(RecipeProcessAiException.class, () -> service.startJob(1L, 100L, 999L));
 
         verify(visualizationJobRepository, never()).save(any());
+        verify(visualizationJobRepository, never()).insert(any(VisualizationJob.class));
+    }
+
+    @Test
+    void startJob_whileAlreadyRunningForProcess_joinsRunningJobWithoutStartingAnother() {
+        VisualizationJob running = new VisualizationJob();
+        running.setId("running");
+        running.setRecipeId("100");
+        running.setProcessId(1L);
+        running.setUserId(1L);
+        running.setStatus(VisualizationJobStatus.IN_PROGRESS);
+        running.setTotalSteps(3);
+        running.setCompletedSteps(1);
+        when(visualizationJobRepository.findByActiveKey("viz:1")).thenReturn(Optional.of(running));
+
+        VisualizationJobResponseDTO result = service.startJob(1L, 100L, 1L);
+
+        assertTrue(result.isReused());
+        assertEquals("running", result.getJobId());
+        assertEquals(1, result.getCompletedSteps());
+        verify(visualizationJobRepository, never()).insert(any(VisualizationJob.class));
+        verify(processRepository, never()).findById(any());
+    }
+
+    @Test
+    void startJob_losesConcurrentInsertRace_joinsTheWinner() {
+        when(processRepository.findById(1L)).thenReturn(Optional.of(processWithSteps(1L, 2)));
+        VisualizationJob winner = new VisualizationJob();
+        winner.setId("winner");
+        winner.setStatus(VisualizationJobStatus.QUEUED);
+        when(visualizationJobRepository.findByActiveKey("viz:1")).thenReturn(Optional.empty(), Optional.of(winner));
+        when(visualizationJobRepository.insert(any(VisualizationJob.class))).thenThrow(new DuplicateKeyException("activeKey"));
+
+        VisualizationJobResponseDTO result = service.startJob(1L, 100L, 1L);
+
+        assertTrue(result.isReused());
+        assertEquals("winner", result.getJobId());
+    }
+
+    @Test
+    void startJob_processOfAnotherRecipe_isNotFound() {
+        Process process = processWithSteps(1L, 1);
+        process.setRecipeId(555L);
+        when(processRepository.findById(1L)).thenReturn(Optional.of(process));
+
+        assertThrows(NoSuchElementException.class, () -> service.startJob(1L, 100L, 1L));
+        verify(visualizationJobRepository, never()).insert(any(VisualizationJob.class));
+    }
+
+    @Test
+    void getJobStatus_jobOfAnotherUserRecipeOrProcess_isNotFound() {
+        VisualizationJob job = new VisualizationJob();
+        job.setId("j1");
+        job.setRecipeId("100");
+        job.setProcessId(1L);
+        job.setUserId(1L);
+        job.setStatus(VisualizationJobStatus.IN_PROGRESS);
+        when(visualizationJobRepository.findById("j1")).thenReturn(Optional.of(job));
+
+        assertEquals("j1", service.getJobStatus(1L, 100L, 1L, "j1").getJobId());
+        assertThrows(NoSuchElementException.class, () -> service.getJobStatus(2L, 100L, 1L, "j1"));
+        assertThrows(NoSuchElementException.class, () -> service.getJobStatus(1L, 101L, 1L, "j1"));
+        assertThrows(NoSuchElementException.class, () -> service.getJobStatus(1L, 100L, 2L, "j1"));
+    }
+
+    @Test
+    void startJob_onCompletion_clearsActiveKeySoANewJobCanStart() throws Exception {
+        when(imageGenerationClient.generate(anyString()))
+                .thenReturn(new ImageGenerationClient.GeneratedImage("image/png", new byte[]{1}));
+        when(processRepository.findById(1L)).thenReturn(Optional.of(processWithSteps(1L, 1)));
+
+        service.startJob(1L, 100L, 1L);
+
+        ArgumentCaptor<Update> updateCaptor = ArgumentCaptor.forClass(Update.class);
+        verify(mongoTemplate, timeout(5000).atLeast(3))
+                .updateFirst(any(Query.class), updateCaptor.capture(), eq(VisualizationJob.class));
+        Update completed = updateCaptor.getAllValues().stream()
+                .filter(u -> statusValue(u) == VisualizationJobStatus.COMPLETED)
+                .findFirst().orElseThrow();
+        Document unset = (Document) completed.getUpdateObject().get("$unset");
+        assertTrue(unset != null && unset.containsKey("activeKey"));
+    }
+
+    /** Edits the user saved while the job ran must survive: the final save merges into a fresh read. */
+    @Test
+    void startJob_finalSave_mergesIntoTheLatestSavedProcess() throws Exception {
+        when(imageGenerationClient.generate(anyString()))
+                .thenReturn(new ImageGenerationClient.GeneratedImage("image/png", new byte[]{1}));
+        Process atStart = processWithSteps(4L, 1);
+        Process editedMeanwhile = processWithSteps(4L, 1);
+        editedMeanwhile.setName("Renamed while generating");
+        when(processRepository.findById(4L)).thenReturn(Optional.of(atStart), Optional.of(editedMeanwhile));
+
+        service.startJob(1L, 100L, 4L);
+
+        verify(processRepository, timeout(5000).times(1)).save(editedMeanwhile);
+        verify(processRepository, never()).save(atStart);
+        assertEquals("https://cdn.example/img.png", editedMeanwhile.getNodes().get(0).getData().get("imageUrl"));
     }
 
     /**

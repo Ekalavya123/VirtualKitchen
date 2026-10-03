@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react'
 import { ProcessApi, RecipeDetailApi } from '../../../api'
 import type { Process, ProcessEdge, ProcessNode, ProcessViewport } from '../../../types/process'
-import { normalizeRecipeStepNodeData, withRecipeStepActionOnProcesses } from '../process/model/recipeStepData'
+import { normalizeRecipeStepNodeData, withRecipeStepActionOnProcesses, withRecipeStepVisualization } from '../process/model/recipeStepData'
+import { useJobTracker } from './useJobTracker'
 
 /**
  * A process not yet created on the backend (e.g. from AI generation — see
@@ -102,6 +103,8 @@ export function RecipeSessionProvider({ recipeId, children }: { recipeId: number
   const [dirtyIds, setDirtyIds] = useState<Set<number>>(new Set())
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const savingRef = useRef(false)
+  const jobTracker = useJobTracker()
 
   useEffect(() => {
     let cancelled = false
@@ -113,6 +116,9 @@ export function RecipeSessionProvider({ recipeId, children }: { recipeId: number
         processesRef.current = processes
         setDirtyIds(new Set())
         setVersion((v) => v + 1)
+        // Re-attach to any generation/visuals job still running (or finished while the user was
+        // away) — the visuals applier below then fills in the steps generated so far.
+        void jobTracker.discover(recipeId)
       })
       .catch((error) => {
         if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Unable to load this recipe\'s processes')
@@ -123,7 +129,50 @@ export function RecipeSessionProvider({ recipeId, children }: { recipeId: number
     return () => {
       cancelled = true
     }
-  }, [recipeId])
+  }, [recipeId, jobTracker])
+
+  // Applies Generate Visuals step results to the session as they arrive, whether or not that
+  // process's canvas is open — so leaving a process mid-job (or coming back after a reload) still
+  // shows every image generated so far, and a later Save can't send nodes missing them. Not marked
+  // dirty: the job itself writes these same images to the backend process when it finishes.
+  const appliedStepsRef = useRef(new Set<string>())
+  useEffect(() => {
+    if (loading) return undefined
+    const applyVisuals = () => {
+      let changed = false
+      for (const tracked of jobTracker.all()) {
+        if (tracked.kind !== 'visuals' || tracked.recipeId !== recipeId) continue
+        const fresh = tracked.job.steps.filter((step) =>
+          step.success && step.visualizationAssetId != null && !appliedStepsRef.current.has(`${tracked.job.jobId}:${step.stepId}`))
+        if (fresh.length === 0) continue
+
+        const freshByStepId = new Map(fresh.map((step) => [step.stepId, step]))
+        processesRef.current = processesRef.current.map((process) => {
+          if (process.id !== tracked.processId) return process
+          return {
+            ...process,
+            nodes: process.nodes.map((node) => {
+              const step = freshByStepId.get(node.id)
+              if (!step || node.kind !== 'STEP') return node
+              return {
+                ...node,
+                data: withRecipeStepVisualization(node.data, {
+                  assetId: step.visualizationAssetId,
+                  imageUrl: step.imageUrl ?? undefined,
+                  status: 'generated',
+                }) as unknown as Record<string, unknown>,
+              }
+            }),
+          }
+        })
+        fresh.forEach((step) => appliedStepsRef.current.add(`${tracked.job.jobId}:${step.stepId}`))
+        changed = true
+      }
+      if (changed) setVersion((v) => v + 1)
+    }
+    applyVisuals()
+    return jobTracker.subscribe(applyVisuals)
+  }, [loading, recipeId, jobTracker])
 
   const getProcesses = useCallback(() => processesRef.current, [])
   const getProcess = useCallback((processId: number) => processesRef.current.find((process) => process.id === processId), [])
@@ -164,6 +213,10 @@ export function RecipeSessionProvider({ recipeId, children }: { recipeId: number
   const isProcessDirty = useCallback((processId: number) => dirtyIds.has(processId), [dirtyIds])
 
   const saveAll = useCallback(async () => {
+    // Re-entry guard: a second click before `saving` re-renders the button disabled would
+    // otherwise create any pending (AI-generated) processes twice.
+    if (savingRef.current) return
+    savingRef.current = true
     setSaving(true)
     setSaveError(null)
     try {
@@ -210,6 +263,7 @@ export function RecipeSessionProvider({ recipeId, children }: { recipeId: number
       setSaveError(error instanceof Error ? error.message : 'Unable to save this recipe right now')
       throw error
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }, [recipeId])

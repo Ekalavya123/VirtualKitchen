@@ -5,6 +5,8 @@ import com.processVisualisation.virtualKitchen.restclient.config.SupabasePropert
 import com.processVisualisation.virtualKitchen.restclient.exception.AIAuthenticationException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AICommunicationException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AITimeoutException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -20,6 +22,8 @@ import org.springframework.web.client.RestClientResponseException;
  */
 @Component
 public class SupabaseImageStorageClient implements ImageStorageClient {
+
+    private static final Logger log = LoggerFactory.getLogger(SupabaseImageStorageClient.class);
 
     private final RestClient restClient;
     private final SupabaseProperties properties;
@@ -64,6 +68,34 @@ public class SupabaseImageStorageClient implements ImageStorageClient {
      */
     @Override
     public String upload(byte[] data, String mimeType, String path) {
+        long startedAt = System.nanoTime();
+        int bytes = data == null ? 0 : data.length;
+        try {
+            String url = doUpload(data, mimeType, path);
+            log.debug("event=image_upload_stored provider=supabase bytes={} durationMs={}", bytes, elapsedMs(startedAt));
+            return url;
+        } catch (RuntimeException ex) {
+            // WARN, no stack: the caller decides whether this fails the step (the payload stays recoverable).
+            log.warn("event=image_upload_failed provider=supabase bytes={} durationMs={} errorType={} status={}",
+                    bytes, elapsedMs(startedAt), ex.getClass().getSimpleName(), httpStatusOf(ex));
+            throw ex;
+        }
+    }
+
+    private static long elapsedMs(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
+    }
+
+    private static Integer httpStatusOf(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof RestClientResponseException rre) {
+                return rre.getStatusCode().value();
+            }
+        }
+        return null;
+    }
+
+    private String doUpload(byte[] data, String mimeType, String path) {
         validateConfiguration();
         try {
             restClient.post()

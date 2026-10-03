@@ -117,12 +117,14 @@ public class GeminiPromptCacheService {
             Instant expireTime = root.hasNonNull("expireTime")
                     ? Instant.parse(root.get("expireTime").asText())
                     : clock.instant().plusSeconds(config.getTtlSeconds());
-            logger.info("Created Gemini prompt cache {} for model {} ({} tokens, expires {}, {} ms)", name, model,
+            logger.info("event=ai_prompt_cache_created provider=gemini cache={} model={} tokens={} expiresAt={} durationMs={}",
+                    name, model,
                     root.path("usageMetadata").path("totalTokenCount").asText("NA"), expireTime, elapsedMs(startedAt));
             return new Entry(name, expireTime.minusSeconds(config.getRefreshMarginSeconds()));
         } catch (Exception ex) {
-            logger.warn("Gemini prompt cache creation failed for model {}; sending the system prompt inline for the next {}s: {}",
-                    model, config.getFailureBackoffSeconds(), ex.getMessage());
+            logger.warn("event=ai_prompt_cache_create_failed provider=gemini model={} fallback=inline_system_prompt "
+                    + "backoffSeconds={} errorType={} error={}",
+                    model, config.getFailureBackoffSeconds(), ex.getClass().getSimpleName(), ex.getMessage());
             return new Entry(null, clock.instant().plusSeconds(config.getFailureBackoffSeconds()));
         }
     }

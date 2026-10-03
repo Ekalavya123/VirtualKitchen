@@ -6,6 +6,8 @@ type RecipeProcessGenerationModalProps = {
   onGenerate: (recipeText: string) => Promise<void>
   isGenerating: boolean
   progress: { percent: number; stageLabel: string } | null
+  /** Why the most recent background generation failed, if it did. */
+  jobError?: string | null
   /** True when generating will replace the recipe's current MAIN process content — shown as an inline warning, not a separate confirm dialog, so the user sees it right where they're about to act. */
   willReplaceMain: boolean
 }
@@ -25,7 +27,7 @@ chicken and cook.`
  * visual pattern. It's a modal because generation is an occasional action, not a constant
  * companion to editing.
  */
-export default function RecipeProcessGenerationModal({ onClose, onGenerate, isGenerating, progress, willReplaceMain }: RecipeProcessGenerationModalProps) {
+export default function RecipeProcessGenerationModal({ onClose, onGenerate, isGenerating, progress, jobError, willReplaceMain }: RecipeProcessGenerationModalProps) {
   const [recipeText, setRecipeText] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
@@ -44,7 +46,7 @@ export default function RecipeProcessGenerationModal({ onClose, onGenerate, isGe
   }
 
   return (
-    <div className="flow-canvas-export-modal-overlay" onClick={() => !isGenerating && onClose()}>
+    <div className="flow-canvas-export-modal-overlay" onClick={onClose}>
       <div className="flow-canvas-export-modal" onClick={(event) => event.stopPropagation()}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--flow-border)' }}>
           <div>
@@ -56,8 +58,8 @@ export default function RecipeProcessGenerationModal({ onClose, onGenerate, isGe
           <button
             type="button"
             onClick={onClose}
-            disabled={isGenerating}
-            style={{ width: 30, height: 30, borderRadius: 7, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text-subtle)', cursor: isGenerating ? 'not-allowed' : 'pointer', fontSize: 15 }}
+            title={isGenerating ? 'Close — generation keeps running in the background' : 'Close'}
+            style={{ width: 30, height: 30, borderRadius: 7, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text-subtle)', cursor: 'pointer', fontSize: 15 }}
           >
             ✕
           </button>
@@ -80,8 +82,14 @@ export default function RecipeProcessGenerationModal({ onClose, onGenerate, isGe
             style={{ minHeight: 180 }}
           />
 
-          {errorMessage && (
-            <div className="recipe-builder-status recipe-builder-status-error" role="alert">{errorMessage}</div>
+          {(errorMessage || (!isGenerating && jobError)) && (
+            <div className="recipe-builder-status recipe-builder-status-error" role="alert">{errorMessage || jobError}</div>
+          )}
+
+          {isGenerating && (
+            <div style={{ fontSize: 11.5, color: 'var(--flow-text-subtle)' }}>
+              Generation is running in the background — you can close this, keep editing, or leave the page. The result will load here when it's ready.
+            </div>
           )}
 
           {isGenerating && progress && (
@@ -105,10 +113,9 @@ export default function RecipeProcessGenerationModal({ onClose, onGenerate, isGe
             <button
               type="button"
               onClick={onClose}
-              disabled={isGenerating}
-              style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text-muted)', fontSize: 12.5, fontWeight: 700, cursor: isGenerating ? 'not-allowed' : 'pointer' }}
+              style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text-muted)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
             >
-              Cancel
+              {isGenerating ? 'Run in background' : 'Cancel'}
             </button>
           </div>
         </div>

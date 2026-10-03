@@ -7,7 +7,7 @@
 import { apiGet, apiPost, apiDelete, apiPut } from './client'
 import { API } from './endpoints'
 import type { Process, ProcessBatchUpdateItem, ProcessCreateRequest, ProcessUpdateRequest } from '../types/process'
-import type { NutritionInfo, RecipeProcessGenerationJobResponse, RecipeProcessGenerationRequest, RecipeProcessVisualizationJobResponse, RecipeDetail, RecipeIngredient, UnitType } from '../types/recipe'
+import type { NutritionInfo, RecipeActiveJobsResponse, RecipeProcessGenerationJobResponse, RecipeProcessGenerationRequest, RecipeProcessVisualizationJobResponse, RecipeDetail, RecipeIngredient, UnitType } from '../types/recipe'
 
 export type RecipeVisibility = 'PUBLIC' | 'PRIVATE'
 
@@ -194,8 +194,8 @@ export const ProcessApi = {
 
 /**
  * AI-driven recipe process generation (semantic MAIN + subprocesses from free-form recipe text) —
- * async job only. The result is never persisted by the backend; the frontend loads it into the
- * current Recipe working session (see
+ * async job only. The result is kept only on the job (never saved as a process) by the backend; the
+ * frontend loads it into the current Recipe working session (see
  * features/recipe-tool/process/adapters/recipeProcessGenerationConverter.ts and
  * RecipeSessionContext) and the user Saves explicitly.
  */
@@ -204,8 +204,20 @@ export const RecipeProcessGenerationApi = {
     return apiPost<RecipeProcessGenerationJobResponse>(API.recipeProcessGeneration.startJob(recipeId), data)
   },
 
-  async getJobStatus(recipeId: number, jobId: string): Promise<RecipeProcessGenerationJobResponse> {
-    return apiGet<RecipeProcessGenerationJobResponse>(API.recipeProcessGeneration.jobStatus(recipeId, jobId))
+  async getJobStatus(recipeId: number, jobId: string, signal?: AbortSignal): Promise<RecipeProcessGenerationJobResponse> {
+    return apiGet<RecipeProcessGenerationJobResponse>(API.recipeProcessGeneration.jobStatus(recipeId, jobId), { signal })
+  },
+
+  /** Records that a completed job's result was loaded into the session, so it isn't offered back again. */
+  async markApplied(recipeId: number, jobId: string): Promise<void> {
+    return apiPost<void>(API.recipeProcessGeneration.markApplied(recipeId, jobId), undefined)
+  },
+}
+
+/** The caller's background AI jobs for a recipe — see features/recipe-tool/context/JobTrackerContext.tsx. */
+export const RecipeJobsApi = {
+  async getActive(recipeId: number): Promise<RecipeActiveJobsResponse> {
+    return apiGet<RecipeActiveJobsResponse>(API.recipeJobs.active(recipeId))
   },
 }
 
@@ -219,8 +231,8 @@ export const RecipeProcessVisualizationApi = {
     return apiPost<RecipeProcessVisualizationJobResponse>(API.recipeProcessVisualization.startJob(recipeId, processId), {})
   },
 
-  async getJobStatus(recipeId: number, processId: number, jobId: string): Promise<RecipeProcessVisualizationJobResponse> {
-    return apiGet<RecipeProcessVisualizationJobResponse>(API.recipeProcessVisualization.jobStatus(recipeId, processId, jobId))
+  async getJobStatus(recipeId: number, processId: number, jobId: string, signal?: AbortSignal): Promise<RecipeProcessVisualizationJobResponse> {
+    return apiGet<RecipeProcessVisualizationJobResponse>(API.recipeProcessVisualization.jobStatus(recipeId, processId, jobId), { signal })
   },
 }
 

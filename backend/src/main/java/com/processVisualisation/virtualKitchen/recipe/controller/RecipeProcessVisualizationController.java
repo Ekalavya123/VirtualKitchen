@@ -32,7 +32,8 @@ public class RecipeProcessVisualizationController {
     /**
      * Starts an async visualization job for this process's own steps and returns immediately —
      * the actual generation work runs on a background task pool. Poll {@link #getJobStatus} with
-     * the returned jobId for progress/completion.
+     * the returned jobId for progress/completion. If a visualization is already running for this
+     * process, that job is returned (with {@code reused=true}) instead of starting a second one.
      */
     @PostMapping("/jobs")
     public ApiResponse<VisualizationJobResponseDTO> startJob(@PathVariable Long recipeId, @PathVariable Long processId) {
@@ -47,7 +48,7 @@ public class RecipeProcessVisualizationController {
     @GetMapping("/jobs/{jobId}")
     public ApiResponse<VisualizationJobResponseDTO> getJobStatus(
             @PathVariable Long recipeId, @PathVariable Long processId, @PathVariable String jobId) {
-        VisualizationJobResponseDTO data = recipeProcessVisualizationJobService.getJobStatus(jobId);
+        VisualizationJobResponseDTO data = recipeProcessVisualizationJobService.getJobStatus(currentUserId(), recipeId, processId, jobId);
         return build(data, "Process visualization job status");
     }
 

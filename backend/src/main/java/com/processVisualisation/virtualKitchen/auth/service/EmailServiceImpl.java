@@ -51,7 +51,7 @@ public class EmailServiceImpl implements EmailService {
         try {
             mailSender.send(message);
         } catch (MailException e) {
-            log.error("Failed to send {} OTP email to {}", purpose, to, e);
+            log.error("event=email_send_failed purpose={} recipientDomain={}", purpose, domainOf(to), e);
             throw new AuthException("Unable to send verification email. Please try again later.", HttpStatus.BAD_GATEWAY);
         }
     }
@@ -89,5 +89,14 @@ public class EmailServiceImpl implements EmailService {
                 + otp
                 + "\n\nThis code expires shortly and can only be used once. "
                 + "If you did not request this, you can safely ignore this email.";
+    }
+
+    /** Only the domain part of an address is logged, so failures can be diagnosed without recording PII. */
+    private static String domainOf(String address) {
+        if (address == null) {
+            return "unknown";
+        }
+        int at = address.lastIndexOf('@');
+        return at >= 0 && at < address.length() - 1 ? address.substring(at + 1) : "unknown";
     }
 }

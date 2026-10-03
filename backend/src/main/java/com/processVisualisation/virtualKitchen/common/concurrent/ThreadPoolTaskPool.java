@@ -2,20 +2,28 @@ package com.processVisualisation.virtualKitchen.common.concurrent;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * {@link TaskPool} backed by a fixed-size {@link ExecutorService}. Every task
  * body is wrapped so any exception is captured as a {@link TaskResult#failure}
  * rather than being allowed to escape the worker thread.
+ * <p>
+ * The submitting thread's logging MDC (request ID, job ID, user ID) is copied
+ * onto the worker for the duration of each task and the worker's previous MDC
+ * restored afterwards, so pooled threads never carry one request's IDs into
+ * another's logs.
  */
 public class ThreadPoolTaskPool implements TaskPool {
 
@@ -59,7 +67,8 @@ public class ThreadPoolTaskPool implements TaskPool {
      */
     @Override
     public <R> CompletableFuture<TaskResult<R>> submit(NamedTask<R> task) {
-        return CompletableFuture.supplyAsync(() -> runSafely(task), executor);
+        Map<String, String> context = MDC.getCopyOfContextMap();
+        return CompletableFuture.supplyAsync(() -> withMdc(context, () -> runSafely(task)), executor);
     }
 
     /**
@@ -73,16 +82,17 @@ public class ThreadPoolTaskPool implements TaskPool {
      */
     @Override
     public <R> BatchResult<R> submitAll(List<NamedTask<R>> tasks, Consumer<TaskResult<R>> onTaskComplete) {
+        Map<String, String> context = MDC.getCopyOfContextMap();
         List<CompletableFuture<TaskResult<R>>> futures = new ArrayList<>(tasks.size());
         for (NamedTask<R> task : tasks) {
-            CompletableFuture<TaskResult<R>> future = CompletableFuture
-                    .supplyAsync(() -> runSafely(task), executor)
-                    .thenApply(result -> {
-                        if (onTaskComplete != null) {
-                            onTaskComplete.accept(result);
-                        }
-                        return result;
-                    });
+            // The callback runs inside the same MDC scope as the task, so its logs carry the caller's IDs too.
+            CompletableFuture<TaskResult<R>> future = CompletableFuture.supplyAsync(() -> withMdc(context, () -> {
+                TaskResult<R> result = runSafely(task);
+                if (onTaskComplete != null) {
+                    onTaskComplete.accept(result);
+                }
+                return result;
+            }), executor);
             futures.add(future);
         }
 
@@ -95,7 +105,7 @@ public class ThreadPoolTaskPool implements TaskPool {
     /**
      * Executes {@code task} and converts any thrown {@link Throwable} into a
      * failed {@link TaskResult} instead of letting it escape onto the worker
-     * thread; the failure is also logged at WARN level.
+     * thread; the failure is also logged at DEBUG level (the caller owns reporting it).
      *
      * @param <R> the type of result produced by the task
      * @param task the task to run
@@ -106,7 +116,8 @@ public class ThreadPoolTaskPool implements TaskPool {
         try {
             return TaskResult.success(task.taskId(), task.task().execute());
         } catch (Throwable t) {
-            log.warn("Task {} failed", task.taskId(), t);
+            // The caller receives the failure and owns logging it; this keeps the stack out of the main log twice.
+            log.debug("event=task_failed taskId={} errorType={}", task.taskId(), t.getClass().getSimpleName(), t);
             return TaskResult.failure(task.taskId(), t);
         }
     }
@@ -128,5 +139,24 @@ public class ThreadPoolTaskPool implements TaskPool {
     @Override
     public void shutdown() {
         executor.shutdown();
+    }
+
+    /** Runs {@code body} with {@code context} as the MDC, then restores whatever the worker thread had before. */
+    private static <T> T withMdc(Map<String, String> context, Supplier<T> body) {
+        Map<String, String> previous = MDC.getCopyOfContextMap();
+        if (context != null) {
+            MDC.setContextMap(context);
+        } else {
+            MDC.clear();
+        }
+        try {
+            return body.get();
+        } finally {
+            if (previous != null) {
+                MDC.setContextMap(previous);
+            } else {
+                MDC.clear();
+            }
+        }
     }
 }

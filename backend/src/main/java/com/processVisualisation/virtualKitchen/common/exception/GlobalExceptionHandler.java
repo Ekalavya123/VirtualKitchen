@@ -8,11 +8,21 @@ import com.processVisualisation.virtualKitchen.restclient.exception.AIClientExce
 import com.processVisualisation.virtualKitchen.restclient.exception.AICommunicationException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AIInvalidResponseException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AITimeoutException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.TypeMismatchException;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.http.converter.HttpMessageNotWritableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.time.LocalDateTime;
@@ -24,9 +34,16 @@ import java.util.NoSuchElementException;
  * bean-validation failures) and this application's custom exceptions
  * (AI-client errors, recipe flow/access errors, auth errors) into a
  * consistent {@link ErrorResponse} JSON body with an appropriate HTTP status.
+ * <p>
+ * This is also the one place a failed synchronous request is logged, once: client errors (400/404) at DEBUG,
+ * rejected requests (403/409/422/429, auth) at WARN, AI/provider failures at ERROR without a stack (the type
+ * and message say what happened, and the AI client has already logged the call), and anything unexpected at
+ * ERROR with the full stack trace. The request ID comes from the MDC.
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     /**
      * Catches a MongoDB unique-index violation and reports it as a conflict.
@@ -37,6 +54,8 @@ public class GlobalExceptionHandler {
     // Handle MongoDB Duplicate Key (Unique Constraint)
     @ExceptionHandler(DuplicateKeyException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateKey(DuplicateKeyException ex) {
+        // The driver message quotes the duplicate value (often an email address), so it is not logged.
+        log.warn("event=request_rejected status=409 errorType={}", ex.getClass().getSimpleName());
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.CONFLICT.value(),
@@ -56,6 +75,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleUserNotFoundException(UserNotFoundException ex) {
+        logClientError(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.CONFLICT.value(),
@@ -76,6 +96,7 @@ public class GlobalExceptionHandler {
     // Handle Validation Errors (e.g., @Email, @NotBlank)
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException ex) {
+        logClientError(ex);
         String msg = ex.getBindingResult().getFieldErrors().get(0).getDefaultMessage();
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
@@ -94,6 +115,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AIAuthenticationException.class)
     public ResponseEntity<ErrorResponse> handleAIAuthentication(AIAuthenticationException ex) {
+        logUpstreamFailure(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.UNAUTHORIZED.value(),
@@ -111,6 +133,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AITimeoutException.class)
     public ResponseEntity<ErrorResponse> handleAITimeout(AITimeoutException ex) {
+        logUpstreamFailure(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.GATEWAY_TIMEOUT.value(),
@@ -128,6 +151,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AIInvalidResponseException.class)
     public ResponseEntity<ErrorResponse> handleAIInvalidResponse(AIInvalidResponseException ex) {
+        logUpstreamFailure(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.BAD_GATEWAY.value(),
@@ -146,6 +170,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AICommunicationException.class)
     public ResponseEntity<ErrorResponse> handleAICommunication(AICommunicationException ex) {
+        logUpstreamFailure(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.BAD_GATEWAY.value(),
@@ -164,6 +189,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AIClientException.class)
     public ResponseEntity<ErrorResponse> handleAIGeneric(AIClientException ex) {
+        logUpstreamFailure(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
@@ -181,6 +207,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(RecipeProcessAiException.class)
     public ResponseEntity<ErrorResponse> handleRecipeGeneration(RecipeProcessAiException ex) {
+        logRejected(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.UNPROCESSABLE_ENTITY.value(),
@@ -199,6 +226,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(RecipeAccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleRecipeAccessDenied(RecipeAccessDeniedException ex) {
+        logRejected(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.FORBIDDEN.value(),
@@ -219,6 +247,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AuthException.class)
     public ResponseEntity<ErrorResponse> handleAuthException(AuthException ex) {
+        logRejected(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 ex.getStatus().value(),
@@ -239,6 +268,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(NoAvailableModelException.class)
     public ResponseEntity<ErrorResponse> handleNoAvailableModel(NoAvailableModelException ex) {
+        logUpstreamFailure(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.SERVICE_UNAVAILABLE.value(),
@@ -257,6 +287,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AiQueueFullException.class)
     public ResponseEntity<ErrorResponse> handleAiQueueFull(AiQueueFullException ex) {
+        logRejected(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.TOO_MANY_REQUESTS.value(),
@@ -275,6 +306,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AiRequestTimeoutException.class)
     public ResponseEntity<ErrorResponse> handleAiRequestTimeout(AiRequestTimeoutException ex) {
+        logUpstreamFailure(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.GATEWAY_TIMEOUT.value(),
@@ -294,6 +326,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(ProcessValidationException.class)
     public ResponseEntity<ErrorResponse> handleProcessValidation(ProcessValidationException ex) {
+        logRejected(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.UNPROCESSABLE_ENTITY.value(),
@@ -316,6 +349,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(NoSuchElementException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(NoSuchElementException ex) {
+        logClientError(ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.NOT_FOUND.value(),
@@ -323,5 +357,59 @@ public class GlobalExceptionHandler {
                 ex.getMessage() != null ? ex.getMessage() : "The requested resource was not found"
         );
         return new ResponseEntity<>(error, HttpStatus.NOT_FOUND);
+    }
+
+    /**
+     * Last-resort handler for anything not mapped above. Exceptions Spring MVC or Spring Security already know
+     * how to answer (malformed JSON, unknown path, wrong method, {@code @ResponseStatus} types, ...) are
+     * rethrown untouched, which hands them back to Spring's default resolvers so their usual 4xx statuses are
+     * kept. Everything else is a bug: logged with its stack trace and answered with a generic 500 that does not
+     * leak the exception message.
+     *
+     * @param ex the unhandled exception
+     * @return an {@link ErrorResponse} with a generic message, at HTTP 500 Internal Server Error
+     * @throws Exception {@code ex} itself, when it is a framework exception with its own status mapping
+     */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) throws Exception {
+        if (isHandledByFramework(ex)) {
+            log.debug("event=request_rejected errorType={} error={}", ex.getClass().getSimpleName(), ex.getMessage());
+            throw ex;
+        }
+        log.error("event=request_failed status=500 errorType={}", ex.getClass().getSimpleName(), ex);
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.INTERNAL_SERVER_ERROR.value(),
+                "Internal Server Error",
+                "An unexpected error occurred"
+        );
+        return new ResponseEntity<>(error, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+
+    private static boolean isHandledByFramework(Exception ex) {
+        return ex instanceof org.springframework.web.ErrorResponse
+                || ex instanceof jakarta.servlet.ServletException
+                || ex instanceof TypeMismatchException
+                || ex instanceof HttpMessageNotReadableException
+                || ex instanceof HttpMessageNotWritableException
+                || ex instanceof BindException
+                || ex instanceof AccessDeniedException
+                || ex instanceof AuthenticationException
+                || AnnotatedElementUtils.hasAnnotation(ex.getClass(), ResponseStatus.class);
+    }
+
+    /** 400/404: the caller's mistake, not worth a line in the main log by default. */
+    private static void logClientError(Exception ex) {
+        log.debug("event=request_rejected errorType={} error={}", ex.getClass().getSimpleName(), ex.getMessage());
+    }
+
+    /** Handled, expected-but-unwanted outcomes: forbidden, conflict, invalid AI output, capacity. */
+    private static void logRejected(Exception ex) {
+        log.warn("event=request_rejected errorType={} error={}", ex.getClass().getSimpleName(), ex.getMessage());
+    }
+
+    /** A dependency (AI provider, model routing) failed; needs attention but the stack adds nothing. */
+    private static void logUpstreamFailure(Exception ex) {
+        log.error("event=request_failed errorType={} error={}", ex.getClass().getSimpleName(), ex.getMessage());
     }
 }

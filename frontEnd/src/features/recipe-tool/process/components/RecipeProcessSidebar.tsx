@@ -13,6 +13,8 @@ type RecipeProcessSidebarProps = {
   onCreateSubprocess: (name: string, description: string) => Promise<void>
   /** Opens the "Generate with AI" modal — omitted (button hidden) for a non-owner. */
   onOpenGenerate?: () => void
+  /** Set while an AI generation runs for this recipe — the AI button then shows its progress and reopens the modal. */
+  generationProgress?: { percent: number; stageLabel: string } | null
 }
 
 /**
@@ -33,6 +35,7 @@ export default function RecipeProcessSidebar({
   creatingMainProcess,
   onCreateSubprocess,
   onOpenGenerate,
+  generationProgress,
 }: RecipeProcessSidebarProps) {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [name, setName] = useState('')
@@ -114,10 +117,10 @@ export default function RecipeProcessSidebar({
               <button
                 type="button"
                 onClick={onOpenGenerate}
-                title="Generate with AI"
+                title={generationProgress ? `Generating with AI — ${generationProgress.stageLabel}` : 'Generate with AI'}
                 style={{ padding: '4px 9px', borderRadius: 7, border: '1px solid var(--flow-magic-border)', background: 'var(--flow-magic-soft)', color: 'var(--flow-magic)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
               >
-                ✨ AI
+                {generationProgress ? `✨ ${generationProgress.percent}%` : '✨ AI'}
               </button>
             )}
             <button

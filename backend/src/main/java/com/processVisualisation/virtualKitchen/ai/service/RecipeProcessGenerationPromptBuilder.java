@@ -32,6 +32,12 @@ import static com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocab
 @Component
 public class RecipeProcessGenerationPromptBuilder {
 
+    /**
+     * Logged with every generation so a change in output quality can be tied to a prompt change.
+     * Bump it whenever the system/initial/retry prompt wording or structure changes.
+     */
+    public static final String PROMPT_VERSION = "1";
+
     /** Aliases shown per ingredient — enough to recognise regional names without bloating the prompt. */
     private static final int MAX_INGREDIENT_ALIASES = 3;
 

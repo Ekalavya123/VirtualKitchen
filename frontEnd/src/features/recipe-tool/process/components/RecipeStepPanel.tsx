@@ -50,6 +50,8 @@ type RecipeStepPanelProps = {
    */
   onGenerateVisuals?: () => void
   isGeneratingVisuals?: boolean
+  /** Button label while generating, e.g. "Generating… 2/5" — falls back to "Generating…". */
+  visualsProgressLabel?: string
 }
 
 type ActionOnTab = 'INGREDIENTS' | 'PROCESSES' | 'STEPS'
@@ -86,6 +88,7 @@ export default function RecipeStepPanel({
   onOpenSubprocess,
   onGenerateVisuals,
   isGeneratingVisuals,
+  visualsProgressLabel,
 }: RecipeStepPanelProps) {
   const [actionOnTab, setActionOnTab] = useState<ActionOnTab>('INGREDIENTS')
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -565,7 +568,7 @@ export default function RecipeStepPanel({
                   fontSize: 11.5, fontWeight: 700, cursor: isGeneratingVisuals ? 'wait' : 'pointer', opacity: isGeneratingVisuals ? 0.7 : 1,
                 }}
               >
-                {isGeneratingVisuals ? 'Generating…' : visualization?.imageUrl ? '🔄 Regenerate visuals' : '🖼️ Generate visuals'}
+                {isGeneratingVisuals ? (visualsProgressLabel ?? 'Generating…') : visualization?.imageUrl ? '🔄 Regenerate visuals' : '🖼️ Generate visuals'}
               </button>
               <div style={{ fontSize: 10, color: 'var(--flow-text-subtle)' }}>
                 Generates an image for every step of this process — not only this one.

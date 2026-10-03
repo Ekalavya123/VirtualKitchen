@@ -61,7 +61,8 @@ import { useRecipeSession, type RecipeSessionContextValue } from '../../context/
 import type { Process } from '../../../../types/process'
 import type { RecipeProcessBreadcrumbEntry, RecipeProcessVisualizationStepResult } from '../../../../types/recipe'
 import { useNotifications } from '../../../../shared/components/notifications/NotificationProvider'
-import { RecipeProcessVisualizationApi } from '../../../../api'
+import { isTrackedJobActive, visualsJobKey } from '../../context/jobTracker'
+import { useJobTracker, useTrackedJob } from '../../context/useJobTracker'
 import RecipeConditionPanel from './RecipeConditionPanel'
 import RecipeStepPanel from './RecipeStepPanel'
 import RecipeProcessTopBar from './RecipeProcessTopBar'
@@ -71,8 +72,7 @@ import '../styles/RecipeProcessSidebar.css'
 import '../styles/RecipePropertiesPanel.css'
 import '../styles/RecipeProcessCanvas.css'
 
-const VISUALIZATION_JOB_POLL_MS = 2000
-const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
+type GenerateVisualsStatus = { type: 'success' | 'error' | 'info'; text: string }
 
 type HistoryEntry = { nodes: Node[]; edges: Edge[] }
 
@@ -255,12 +255,17 @@ function RecipeProcessCanvasContent({
   const [zoomPercent, setZoomPercent] = useState(Math.round((initialFlowData.viewport?.zoom ?? 1) * 100))
   const [exportJson, setExportJson] = useState<string | null>(null)
   const [showSlideshow, setShowSlideshow] = useState(false)
-  const [generatingVisuals, setGeneratingVisuals] = useState(false)
-  const [generateVisualsStatus, setGenerateVisualsStatus] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  // Generate Visuals state lives in the app-level JobTracker (keyed by process), so it's still
+  // correct after this instance remounts or the page reloads; only the start request is local.
+  const jobTracker = useJobTracker()
+  const visualsJob = useTrackedJob(visualsJobKey(processId))
+  const [startingVisuals, setStartingVisuals] = useState(false)
+  const generatingVisuals = startingVisuals || isTrackedJobActive(visualsJob)
+  const [generateVisualsMessage, setGenerateVisualsMessage] = useState<GenerateVisualsStatus | null>(null)
 
-  // Guards the polling loop below against setState-after-unmount — this instance remounts fresh
-  // per process (key={processId} on the outer RecipeProcessCanvas), so a job started just before
-  // switching processes must stop touching this instance's state once it's gone. Reset on every
+  // Guards generateVisuals below against setState-after-unmount — this instance remounts fresh
+  // per process (key={processId} on the outer RecipeProcessCanvas), so a start request still in
+  // flight when switching processes must not touch this instance's state once it's gone. Reset on every
   // (re-)mount rather than declared once: React StrictMode's
   // dev-only mount->cleanup->mount cycle would otherwise run the cleanup once during the synthetic
   // first "unmount" and permanently latch this to true even though the component is actually mounted.
@@ -661,68 +666,69 @@ function RecipeProcessCanvasContent({
   }, [setNodes])
 
   /**
-   * Starts the async per-step visualization job for this process's own STEP nodes (one generated
-   * image per step — CONDITION nodes and subprocesses referenced from Action On are never
-   * visualized by this call, see RecipeProcessVisualizationService) and polls it until it reaches a
-   * terminal status, applying each step's result to the canvas as soon as it shows up in a poll
-   * response. Generated images flow into the shared recipe session automatically, the same way any
-   * other canvas edit does (see the nodes/edges push-to-session effect above) — no separate
-   * plumbing needed here.
+   * Starts (or joins the already-running) per-step visualization job for this process's own STEP
+   * nodes — one generated image per step; CONDITION nodes and subprocesses referenced from Action
+   * On are never visualized by this call, see RecipeProcessVisualizationService. The job itself is
+   * followed by the app-level JobTracker, not this component, so it keeps running (and its progress
+   * stays visible) across process switches, page navigation and reloads.
    */
   const generateVisuals = useCallback(async () => {
+    if (generatingVisuals) return
     const stepNodeCount = nodes.filter(isRecipeStepNode).length
     if (stepNodeCount === 0) {
-      setGenerateVisualsStatus({ type: 'error', text: 'No steps to visualize' })
+      setGenerateVisualsMessage({ type: 'error', text: 'No steps to visualize' })
       return
     }
 
-    setGeneratingVisuals(true)
-    setGenerateVisualsStatus(null)
-
-    const appliedStepIds = new Set<string>()
-    const applyNewSteps = (steps: RecipeProcessVisualizationStepResult[]) => {
-      for (const step of steps) {
-        if (!appliedStepIds.has(step.stepId)) {
-          applyStepVisualization(step)
-          appliedStepIds.add(step.stepId)
-        }
-      }
-    }
-
+    setGenerateVisualsMessage(null)
+    setStartingVisuals(true)
     try {
-      let job = await RecipeProcessVisualizationApi.startJob(recipeId, processId)
-
-      while (!unmountedRef.current && (job.status === 'QUEUED' || job.status === 'IN_PROGRESS')) {
-        await sleep(VISUALIZATION_JOB_POLL_MS)
-        if (unmountedRef.current) break
-
-        job = await RecipeProcessVisualizationApi.getJobStatus(recipeId, processId, job.jobId)
-        applyNewSteps(job.steps)
-      }
-
-      if (unmountedRef.current) return
-
-      const successCount = job.steps.filter((step) => step.success).length
-      const failedCount = job.totalSteps - successCount
-
-      setGenerateVisualsStatus(
-        job.status === 'COMPLETED'
-          ? { type: 'success', text: `Generated visuals for all ${job.totalSteps} steps` }
-          : job.status === 'COMPLETED_WITH_ERRORS'
-            ? { type: 'error', text: `Generated ${successCount}/${job.totalSteps} steps — ${failedCount} failed` }
-            : { type: 'error', text: 'Unable to generate visuals right now.' }
-      )
+      await jobTracker.startVisuals(recipeId, processId)
     } catch (error) {
       if (!unmountedRef.current) {
-        setGenerateVisualsStatus({
+        setGenerateVisualsMessage({
           type: 'error',
           text: error instanceof Error ? error.message : 'Unable to generate visuals right now.',
         })
       }
     } finally {
-      if (!unmountedRef.current) setGeneratingVisuals(false)
+      if (!unmountedRef.current) setStartingVisuals(false)
     }
-  }, [recipeId, processId, nodes, applyStepVisualization])
+  }, [generatingVisuals, nodes, jobTracker, recipeId, processId])
+
+  // Applies each step's result to the canvas as soon as it shows up in a poll — including, on
+  // (re)mount, every step a job already finished while this process wasn't open. Generated images
+  // then flow into the shared recipe session the same way any other canvas edit does (see the
+  // nodes/edges push-to-session effect above).
+  const appliedVisualStepsRef = useRef(new Set<string>())
+  useEffect(() => {
+    if (!visualsJob) return
+    for (const step of visualsJob.job.steps) {
+      const appliedKey = `${visualsJob.job.jobId}:${step.stepId}`
+      if (appliedVisualStepsRef.current.has(appliedKey)) continue
+      applyStepVisualization(step)
+      appliedVisualStepsRef.current.add(appliedKey)
+    }
+  }, [visualsJob, applyStepVisualization])
+
+  const generateVisualsStatus = useMemo<GenerateVisualsStatus | null>(() => {
+    if (generateVisualsMessage) return generateVisualsMessage
+    if (!visualsJob) return null
+    const { job } = visualsJob
+    if (visualsJob.pollError) return { type: 'error', text: `Lost track of visuals generation: ${visualsJob.pollError}` }
+    if (isTrackedJobActive(visualsJob)) {
+      const progress = `Generating visuals… ${job.completedSteps}/${job.totalSteps} steps`
+      return { type: 'info', text: visualsJob.connectionLost ? `${progress} (connection lost, retrying…)` : progress }
+    }
+    const successCount = job.steps.filter((step) => step.success).length
+    if (job.status === 'COMPLETED') return { type: 'success', text: `Generated visuals for all ${job.totalSteps} steps` }
+    if (job.status === 'COMPLETED_WITH_ERRORS') return { type: 'error', text: `Generated ${successCount}/${job.totalSteps} steps — ${job.totalSteps - successCount} failed` }
+    return { type: 'error', text: job.errorMessage || 'Unable to generate visuals right now.' }
+  }, [generateVisualsMessage, visualsJob])
+
+  const visualsProgressLabel = visualsJob && isTrackedJobActive(visualsJob)
+    ? `Generating… ${visualsJob.job.completedSteps}/${visualsJob.job.totalSteps}`
+    : undefined
 
   /** Guards any navigation away from this process (Back button, breadcrumb clicks, opening a subprocess) behind an unsaved-changes confirmation when the *recipe* (any process) has unsaved edits — navigating within the Recipe Tool never discards them either way, but a confirmation still matters when actually leaving via onBack. */
   const confirmNavigatingAway = useCallback(() => !session.anyDirty || window.confirm('You have unsaved changes. Leave without saving?'), [session])
@@ -807,6 +813,7 @@ function RecipeProcessCanvasContent({
         onExport={handleExport}
         onGenerateVisuals={() => void generateVisuals()}
         isGeneratingVisuals={generatingVisuals}
+        visualsProgressLabel={visualsProgressLabel}
         generateVisualsStatus={generateVisualsStatus}
         onAddStep={() => addNode(RECIPE_NODE_TYPES.step)}
         onAddCondition={() => addNode(RECIPE_NODE_TYPES.condition)}
@@ -993,6 +1000,7 @@ function RecipeProcessCanvasContent({
                   onOpenSubprocess={handleOpenSubprocess}
                   onGenerateVisuals={() => void generateVisuals()}
                   isGeneratingVisuals={generatingVisuals}
+                  visualsProgressLabel={visualsProgressLabel}
                 />
               ) : (
                 <RecipeConditionPanel

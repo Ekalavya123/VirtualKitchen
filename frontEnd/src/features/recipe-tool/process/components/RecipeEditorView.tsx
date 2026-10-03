@@ -1,15 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import '../../styles/recipe-tool.css'
 import { ProcessApi, RecipeProcessGenerationApi, RecipeDetailApi } from '../../../../api'
-import type { RecipeProcessBreadcrumbEntry, RecipeProcessGenerationJobStatus } from '../../../../types/recipe'
+import type { RecipeProcessBreadcrumbEntry } from '../../../../types/recipe'
 import { useNotifications } from '../../../../shared/components/notifications/NotificationProvider'
 import RecipeProcessEditor from './RecipeProcessEditor'
 import RecipeProcessSidebar from './RecipeProcessSidebar'
 import RecipeProcessGenerationModal from './RecipeProcessGenerationModal'
 import { useRecipeSession } from '../../context/RecipeSessionContext'
 import { convertGeneratedResultToProcesses } from '../adapters/recipeProcessGenerationConverter'
-
-const GENERATION_JOB_POLL_MS = 2000
+import { generationJobKey, isTrackedJobActive } from '../../context/jobTracker'
+import { useJobTracker, useTrackedJob } from '../../context/useJobTracker'
 
 const GENERATION_STAGE_LABELS: Record<string, string> = {
   QUEUED: 'Queued…',
@@ -20,9 +20,6 @@ const GENERATION_STAGE_LABELS: Record<string, string> = {
   COMPLETED: 'Done',
 }
 
-const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
-
-const isTerminalStatus = (status: RecipeProcessGenerationJobStatus) => status === 'COMPLETED' || status === 'FAILED'
 
 type RecipeEditorViewProps = {
   recipeId: number
@@ -51,8 +48,22 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
   const [ancestorTrail, setAncestorTrail] = useState<RecipeProcessBreadcrumbEntry[]>([])
   const [creatingMainProcess, setCreatingMainProcess] = useState(false)
   const [showGenerationModal, setShowGenerationModal] = useState(false)
-  const [generating, setGenerating] = useState(false)
-  const [generationProgress, setGenerationProgress] = useState<{ percent: number; stageLabel: string } | null>(null)
+  // AI generation state lives in the app-level JobTracker (keyed by recipe), so it survives
+  // leaving the recipe tool and reloads; only the start request itself is local.
+  const jobTracker = useJobTracker()
+  const generationJob = useTrackedJob(generationJobKey(recipeId))
+  const [startingGeneration, setStartingGeneration] = useState(false)
+  const generating = startingGeneration || isTrackedJobActive(generationJob)
+  const generationProgress = useMemo(() => {
+    if (startingGeneration && !isTrackedJobActive(generationJob)) return { percent: 0, stageLabel: GENERATION_STAGE_LABELS.QUEUED }
+    if (!generationJob || !isTrackedJobActive(generationJob)) return null
+    const { job } = generationJob
+    const stageLabel = GENERATION_STAGE_LABELS[job.stage] ?? job.stage
+    return { percent: job.progressPercent, stageLabel: generationJob.connectionLost ? `${stageLabel} (connection lost, retrying…)` : stageLabel }
+  }, [startingGeneration, generationJob])
+  const generationError = generationJob && !isTrackedJobActive(generationJob)
+    ? (generationJob.pollError ?? (generationJob.job.status === 'FAILED' ? (generationJob.job.errorMessage || 'Unable to generate this recipe right now.') : null))
+    : null
   const [editorRevision, setEditorRevision] = useState(0)
 
   // Defaults the selection to MAIN (or the first process) once the session has loaded, and keeps
@@ -96,51 +107,54 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
   const existingMain = processes.find((process) => process.type === 'MAIN') ?? null
 
   /**
-   * Generates a MAIN process (+ subprocesses where meaningful) from free-form recipe text and
-   * loads the result straight into the current in-memory Recipe session — never persisted until
-   * the user explicitly Saves (see RecipeSessionContext.saveAll, which creates any still-pending
-   * generated process for real at that point). Replaces the recipe's existing MAIN content in
-   * place (same real id, so its own unsaved edits are what get overwritten, deliberately, since the
-   * user just confirmed this in the modal) rather than adding a second MAIN; every generated
-   * subprocess is new and simply added alongside whatever subprocesses already existed.
+   * Starts (or joins the already-running) AI generation of a MAIN process (+ subprocesses where
+   * meaningful) from free-form recipe text. The job runs in the background and is followed by the
+   * app-level JobTracker, so the user can close the modal, switch processes or leave the tool; the
+   * effect below loads the result once it's ready, whenever that is.
    */
   const runGeneration = useCallback(async (recipeText: string) => {
-    if (!session) return
-    setGenerating(true)
-    setGenerationProgress({ percent: 0, stageLabel: GENERATION_STAGE_LABELS.QUEUED })
+    if (generating) return
+    setStartingGeneration(true)
     try {
-      const clientRequestId = crypto.randomUUID()
-      let job = await RecipeProcessGenerationApi.startJob(recipeId, { recipeText, clientRequestId })
-      setGenerationProgress({ percent: job.progressPercent, stageLabel: GENERATION_STAGE_LABELS[job.stage] ?? job.stage })
-
-      while (!isTerminalStatus(job.status)) {
-        await sleep(GENERATION_JOB_POLL_MS)
-        job = await RecipeProcessGenerationApi.getJobStatus(recipeId, job.jobId)
-        setGenerationProgress({ percent: job.progressPercent, stageLabel: GENERATION_STAGE_LABELS[job.stage] ?? job.stage })
-      }
-
-      if (job.status !== 'COMPLETED' || !job.result) {
-        throw new Error(job.errorMessage || 'Unable to generate this recipe right now.')
-      }
-
-      const { processes: generated, mainProcessId } = convertGeneratedResultToProcesses(
-        recipeId, job.result, existingMain, session.getProcesses().map((process) => process.id))
-
-      generated.forEach((process) => session.addProcess(process))
-      setAncestorTrail([])
-      setSelectedProcessId(mainProcessId)
-      // Re-seed React Flow when generation replaces an existing MAIN process without changing its
-      // id. Normal edits must stay mounted so their local selection and history are preserved.
-      setEditorRevision((revision) => revision + 1)
-      if (!existingMain) onMainProcessChanged(mainProcessId)
-
-      setShowGenerationModal(false)
-      notifySuccess('Recipe generated — review it, then Save when you\'re happy with it.')
+      await jobTracker.startGeneration(recipeId, recipeText)
     } finally {
-      setGenerating(false)
-      setGenerationProgress(null)
+      setStartingGeneration(false)
     }
-  }, [recipeId, session, existingMain, onMainProcessChanged, notifySuccess])
+  }, [generating, jobTracker, recipeId])
+
+  /**
+   * Loads a completed generation's result straight into the current in-memory Recipe session —
+   * never persisted until the user explicitly Saves (see RecipeSessionContext.saveAll, which creates
+   * any still-pending generated process for real at that point). Replaces the recipe's existing
+   * MAIN content in place (same real id, so its own unsaved edits are what get overwritten,
+   * deliberately, since the user confirmed this in the modal) rather than adding a second MAIN;
+   * every generated subprocess is new and simply added alongside whatever subprocesses already
+   * existed. Also covers a job that finished while the user was away (rediscovered on load).
+   */
+  const appliedGenerationJobIdsRef = useRef(new Set<string>())
+  useEffect(() => {
+    if (!session || session.loading || !generationJob) return
+    const { job } = generationJob
+    if (job.status !== 'COMPLETED' || !job.result || appliedGenerationJobIdsRef.current.has(job.jobId)) return
+    appliedGenerationJobIdsRef.current.add(job.jobId)
+
+    const { processes: generated, mainProcessId } = convertGeneratedResultToProcesses(
+      recipeId, job.result, existingMain, session.getProcesses().map((process) => process.id))
+
+    generated.forEach((process) => session.addProcess(process))
+    setAncestorTrail([])
+    setSelectedProcessId(mainProcessId)
+    // Re-seed React Flow when generation replaces an existing MAIN process without changing its
+    // id. Normal edits must stay mounted so their local selection and history are preserved.
+    setEditorRevision((revision) => revision + 1)
+    if (!existingMain) onMainProcessChanged(mainProcessId)
+
+    setShowGenerationModal(false)
+    jobTracker.dismiss(generationJobKey(recipeId))
+    RecipeProcessGenerationApi.markApplied(recipeId, job.jobId)
+      .catch((error) => console.error('Unable to mark the generated recipe as applied:', error))
+    notifySuccess('AI recipe process ready — review it, then Save when you\'re happy with it.')
+  }, [session, generationJob, recipeId, existingMain, onMainProcessChanged, jobTracker, notifySuccess])
 
   const handleSelectFromSidebar = useCallback((processId: number) => {
     setAncestorTrail([])
@@ -198,6 +212,7 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
       creatingMainProcess={creatingMainProcess}
       onCreateSubprocess={handleCreateSubprocess}
       onOpenGenerate={isOwner ? () => setShowGenerationModal(true) : undefined}
+      generationProgress={generationProgress}
     />
   )
 
@@ -207,6 +222,7 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
       onGenerate={runGeneration}
       isGenerating={generating}
       progress={generationProgress}
+      jobError={generationError}
       willReplaceMain={existingMain != null}
     />
   )
@@ -229,7 +245,7 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
               onClick={() => setShowGenerationModal(true)}
               style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--flow-accent)', background: 'var(--flow-accent)', color: 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
             >
-              ✨ Generate with AI
+              {generationProgress ? `✨ Generating… ${generationProgress.percent}%` : '✨ Generate with AI'}
             </button>
           )}
         </div>
