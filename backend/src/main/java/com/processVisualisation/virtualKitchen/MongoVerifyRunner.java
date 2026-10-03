@@ -1,5 +1,7 @@
 package com.processVisualisation.virtualKitchen;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
@@ -15,6 +17,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class MongoVerifyRunner implements CommandLineRunner {
 
+    private static final Logger log = LoggerFactory.getLogger(MongoVerifyRunner.class);
+
     @Autowired
     private MongoTemplate mongoTemplate;
 
@@ -27,17 +31,14 @@ public class MongoVerifyRunner implements CommandLineRunner {
     @Override
     public void run(String... args) {
 
-        System.out.println("Database = "
-                + mongoTemplate.getDb().getName());
-
-        System.out.println("Collections = "
-                + mongoTemplate.getCollectionNames());
+        log.info("event=mongo_connection_verified database={} collections={}",
+                mongoTemplate.getDb().getName(), mongoTemplate.getCollectionNames().size());
 
         mongoTemplate.save(
                 new org.bson.Document("name", "verify"),
                 "testCollection"
         );
 
-        System.out.println("Document inserted");
+        log.debug("event=mongo_write_verified collection=testCollection");
     }
 }

@@ -42,6 +42,14 @@ public class VisualizationJob {
 
     private String errorMessage;
 
+    /**
+     * Set to {@code viz:<processId>} only while the job is QUEUED/IN_PROGRESS and unset once it
+     * terminates. The unique sparse index makes "one running visualization per process" atomic:
+     * a concurrent second start fails the insert and joins the job that won instead.
+     */
+    @Indexed(unique = true, sparse = true)
+    private String activeKey;
+
     private Instant createdAt;
 
     private Instant startedAt;

@@ -39,6 +39,8 @@ public class RecipeProcessGenerationController {
     /**
      * Starts an async Process generation job and returns immediately — the actual AI call runs on
      * a background task pool. Poll {@link #getJobStatus} with the returned jobId for progress/completion.
+     * If a generation is already running for this recipe, that job is returned (with
+     * {@code reused=true}) instead of starting a second one.
      *
      * @param recipeId the id of the recipe this generation is for (not persisted against by this
      *                 endpoint — only used for job bookkeeping/analytics)
@@ -64,8 +66,21 @@ public class RecipeProcessGenerationController {
      */
     @GetMapping("/jobs/{jobId}")
     public ApiResponse<RecipeProcessGenerationJobResponseDTO> getJobStatus(@PathVariable Long recipeId, @PathVariable String jobId) {
-        RecipeProcessGenerationJobResponseDTO data = recipeProcessGenerationJobService.getJobStatus(jobId);
+        RecipeProcessGenerationJobResponseDTO data = recipeProcessGenerationJobService.getJobStatus(currentUserId(), recipeId, jobId);
         return build(data, "Process generation job status");
+    }
+
+    /**
+     * Records that the frontend loaded a completed job's result into the user's working session,
+     * so {@code GET /api/v1/recipes/{recipeId}/jobs/active} stops offering it back.
+     *
+     * @param jobId the id of the completed job whose result was applied
+     * @return an empty ApiResponse
+     */
+    @PostMapping("/jobs/{jobId}/applied")
+    public ApiResponse<Void> markResultApplied(@PathVariable Long recipeId, @PathVariable String jobId) {
+        recipeProcessGenerationJobService.markResultApplied(currentUserId(), recipeId, jobId);
+        return build(null, "Process generation result marked as applied");
     }
 
     private Long currentUserId() {

@@ -18,4 +18,6 @@ public class RecipeProcessGenerationJobResponseDTO {
     private int progressPercent;
     private RecipeProcessGenerationResultDTO result;
     private String errorMessage;
+    /** True when the start request joined a generation already running for this recipe instead of starting a new one. */
+    private boolean reused;
 }

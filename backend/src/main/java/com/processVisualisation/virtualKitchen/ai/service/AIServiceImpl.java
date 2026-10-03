@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.service;
 
+import com.processVisualisation.virtualKitchen.ai.dispatch.LoggingAIClient;
 import com.processVisualisation.virtualKitchen.restclient.client.AIClient;
 import com.processVisualisation.virtualKitchen.restclient.config.GeminiProperties;
 import com.processVisualisation.virtualKitchen.restclient.config.OpenAIProperties;
@@ -9,6 +10,7 @@ import com.processVisualisation.virtualKitchen.restclient.dto.AIResponse;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 /**
  * Default {@link IAIService} implementation that builds a chat request for
@@ -28,7 +30,9 @@ public class AIServiceImpl implements IAIService {
                          OpenAIProperties openAIProperties,
                          ObjectProvider<GeminiProperties> geminiPropertiesProvider,
                          @Value("${ai.provider:gemini}") String provider) {
-        this.aiClient = aiClient;
+        // The injected client is the @Primary provider bean, not one resolved from the model registry.
+        this.aiClient = new LoggingAIClient(aiClient,
+                LoggingAIClient.providerOf(StringUtils.uncapitalize(aiClient.getClass().getSimpleName())));
         this.openAIProperties = openAIProperties;
         this.geminiProperties = geminiPropertiesProvider.getIfAvailable();
         this.provider = provider == null ? "gemini" : provider;
@@ -54,6 +58,7 @@ public class AIServiceImpl implements IAIService {
                 .model(defaultModel)
                 .temperature(0.2d)
                 .maxTokens(300)
+                .operation("CHAT")
                 .build();
 
         return aiClient.chat(request);

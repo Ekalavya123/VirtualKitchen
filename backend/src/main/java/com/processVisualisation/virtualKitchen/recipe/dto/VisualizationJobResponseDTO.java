@@ -21,6 +21,9 @@ public class VisualizationJobResponseDTO {
     private int totalSteps;
     private int completedSteps;
     private List<StepResultDTO> steps;
+    private String errorMessage;
+    /** True when the start request joined a visualization already running for this process instead of starting a new one. */
+    private boolean reused;
 
     /**
      * Outcome of generating a visualization image for a single recipe step within

@@ -115,18 +115,20 @@ public class RecipeProcessGenerationService {
         AttemptResult firstAttempt = runAttempt(client, modelId, recipeText, null);
         onStage.accept(RecipeProcessGenerationStage.VALIDATING_RESPONSE);
         if (firstAttempt.valid()) {
+            logValidationCompleted(1, firstAttempt.result());
             return firstAttempt.result();
         }
 
-        logger.info("Process generation validation failed on first attempt, retrying once. errors={}", firstAttempt.errors());
+        logValidationFailed(1, true, firstAttempt.errors());
         onStage.accept(RecipeProcessGenerationStage.RETRYING);
         AttemptResult secondAttempt = runAttempt(client, modelId, recipeText, firstAttempt);
         if (secondAttempt.valid()) {
+            logValidationCompleted(2, secondAttempt.result());
             return secondAttempt.result();
         }
 
+        logValidationFailed(2, false, secondAttempt.errors());
         String errorMessage = String.join("; ", secondAttempt.errors());
-        logger.warn("Process generation failed after retry. errors={}", errorMessage);
         throw new RecipeProcessAiException("Unable to generate a valid recipe process: " + errorMessage);
     }
 
@@ -145,6 +147,7 @@ public class RecipeProcessGenerationService {
                 .responseFormat("json_object")
                 .responseSchema(outputSchema.jsonSchema())
                 .responseSchemaName(RecipeProcessOutputSchema.SCHEMA_NAME)
+                .operation("RECIPE_TO_FLOW")
                 .build();
 
         long startNs = System.nanoTime();
@@ -182,6 +185,19 @@ public class RecipeProcessGenerationService {
         }
     }
 
+    private void logValidationCompleted(int attempt, RecipeProcessGenerationResultDTO result) {
+        logger.info("event=process_validation_completed attempt={} promptVersion={} subprocesses={}",
+                attempt, RecipeProcessGenerationPromptBuilder.PROMPT_VERSION,
+                result.getSubprocesses() == null ? 0 : result.getSubprocesses().size());
+    }
+
+    private void logValidationFailed(int attempt, boolean willRetry, List<String> errors) {
+        logger.warn("event=process_validation_failed attempt={} willRetry={} promptVersion={} errorCount={}",
+                attempt, willRetry, RecipeProcessGenerationPromptBuilder.PROMPT_VERSION, errors.size());
+        // The messages can quote fragments of the model output, so they stay at DEBUG.
+        logger.debug("event=process_validation_errors attempt={} errors={}", attempt, errors);
+    }
+
     private void persistAIResponse(String userPrompt, AIResponse response, boolean success, long durationMs, List<String> errors) {
         try {
             AIResponseRecordDTO record = new AIResponseRecordDTO();
@@ -205,7 +221,9 @@ public class RecipeProcessGenerationService {
             record.setResponseData(respData);
             aiResponseService.save(record);
         } catch (Exception ex) {
-            logger.error("Failed to persist AI response for process generation", ex);
+            // Best-effort analytics record; the generation itself is unaffected.
+            logger.warn("event=ai_response_persist_failed context=process-generation errorType={}",
+                    ex.getClass().getSimpleName(), ex);
         }
     }
 

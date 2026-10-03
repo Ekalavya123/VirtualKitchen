@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Application logging configuration.
+
+  Console: INFO and above, compact, one line per event.
+  File:    logs/application.log, DEBUG and above for application code, rolled daily and by size.
+  Errors:  logs/application-error.log, ERROR only, kept longer for triage.
+
+  Every line carries the MDC keys set by RequestIdFilter / JwtAuthenticationFilter / the job services:
+  requestId, jobId, userId. Search a whole request with: grep "requestId=<id>" logs/application.log
+
+  Profiles: no profile (local development) gets coloured console and DEBUG for application code in the file;
+  "prod" gets a plain console and INFO in the file.
+
+  Overrides (application.properties or env), all optional:
+    logging.file.path                              directory for the log files (default: logs)
+    logging.threshold.console                      console threshold (default: INFO)
+    logging.logback.rollingpolicy.max-file-size    per-file size before rolling (default: 20MB)
+    logging.logback.rollingpolicy.max-history      days of archives to keep (default: 14)
+    logging.logback.rollingpolicy.total-size-cap   cap on all archives (default: 1GB)
+    logging.level.virtualKitchen.ai.payload=DEBUG  log truncated AI user prompts/responses (off by default)
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <springProperty scope="context" name="CONSOLE_THRESHOLD" source="logging.threshold.console" defaultValue="INFO"/>
+
+    <property name="LOG_DIR" value="${LOG_PATH:-logs}"/>
+    <property name="MDC_PATTERN" value="requestId=%X{requestId:-} jobId=%X{jobId:-} userId=%X{userId:-}"/>
+    <property name="FILE_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p [%t] [${MDC_PATTERN}] %logger{40} - %m%n%wEx"/>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/application.log</file>
+        <encoder>
+            <pattern>${FILE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/application.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${LOGBACK_ROLLINGPOLICY_MAX_FILE_SIZE:-20MB}</maxFileSize>
+            <maxHistory>${LOGBACK_ROLLINGPOLICY_MAX_HISTORY:-14}</maxHistory>
+            <totalSizeCap>${LOGBACK_ROLLINGPOLICY_TOTAL_SIZE_CAP:-1GB}</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>ERROR</level>
+        </filter>
+        <file>${LOG_DIR}/application-error.log</file>
+        <encoder>
+            <pattern>${FILE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/application-error.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${LOGBACK_ROLLINGPOLICY_MAX_FILE_SIZE:-20MB}</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>200MB</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Full AI prompts/responses: never on unless explicitly enabled, and only ever to the file. -->
+    <logger name="virtualKitchen.ai.payload" level="OFF" additivity="false">
+        <appender-ref ref="FILE"/>
+    </logger>
+
+    <springProfile name="!prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+                <level>${CONSOLE_THRESHOLD}</level>
+            </filter>
+            <encoder>
+                <pattern>%clr(%d{HH:mm:ss.SSS}){faint} %clr(%5p) %clr([%X{requestId:--}]){magenta} %clr(%-40.40logger{39}){cyan} %clr(:){faint} %m%n%wEx</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <logger name="com.processVisualisation" level="DEBUG"/>
+    </springProfile>
+
+    <springProfile name="prod">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+                <level>${CONSOLE_THRESHOLD}</level>
+            </filter>
+            <encoder>
+                <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%X{requestId:--}] %-40.40logger{39} : %m%n%wEx</pattern>
+                <charset>UTF-8</charset>
+            </encoder>
+        </appender>
+
+        <logger name="com.processVisualisation" level="INFO"/>
+    </springProfile>
+
+    <logger name="org.mongodb.driver" level="INFO"/>
+    <!-- Its startup line dumps the full client settings, including the database username. -->
+    <logger name="org.mongodb.driver.client" level="WARN"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </root>
+</configuration>

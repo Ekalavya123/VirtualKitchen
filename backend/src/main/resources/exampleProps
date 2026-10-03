@@ -2,9 +2,19 @@
 # Anything using ${ENV_VAR:default} can instead be supplied as an environment variable
 # at runtime (recommended for secrets) without touching this file at all.
 
+# Required. Contains the DB password, so it is never logged; can also be supplied as the
+# SPRING_DATA_MONGODB_URI environment variable. Without it the app falls back to a local, credential-free MongoDB.
 spring.data.mongodb.uri=REPLACE_WITH_YOUR_MONGODB_CONNECTION_STRING
 spring.data.mongodb.database=REPLACE_WITH_YOUR_DATABASE_NAME
 management.health.mongo.enabled=false
+
+# --- Logging (see logback-spring.xml and the Logging section of README.md) ---
+# No profile = development logging. Use "prod" in deployed environments (plain console, INFO-level files).
+#spring.profiles.active=prod
+# Directory for application.log / application-error.log (default: ./logs).
+#logging.file.path=logs
+# Local debugging only: log truncated AI user prompts/responses to the log file.
+#logging.level.virtualKitchen.ai.payload=DEBUG
 
 # --- Authentication ---
 # JWT signing secret. MUST be overridden (32+ chars) in any shared/production environment.

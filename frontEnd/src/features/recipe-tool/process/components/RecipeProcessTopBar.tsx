@@ -4,6 +4,7 @@ import type { ProcessType } from '../../../../types/process'
 import type { RecipeProcessBreadcrumbEntry } from '../../../../types/recipe'
 import RecipeProcessBreadcrumb from './RecipeProcessBreadcrumb'
 import AiCreditBadge from '../../../../shared/components/AiCreditBadge'
+import { useJobsFinishedSignal } from '../../context/useJobTracker'
 
 type RecipeProcessTopBarProps = {
   name: string
@@ -30,7 +31,9 @@ type RecipeProcessTopBarProps = {
   /** Starts the AI visualization job for this process's own steps (see RecipeProcessCanvas's generateVisuals). */
   onGenerateVisuals?: () => void
   isGeneratingVisuals?: boolean
-  generateVisualsStatus?: { type: 'success' | 'error'; text: string } | null
+  /** Button label while generating, e.g. "Generating… 2/5" — falls back to "Generating…". */
+  visualsProgressLabel?: string
+  generateVisualsStatus?: { type: 'success' | 'error' | 'info'; text: string } | null
   /** Adds a new STEP/CONDITION node to the canvas — relocated here from the sidebar's old "Quick Add". */
   onAddStep?: () => void
   onAddCondition?: () => void
@@ -81,6 +84,7 @@ export default function RecipeProcessTopBar({
   onExport,
   onGenerateVisuals,
   isGeneratingVisuals = false,
+  visualsProgressLabel,
   generateVisualsStatus,
   onAddStep,
   onAddCondition,
@@ -88,6 +92,9 @@ export default function RecipeProcessTopBar({
   currentStepId,
   onSelectStep,
 }: RecipeProcessTopBarProps) {
+  // Refetch the credit balance whenever a background AI job finishes (it charged or refunded credits).
+  const jobsFinishedSignal = useJobsFinishedSignal()
+
   return (
     <div className="flex h-[3.75rem] flex-shrink-0 items-center justify-between border-b border-[var(--flow-border)] bg-[var(--flow-surface)] px-4">
       <div className="flex items-center gap-2.5" style={{ minWidth: 0 }}>
@@ -170,14 +177,14 @@ export default function RecipeProcessTopBar({
           <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>{saveError}</span>
         )}
         {generateVisualsStatus && (
-          <span style={{ fontSize: 11, fontWeight: 600, color: generateVisualsStatus.type === 'success' ? 'var(--flow-success)' : '#dc2626' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: generateVisualsStatus.type === 'success' ? 'var(--flow-success)' : generateVisualsStatus.type === 'info' ? 'var(--flow-magic)' : '#dc2626' }}>
             {generateVisualsStatus.text}
           </span>
         )}
       </div>
 
       <div className="flex items-center gap-2">
-        <AiCreditBadge />
+        <AiCreditBadge refreshSignal={jobsFinishedSignal} />
 
         {onFitView && (
           <button onClick={onFitView} style={btnStyle({ padding: '8px 10px' })} title="Fit view">
@@ -217,9 +224,9 @@ export default function RecipeProcessTopBar({
               opacity: isGeneratingVisuals ? 0.7 : 1,
               cursor: isGeneratingVisuals ? 'wait' : 'pointer',
             })}
-            title="Generate an AI image for every step of this process"
+            title={isGeneratingVisuals ? 'Visuals are being generated for this process' : 'Generate an AI image for every step of this process'}
           >
-            {isGeneratingVisuals ? 'Generating…' : '🖼️ Generate Visuals'}
+            {isGeneratingVisuals ? (visualsProgressLabel ?? 'Generating…') : '🖼️ Generate Visuals'}
           </button>
         )}
 

@@ -11,6 +11,8 @@ import com.processVisualisation.virtualKitchen.restclient.exception.AICommunicat
 import com.processVisualisation.virtualKitchen.restclient.exception.AIInvalidResponseException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AITimeoutException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
@@ -23,7 +25,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * {@link AIClient} implementation that talks to a locally or self-hosted
@@ -33,6 +34,9 @@ import java.util.concurrent.TimeUnit;
  */
 @Component("ollamaAiClient")
 public class OllamaClient implements AIClient {
+
+    private static final Logger log = LoggerFactory.getLogger(OllamaClient.class);
+    private static final int MAX_LOGGED_BODY_CHARS = 500;
 
     private final RestClient restClient;
     private final OllamaProperties properties;
@@ -74,12 +78,6 @@ public class OllamaClient implements AIClient {
                 ? request.getModel()
                 : properties.getDefaultModel();
 
-        long startedAt = System.nanoTime();
-
-        System.out.println(
-                "[AI] Request start. provider=ollama model=" + model
-        );
-
         try {
 
             String body = objectMapper.writeValueAsString(
@@ -94,13 +92,7 @@ public class OllamaClient implements AIClient {
                     .retrieve()
                     .body(String.class);
 
-            long latencyMs = elapsedMs(startedAt);
-
             if (!StringUtils.hasText(rawResponse)) {
-                System.out.println(
-                        "[AI] Failure. provider=ollama " +
-                                "reason=empty_response latencyMs=" + latencyMs
-                );
 
                 throw new AIInvalidResponseException(
                         "Received empty response from Ollama"
@@ -109,28 +101,12 @@ public class OllamaClient implements AIClient {
 
             AIResponse parsed = parseResponse(rawResponse, model);
 
-            System.out.println(
-                    "[AI] Success. provider=ollama model=" +
-                            parsed.getModel()
-                            + " latencyMs=" + latencyMs
-                            + " promptTokens=" + safeInt(parsed.getPromptTokens())
-                            + " completionTokens=" + safeInt(parsed.getCompletionTokens())
-                            + " totalTokens=" + safeInt(parsed.getTotalTokens())
-            );
-
             return parsed;
 
         } catch (RestClientResponseException ex) {
 
-            long latencyMs = elapsedMs(startedAt);
-
-            System.out.println(
-                    "[AI] Failure. provider=ollama " +
-                            "reason=http_error status=" +
-                            ex.getStatusCode().value()
-                            + " latencyMs=" + latencyMs
-                            + " body=" + ex.getResponseBodyAsString()
-            );
+            log.debug("event=ai_provider_http_error provider=ollama status={} body={}",
+                    ex.getStatusCode().value(), truncate(ex.getResponseBodyAsString()));
 
             throw new AICommunicationException(
                     "Ollama API request failed with status: "
@@ -140,27 +116,12 @@ public class OllamaClient implements AIClient {
 
         } catch (ResourceAccessException ex) {
 
-            long latencyMs = elapsedMs(startedAt);
-
-            System.out.println(
-                    "[AI] Failure. provider=ollama " +
-                            "reason=timeout_or_connectivity latencyMs="
-                            + latencyMs
-            );
-
             throw new AITimeoutException(
                     "Ollama request timed out or could not connect",
                     ex
             );
 
         } catch (JsonProcessingException ex) {
-
-            long latencyMs = elapsedMs(startedAt);
-
-            System.out.println(
-                    "[AI] Failure. provider=ollama " +
-                            "reason=invalid_json latencyMs=" + latencyMs
-            );
 
             throw new AIInvalidResponseException(
                     "Failed to process Ollama JSON payload",
@@ -295,16 +256,6 @@ public class OllamaClient implements AIClient {
                 : node.asInt();
     }
 
-    private String safeInt(Integer value) {
-        return value == null ? "NA" : value.toString();
-    }
-
-    private long elapsedMs(long startedAt) {
-        return TimeUnit.NANOSECONDS.toMillis(
-                System.nanoTime() - startedAt
-        );
-    }
-
     private void validateConfiguration() {
 
         if (!StringUtils.hasText(properties.getBaseUrl())) {
@@ -339,5 +290,13 @@ public class OllamaClient implements AIClient {
                     "AI user prompt cannot be empty"
             );
         }
+    }
+
+    /** Provider error bodies can echo request content, so they are only logged at DEBUG and truncated. */
+    private static String truncate(String body) {
+        if (body == null || body.length() <= MAX_LOGGED_BODY_CHARS) {
+            return body;
+        }
+        return body.substring(0, MAX_LOGGED_BODY_CHARS) + "...[truncated]";
     }
 }

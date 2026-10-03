@@ -12,6 +12,8 @@ import com.processVisualisation.virtualKitchen.restclient.exception.AICommunicat
 import com.processVisualisation.virtualKitchen.restclient.exception.AIInvalidResponseException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AITimeoutException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -25,7 +27,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * {@link AIClient} implementation that talks to OpenAI's chat completion
@@ -36,6 +37,9 @@ import java.util.concurrent.TimeUnit;
  */
 @Component("openAiAiClient")
 public class OpenAIClient implements AIClient {
+
+    private static final Logger log = LoggerFactory.getLogger(OpenAIClient.class);
+    private static final int MAX_LOGGED_BODY_CHARS = 500;
 
     private final RestClient restClient;
     private final OpenAIProperties properties;
@@ -74,9 +78,6 @@ public class OpenAIClient implements AIClient {
         validateRequest(request);
 
         String model = StringUtils.hasText(request.getModel()) ? request.getModel() : properties.getDefaultModel();
-        long startedAt = System.nanoTime();
-
-        System.out.println("[AI] Request start. provider=openai model=" + model);
 
         try {
             String body = objectMapper.writeValueAsString(buildRequestPayload(request, model));
@@ -90,28 +91,16 @@ public class OpenAIClient implements AIClient {
                     .retrieve()
                     .body(String.class);
 
-            long latencyMs = elapsedMs(startedAt);
-
             if (!StringUtils.hasText(rawResponse)) {
-                System.out.println("[AI] Failure. provider=openai reason=empty_response latencyMs=" + latencyMs);
                 throw new AIInvalidResponseException("Received empty response from OpenAI");
             }
 
             AIResponse parsed = parseResponse(rawResponse);
-            System.out.println(
-                    "[AI] Success. provider=openai model=" + parsed.getModel()
-                            + " latencyMs=" + latencyMs
-                            + " promptTokens=" + safeInt(parsed.getPromptTokens())
-                            + " completionTokens=" + safeInt(parsed.getCompletionTokens())
-                            + " totalTokens=" + safeInt(parsed.getTotalTokens())
-            );
             return parsed;
         } catch (RestClientResponseException ex) {
-            long latencyMs = elapsedMs(startedAt);
             int status = ex.getStatusCode().value();
             String responseBody = ex.getResponseBodyAsString();
             if (status == 401 || status == 403) {
-                System.out.println("[AI] Failure. provider=openai reason=authentication_failed latencyMs=" + latencyMs);
                 throw new AIAuthenticationException("OpenAI authentication failed", ex);
             }
 
@@ -130,20 +119,14 @@ public class OpenAIClient implements AIClient {
                 } catch (Exception parseEx) {
                     // ignore JSON parse errors and keep generic message
                 }
-                System.out.println("[AI] Failure. provider=openai reason=quota_exceeded status=429 latencyMs=" + latencyMs);
                 throw new AICommunicationException(errorMessage, ex);
             }
 
-            System.out.println("[AI] Failure. provider=openai reason=http_error status=" + status
-                    + " latencyMs=" + latencyMs + " body=" + (responseBody != null ? responseBody : "NA"));
+            log.debug("event=ai_provider_http_error provider=openai status={} body={}", status, truncate(responseBody));
             throw new AICommunicationException("OpenAI API request failed with status: " + ex.getStatusCode(), ex);
         } catch (ResourceAccessException ex) {
-            long latencyMs = elapsedMs(startedAt);
-            System.out.println("[AI] Failure. provider=openai reason=timeout_or_connectivity latencyMs=" + latencyMs);
             throw new AITimeoutException("OpenAI request timed out or could not connect", ex);
         } catch (JsonProcessingException ex) {
-            long latencyMs = elapsedMs(startedAt);
-            System.out.println("[AI] Failure. provider=openai reason=invalid_json latencyMs=" + latencyMs);
             throw new AIInvalidResponseException("Failed to process OpenAI JSON payload", ex);
         }
     }
@@ -208,14 +191,6 @@ public class OpenAIClient implements AIClient {
         return node.isMissingNode() || node.isNull() ? null : node.asInt();
     }
 
-    private String safeInt(Integer value) {
-        return value == null ? "NA" : value.toString();
-    }
-
-    private long elapsedMs(long startedAt) {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
-    }
-
     private void validateConfiguration() {
         if (!StringUtils.hasText(properties.getApiKey())) {
             throw new AICommunicationException("OpenAI API key is not configured");
@@ -238,5 +213,13 @@ public class OpenAIClient implements AIClient {
         if (!StringUtils.hasText(request.getUserPrompt())) {
             throw new AICommunicationException("AI user prompt cannot be empty");
         }
+    }
+
+    /** Provider error bodies can echo request content, so they are only logged at DEBUG and truncated. */
+    private static String truncate(String body) {
+        if (body == null || body.length() <= MAX_LOGGED_BODY_CHARS) {
+            return body;
+        }
+        return body.substring(0, MAX_LOGGED_BODY_CHARS) + "...[truncated]";
     }
 }

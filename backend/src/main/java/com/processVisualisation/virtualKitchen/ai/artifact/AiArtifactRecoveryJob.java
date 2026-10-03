@@ -2,8 +2,10 @@ package com.processVisualisation.virtualKitchen.ai.artifact;
 
 import com.processVisualisation.virtualKitchen.ai.artifact.consumer.AiArtifactConsumer;
 import com.processVisualisation.virtualKitchen.ai.artifact.consumer.AiArtifactConsumerRegistry;
+import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -64,8 +66,12 @@ public class AiArtifactRecoveryJob {
         if (!properties.isEnabled() || !properties.getSweeper().isEnabled()) {
             return;
         }
-        recoverOrphans();
-        collectRetiredPayloads();
+        // Scheduler threads have no request ID; a per-sweep job ID groups this sweep's log lines instead.
+        try (MDC.MDCCloseable ignored = MDC.putCloseable(MdcKeys.JOB_ID,
+                "artifact-sweep-" + Long.toHexString(System.currentTimeMillis()))) {
+            recoverOrphans();
+            collectRetiredPayloads();
+        }
     }
 
     /**
@@ -84,8 +90,7 @@ public class AiArtifactRecoveryJob {
                 recovered++;
             }
         }
-        log.info("AI artifact recovery: {} of {} orphaned payload(s) consumed without a new provider call",
-                recovered, orphans.size());
+        log.info("event=ai_artifact_recovery_completed recovered={} orphans={}", recovered, orphans.size());
     }
 
     private boolean recover(AiArtifact orphan) {
@@ -113,8 +118,8 @@ public class AiArtifactRecoveryJob {
             consumer.get().consume(artifact, loaded.get().value());
             return artifactService.markConsumed(artifact.getId());
         } catch (Exception e) {
-            log.warn("Recovery of AI artifact {} (key={}) failed; payload retained for a later attempt",
-                    artifact.getId(), artifact.getArtifactKey(), e);
+            log.warn("event=ai_artifact_recovery_failed artifactId={} artifactKey={} errorType={} payloadRetained=true",
+                    artifact.getId(), artifact.getArtifactKey(), e.getClass().getSimpleName(), e);
             artifactService.markRecoveryFailure(artifact.getId(), safeMessage(e));
             return false;
         }
@@ -132,7 +137,7 @@ public class AiArtifactRecoveryJob {
             artifactService.releasePayload(artifact.getId());
         }
         if (!collectable.isEmpty()) {
-            log.info("AI artifact recovery: collected {} orphaned payload blob(s)", collectable.size());
+            log.info("event=ai_artifact_blobs_collected count={}", collectable.size());
         }
     }
 

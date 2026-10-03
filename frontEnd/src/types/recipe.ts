@@ -90,6 +90,8 @@ export interface RecipeProcessGenerationJobResponse {
   progressPercent: number
   result?: RecipeProcessGenerationResult | null
   errorMessage?: string | null
+  /** True when the start request joined a generation already running for this recipe. */
+  reused?: boolean
 }
 
 /**
@@ -117,6 +119,19 @@ export interface RecipeProcessVisualizationJobResponse {
   totalSteps: number
   completedSteps: number
   steps: RecipeProcessVisualizationStepResult[]
+  errorMessage?: string | null
+  /** True when the start request joined a visualization already running for this process. */
+  reused?: boolean
+}
+
+/**
+ * The caller's background AI jobs for one recipe, used to re-attach to them after a reload or after
+ * navigating away and back. Mirrors the backend's `RecipeActiveJobsResponseDTO`.
+ */
+export interface RecipeActiveJobsResponse {
+  /** The running generation, else a completed one whose result was never applied, else null. */
+  generation: RecipeProcessGenerationJobResponse | null
+  visualizations: RecipeProcessVisualizationJobResponse[]
 }
 
 export interface RecipeIngredient {

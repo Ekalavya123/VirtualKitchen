@@ -37,6 +37,17 @@ public class RecipeProcessGenerationJob {
 
     private String errorMessage;
 
+    /**
+     * Set to {@code gen:<userId>:<recipeId>} only while the job is QUEUED/IN_PROGRESS and unset once
+     * it terminates. The unique sparse index makes "one running generation per user+recipe" atomic:
+     * a concurrent second start fails the insert and joins the job that won instead.
+     */
+    @Indexed(unique = true, sparse = true)
+    private String activeKey;
+
+    /** When the frontend loaded {@link #result} into the user's working session; null until then. */
+    private Instant resultAppliedAt;
+
     private Instant createdAt;
 
     private Instant startedAt;

@@ -113,14 +113,14 @@ public class AiArtifactService {
         try {
             AiArtifactPayload payload = readPayload(artifact);
             R value = spec.codec().decode(payload);
-            log.info("Reusing AI artifact {} (key={}, reuseCount={}) — no provider call, no credits spent",
+            log.info("event=ai_artifact_reused artifactId={} artifactKey={} reuseCount={} providerCall=false",
                     artifact.getId(), artifact.getArtifactKey(), artifact.getReuseCount());
             return Optional.of(new AiArtifactHit<>(artifact, value));
         } catch (Exception e) {
             // A payload we cannot read is not worth failing the request over — the caller simply
             // regenerates, which is exactly what would have happened without the store.
-            log.warn("AI artifact {} (key={}) could not be read back; regenerating instead",
-                    artifact.getId(), artifact.getArtifactKey(), e);
+            log.warn("event=ai_artifact_read_failed artifactId={} artifactKey={} fallback=regenerate errorType={}",
+                    artifact.getId(), artifact.getArtifactKey(), e.getClass().getSimpleName(), e);
             return Optional.empty();
         }
     }
@@ -224,7 +224,7 @@ public class AiArtifactService {
         }
 
         if (staged != null) {
-            log.debug("Staged AI artifact {} (key={}, {} bytes) before dependent work",
+            log.debug("event=ai_artifact_staged artifactId={} artifactKey={} bytes={}",
                     staged.getId(), staged.getArtifactKey(), staged.getPayloadSize());
         }
         return staged;
@@ -258,7 +258,7 @@ public class AiArtifactService {
                 AiArtifact.class);
 
         if (result.getModifiedCount() == 0) {
-            log.debug("AI artifact {} was already consumed by another worker", artifactId);
+            log.debug("event=ai_artifact_consume_skipped artifactId={} reason=already_consumed", artifactId);
             return false;
         }
 
@@ -292,7 +292,7 @@ public class AiArtifactService {
             return;
         }
 
-        log.error("Abandoning AI artifact {} (key={}) after {} failed recovery attempts; last error: {}",
+        log.error("event=ai_artifact_abandoned artifactId={} artifactKey={} recoveryAttempts={} lastError={}",
                 updated.getId(), updated.getArtifactKey(), updated.getRecoveryAttempts(), errorMessage);
         mongoTemplate.updateFirst(
                 query(where("_id").is(artifactId).and("status").is(AiArtifactStatus.PENDING)),
@@ -315,15 +315,16 @@ public class AiArtifactService {
     public Optional<LoadedArtifact> load(AiArtifact artifact) {
         Optional<AiArtifactCodec<?>> codec = codecRegistry.find(artifact.getCodecId());
         if (codec.isEmpty()) {
-            log.warn("No codec registered for id '{}' (artifact {}); cannot recover it",
-                    artifact.getCodecId(), artifact.getId());
+            log.warn("event=ai_artifact_decode_failed artifactId={} codecId={} reason=no_codec",
+                    artifact.getId(), artifact.getCodecId());
             return Optional.empty();
         }
         try {
             Object value = codec.get().decode(readPayload(artifact));
             return Optional.of(new LoadedArtifact(artifact, value));
         } catch (Exception e) {
-            log.warn("Could not decode AI artifact {} (codecId={})", artifact.getId(), artifact.getCodecId(), e);
+            log.warn("event=ai_artifact_decode_failed artifactId={} codecId={} errorType={}",
+                    artifact.getId(), artifact.getCodecId(), e.getClass().getSimpleName(), e);
             return Optional.empty();
         }
     }
@@ -435,7 +436,7 @@ public class AiArtifactService {
         } catch (Exception e) {
             // A blob we cannot delete is wasted storage, not a correctness problem, and the GC
             // pass will try again while the row still references it.
-            log.warn("Could not delete AI artifact blob {}", gridFsId, e);
+            log.warn("event=ai_artifact_blob_delete_failed gridFsId={} errorType={}", gridFsId, e.getClass().getSimpleName(), e);
         }
     }
 

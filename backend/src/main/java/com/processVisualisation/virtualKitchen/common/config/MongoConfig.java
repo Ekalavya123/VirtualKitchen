@@ -9,13 +9,14 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Configures the {@link MongoClient} bean used to connect to the
  * application's MongoDB instance. The connection URI is read from the
- * {@code spring.data.mongodb.uri} property, falling back to a hardcoded
- * default connection string when the property is not set.
+ * {@code spring.data.mongodb.uri} property, falling back to a local,
+ * credential-free MongoDB when the property is not set. The URI is never
+ * logged, since it normally carries the database username and password.
  */
 @Configuration
 public class MongoConfig {
 
-    @Value("${spring.data.mongodb.uri:mongodb+srv://originSeed:originSeed123@originseed.fx177fa.mongodb.net/OriginSeed}")
+    @Value("${spring.data.mongodb.uri:mongodb://localhost:27017/virtualKitchen}")
     private String mongoUri;
 
     /**
@@ -26,10 +27,6 @@ public class MongoConfig {
      */
     @Bean
     public MongoClient mongoClient() {
-        System.out.println("========================================");
-        System.out.println("Connecting to MongoDB with URI:");
-        System.out.println(mongoUri);
-        System.out.println("========================================");
         return MongoClients.create(mongoUri);
     }
 }

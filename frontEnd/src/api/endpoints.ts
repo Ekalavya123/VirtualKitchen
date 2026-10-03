@@ -78,6 +78,12 @@ export const API = {
   recipeProcessGeneration: {
     startJob: (recipeId: number) => `/api/v1/recipes/${recipeId}/processes/generate/jobs`,
     jobStatus: (recipeId: number, jobId: string) => `/api/v1/recipes/${recipeId}/processes/generate/jobs/${jobId}`,
+    markApplied: (recipeId: number, jobId: string) => `/api/v1/recipes/${recipeId}/processes/generate/jobs/${jobId}/applied`,
+  },
+
+  // The caller's running background jobs for a recipe — re-attached to after a reload/navigation.
+  recipeJobs: {
+    active: (recipeId: number) => `/api/v1/recipes/${recipeId}/jobs/active`,
   },
 
   // Recipe process visualization (one image per STEP of a MAIN/SUBPROCESS) — async job only.

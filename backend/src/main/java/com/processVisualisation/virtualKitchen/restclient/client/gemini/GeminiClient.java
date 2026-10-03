@@ -12,6 +12,8 @@ import com.processVisualisation.virtualKitchen.restclient.exception.AICommunicat
 import com.processVisualisation.virtualKitchen.restclient.exception.AIInvalidResponseException;
 import com.processVisualisation.virtualKitchen.restclient.exception.AITimeoutException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
@@ -25,7 +27,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * {@link AIClient} implementation that talks to Google's Gemini chat
@@ -37,6 +38,9 @@ import java.util.concurrent.TimeUnit;
 @Component("geminiAiClient")
 @Primary
 public class GeminiClient implements AIClient {
+
+    private static final Logger log = LoggerFactory.getLogger(GeminiClient.class);
+    private static final int MAX_LOGGED_BODY_CHARS = 500;
 
     private final RestClient restClient;
     private final GeminiProperties properties;
@@ -97,18 +101,13 @@ public class GeminiClient implements AIClient {
             return execute(request, model, cacheName);
         } catch (CachedContentRejectedException ex) {
             // The cache expired early, was deleted, or is otherwise unusable: forget it and send the prompt inline.
-            System.out.println("[AI] Prompt cache rejected. provider=gemini cache=" + cacheName
-                    + " status=" + ex.status + "; retrying without cache");
+            log.warn("event=ai_prompt_cache_rejected provider=gemini status={} fallback=inline_system_prompt", ex.status);
             promptCacheService.evict(model, request.getSystemPrompt());
             return execute(request, model, null);
         }
     }
 
     private AIResponse execute(AIRequest request, String model, String cacheName) {
-        long startedAt = System.nanoTime();
-
-        System.out.println("[AI] Request start. provider=gemini model=" + model
-                + (cacheName != null ? " cache=" + cacheName : ""));
 
         try {
             String body = objectMapper.writeValueAsString(buildRequestPayload(request, cacheName));
@@ -124,26 +123,13 @@ public class GeminiClient implements AIClient {
                     .retrieve()
                     .body(String.class);
 
-            long latencyMs = elapsedMs(startedAt);
-
             if (!StringUtils.hasText(rawResponse)) {
-                System.out.println("[AI] Failure. provider=gemini reason=empty_response latencyMs=" + latencyMs);
                 throw new AIInvalidResponseException("Received empty response from Gemini");
             }
 
             AIResponse parsed = parseResponse(rawResponse, model);
-            System.out.println(
-                    "[AI] Success. provider=gemini model=" + parsed.getModel()
-                            + " latencyMs=" + latencyMs
-                            + " promptTokens=" + safeInt(parsed.getPromptTokens())
-                            + " completionTokens=" + safeInt(parsed.getCompletionTokens())
-                            + " totalTokens=" + safeInt(parsed.getTotalTokens())
-                            + " cachedTokens=" + safeInt(parsed.getCachedTokens())
-                            + " thoughtsTokens=" + safeInt(parsed.getThoughtsTokens())
-            );
             return parsed;
         } catch (RestClientResponseException ex) {
-            long latencyMs = elapsedMs(startedAt);
             int status = ex.getStatusCode().value();
             String responseBody = ex.getResponseBodyAsString();
             if (cacheName != null && (status == 400 || status == 403 || status == 404)) {
@@ -151,7 +137,6 @@ public class GeminiClient implements AIClient {
                 throw new CachedContentRejectedException(status);
             }
             if (status == 401 || status == 403) {
-                System.out.println("[AI] Failure. provider=gemini reason=authentication_failed latencyMs=" + latencyMs);
                 throw new AIAuthenticationException("Gemini authentication failed", ex);
             }
 
@@ -170,24 +155,16 @@ public class GeminiClient implements AIClient {
                 } catch (Exception parseEx) {
                     // ignore JSON parse errors and keep generic message
                 }
-                System.out.println("[AI] Failure. provider=gemini reason=quota_exceeded status=429 latencyMs=" + latencyMs);
                 throw new AICommunicationException(errorMessage, ex);
             }
 
-            System.out.println("[AI] Failure. provider=gemini reason=http_error status=" + status
-                    + " latencyMs=" + latencyMs + " body=" + responseBody);
+            log.debug("event=ai_provider_http_error provider=gemini status={} body={}", status, truncate(responseBody));
             throw new AICommunicationException("Gemini API request failed with status: " + ex.getStatusCode(), ex);
         } catch (ResourceAccessException ex) {
-            long latencyMs = elapsedMs(startedAt);
-            System.out.println("[AI] Failure. provider=gemini reason=timeout_or_connectivity latencyMs=" + latencyMs);
             throw new AITimeoutException("Gemini request timed out or could not connect", ex);
         } catch (JsonProcessingException ex) {
-            long latencyMs = elapsedMs(startedAt);
-            System.out.println("[AI] Failure. provider=gemini reason=invalid_json latencyMs=" + latencyMs);
             throw new AIInvalidResponseException("Failed to process Gemini JSON payload", ex);
         } catch (IllegalArgumentException ex) {
-            long latencyMs = elapsedMs(startedAt);
-            System.out.println("[AI] Failure. provider=gemini reason=invalid_uri latencyMs=" + latencyMs);
             throw new AICommunicationException("Gemini endpoint configuration is invalid", ex);
         }
     }
@@ -298,14 +275,6 @@ public class GeminiClient implements AIClient {
         return node.isMissingNode() || node.isNull() ? null : node.asInt();
     }
 
-    private String safeInt(Integer value) {
-        return value == null ? "NA" : value.toString();
-    }
-
-    private long elapsedMs(long startedAt) {
-        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
-    }
-
     private void validateConfiguration() {
         if (!StringUtils.hasText(properties.getApiKey())) {
             throw new AICommunicationException("Gemini API key is not configured");
@@ -328,5 +297,13 @@ public class GeminiClient implements AIClient {
         if (!StringUtils.hasText(request.getUserPrompt())) {
             throw new AICommunicationException("AI user prompt cannot be empty");
         }
+    }
+
+    /** Provider error bodies can echo request content, so they are only logged at DEBUG and truncated. */
+    private static String truncate(String body) {
+        if (body == null || body.length() <= MAX_LOGGED_BODY_CHARS) {
+            return body;
+        }
+        return body.substring(0, MAX_LOGGED_BODY_CHARS) + "...[truncated]";
     }
 }
