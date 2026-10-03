@@ -5,6 +5,8 @@ import type { RecipeProcessBreadcrumbEntry } from '../../../../types/recipe'
 import RecipeProcessBreadcrumb from './RecipeProcessBreadcrumb'
 import AiCreditBadge from '../../../../shared/components/AiCreditBadge'
 import { useJobsFinishedSignal } from '../../context/useJobTracker'
+import type { SaveState } from '../../persistence/saveCoordinator'
+import RecipeSaveStatus from './RecipeSaveStatus'
 
 type RecipeProcessTopBarProps = {
   name: string
@@ -13,10 +15,10 @@ type RecipeProcessTopBarProps = {
   onNavigateToList: () => void
   onNavigateToAncestor: (index: number) => void
   onBack?: () => void
+  /** "Save everything now" — flushes the pending autosave. */
   onSave: () => void
-  isSaving: boolean
-  isDirty: boolean
-  saveError?: string | null
+  saveState: SaveState
+  onResolveConflict: (choice: 'reload' | 'keepMine') => void
   onUndo?: () => void
   onRedo?: () => void
   canUndo?: boolean
@@ -68,9 +70,8 @@ export default function RecipeProcessTopBar({
   onNavigateToAncestor,
   onBack,
   onSave,
-  isSaving,
-  isDirty,
-  saveError,
+  saveState,
+  onResolveConflict,
   onUndo,
   onRedo,
   canUndo = false,
@@ -94,6 +95,7 @@ export default function RecipeProcessTopBar({
 }: RecipeProcessTopBarProps) {
   // Refetch the credit balance whenever a background AI job finishes (it charged or refunded credits).
   const jobsFinishedSignal = useJobsFinishedSignal()
+  const isSaving = saveState.status === 'saving'
 
   return (
     <div className="flex h-[3.75rem] flex-shrink-0 items-center justify-between border-b border-[var(--flow-border)] bg-[var(--flow-surface)] px-4">
@@ -170,12 +172,7 @@ export default function RecipeProcessTopBar({
           </select>
         )}
 
-        {isDirty && !isSaving && (
-          <span style={{ fontSize: 11, color: 'var(--flow-warning)', fontWeight: 600 }}>● Unsaved changes</span>
-        )}
-        {saveError && (
-          <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>{saveError}</span>
-        )}
+        <RecipeSaveStatus saveState={saveState} onResolveConflict={onResolveConflict} />
         {generateVisualsStatus && (
           <span style={{ fontSize: 11, fontWeight: 600, color: generateVisualsStatus.type === 'success' ? 'var(--flow-success)' : generateVisualsStatus.type === 'info' ? 'var(--flow-magic)' : '#dc2626' }}>
             {generateVisualsStatus.text}
@@ -245,6 +242,7 @@ export default function RecipeProcessTopBar({
         <button
           onClick={onSave}
           disabled={isSaving}
+          title="Changes are saved automatically — this saves everything right now"
           style={btnStyle({
             background: 'var(--flow-accent)',
             color: 'white',

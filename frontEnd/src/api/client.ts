@@ -11,6 +11,25 @@ interface FetchOptions extends RequestInit {
   timeout?: number
 }
 
+/**
+ * A request that reached the server and got a non-2xx answer. Keeps the HTTP status so callers can
+ * tell e.g. a validation error (422) or a conflict (409) from an outage (5xx) — a request that
+ * never got a response (offline, timeout) throws a plain Error instead.
+ */
+export class ApiError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+/** The HTTP status of a failed request, or undefined when it never got a response. */
+export const httpStatusOf = (error: unknown): number | undefined =>
+  error instanceof ApiError ? error.status : undefined
+
 interface ApiResponse<T> {
   success: boolean
   message?: string
@@ -83,9 +102,10 @@ async function request<T>(
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
-    throw new Error(
-      errorData.message || 
-      `HTTP ${response.status}: ${response.statusText}`
+    throw new ApiError(
+      errorData.message ||
+      `HTTP ${response.status}: ${response.statusText}`,
+      response.status,
     )
   }
 

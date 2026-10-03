@@ -169,9 +169,12 @@ class RecipeProcessVisualizationJobServiceTest {
         assertEquals("QUEUED", started.getStatus());
         assertEquals(1L, started.getProcessId());
 
-        // Only the reduce step saves the shared process document, and it must happen exactly once
-        // regardless of how many steps ran concurrently.
-        verify(processRepository, timeout(5000).times(1)).save(process);
+        // Only the reduce step writes the shared process document: one atomic in-place update per
+        // step, never a whole-document save (which could overwrite an editor save made meanwhile).
+        for (int i = 0; i < 3; i++) {
+            verify(processRepository, timeout(5000).times(1)).setStepVisualization(eq(1L), eq("node-" + i), any(), any(), any());
+        }
+        verify(processRepository, never()).save(any());
 
         ArgumentCaptor<Update> updateCaptor = ArgumentCaptor.forClass(Update.class);
         verify(mongoTemplate, timeout(5000).atLeast(4))
@@ -197,7 +200,8 @@ class RecipeProcessVisualizationJobServiceTest {
 
         service.startJob(1L, 100L, 2L);
 
-        verify(processRepository, timeout(5000).times(1)).save(process);
+        verify(processRepository, timeout(5000).atLeastOnce()).setStepVisualization(eq(2L), anyString(), any(), any(), any());
+        verify(processRepository, never()).save(any());
 
         ArgumentCaptor<Update> updateCaptor = ArgumentCaptor.forClass(Update.class);
         verify(mongoTemplate, timeout(5000).atLeast(4))
@@ -298,21 +302,22 @@ class RecipeProcessVisualizationJobServiceTest {
         assertTrue(unset != null && unset.containsKey("activeKey"));
     }
 
-    /** Edits the user saved while the job ran must survive: the final save merges into a fresh read. */
+    /**
+     * Edits the user saved while the job ran must survive: the final write only sets each step's
+     * visualization fields in place, never re-saving a copy of the process read at any point.
+     */
     @Test
-    void startJob_finalSave_mergesIntoTheLatestSavedProcess() throws Exception {
+    void startJob_finalWrite_onlyTouchesEachStepsVisualizationFields() throws Exception {
         when(imageGenerationClient.generate(anyString()))
                 .thenReturn(new ImageGenerationClient.GeneratedImage("image/png", new byte[]{1}));
         Process atStart = processWithSteps(4L, 1);
-        Process editedMeanwhile = processWithSteps(4L, 1);
-        editedMeanwhile.setName("Renamed while generating");
-        when(processRepository.findById(4L)).thenReturn(Optional.of(atStart), Optional.of(editedMeanwhile));
+        when(processRepository.findById(4L)).thenReturn(Optional.of(atStart));
 
         service.startJob(1L, 100L, 4L);
 
-        verify(processRepository, timeout(5000).times(1)).save(editedMeanwhile);
-        verify(processRepository, never()).save(atStart);
-        assertEquals("https://cdn.example/img.png", editedMeanwhile.getNodes().get(0).getData().get("imageUrl"));
+        verify(processRepository, timeout(5000).times(1))
+                .setStepVisualization(eq(4L), eq("node-0"), any(), any(), eq("https://cdn.example/img.png"));
+        verify(processRepository, never()).save(any());
     }
 
     /**
@@ -354,8 +359,9 @@ class RecipeProcessVisualizationJobServiceTest {
 
         service.startJob(1L, 100L, 3L);
 
-        verify(processRepository, timeout(5000).times(1)).save(main);
-        verify(processRepository, never()).save(subprocess);
+        verify(processRepository, timeout(5000).times(1)).setStepVisualization(eq(3L), eq("step-a"), any(), any(), any());
+        verify(processRepository, never()).setStepVisualization(eq(50L), anyString(), any(), any(), any());
+        verify(processRepository, never()).save(any());
         verify(processRepository, never()).findById(50L);
     }
 

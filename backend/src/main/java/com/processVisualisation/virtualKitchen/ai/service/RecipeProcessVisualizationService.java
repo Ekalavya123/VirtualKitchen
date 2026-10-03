@@ -142,27 +142,16 @@ public class RecipeProcessVisualizationService {
     }
 
     /**
-     * Attaches each successfully generated asset to its STEP node and saves the process exactly
-     * once — the only place that mutates/saves the shared process document for the async pipeline,
-     * to avoid a lost-update race across concurrently-completing step tasks. Steps missing from
-     * {@code assetsByStepId} (failed generations) are left unmutated and can be retried later.
-     * <p>
-     * The process is re-read just before merging, so edits the user saved while the (minutes-long)
-     * job was running are kept instead of being overwritten by the copy loaded when it started.
+     * Attaches each successfully generated asset to its STEP node in the stored process. Each step
+     * is written with its own atomic in-place update ({@link ProcessRepository#setStepVisualization})
+     * rather than a read-modify-save of the whole document, so the (minutes-long) job never
+     * overwrites edits the Recipe Tool autosaved meanwhile, and a process or step deleted meanwhile
+     * is simply skipped instead of being re-created. Steps missing from {@code assetsByStepId}
+     * (failed generations) are left untouched and can be retried later.
      */
     public void attachResultsAndSave(Process process, Map<String, VisualizationAsset> assetsByStepId) {
-        Process latest = processRepository.findById(process.getId()).orElse(process);
-        for (Process.ProcessNode node : latest.getNodes()) {
-            VisualizationAsset asset = assetsByStepId.get(node.getId());
-            if (asset != null) {
-                Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
-                data.put("visualizationAssetId", asset.getId());
-                data.put("imagePrompt", asset.getImagePrompt());
-                data.put("imageUrl", asset.getImageUrl());
-                node.setData(data);
-            }
-        }
-        processRepository.save(latest);
+        assetsByStepId.forEach((stepId, asset) -> processRepository.setStepVisualization(
+                process.getId(), stepId, asset.getId(), asset.getImagePrompt(), asset.getImageUrl()));
     }
 
     /** One STEP's pre-loaded generation context: its process node and extracted visualization input. */

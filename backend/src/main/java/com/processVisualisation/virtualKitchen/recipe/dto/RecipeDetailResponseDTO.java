@@ -25,6 +25,8 @@ public class RecipeDetailResponseDTO {
     private List<RecipeIngredientDTO> ingredients;
     private NutritionInfoDTO nutrition;
     private Long mainProcessId;
+    /** The recipe's current process revision (see {@code RecipeTemplate.processRevision}); 0 if never saved. */
+    private Long processRevision;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

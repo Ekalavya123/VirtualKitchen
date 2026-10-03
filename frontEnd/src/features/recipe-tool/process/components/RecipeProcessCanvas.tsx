@@ -74,8 +74,6 @@ import '../styles/RecipeProcessCanvas.css'
 
 type GenerateVisualsStatus = { type: 'success' | 'error' | 'info'; text: string }
 
-type HistoryEntry = { nodes: Node[]; edges: Edge[] }
-
 type RecipeProcessCanvasProps = {
   recipeId: number
   processId: number
@@ -96,15 +94,22 @@ type RecipeProcessCanvasProps = {
   sidebarHeader?: ReactNode
 }
 
+/** JSON of exactly what a save would send for this graph — equal strings mean nothing worth saving changed. */
+const graphPayloadJson = (flowNodes: Node[], flowEdges: Edge[]) => {
+  const { nodes, edges } = buildProcessUpdateRequest('', undefined, createFlowDataPayload(flowNodes, flowEdges))
+  return JSON.stringify([nodes, edges])
+}
+
 /**
  * A recipe is one unified editing session — MAIN and every SUBPROCESS are
  * views of the same in-memory snapshot (RecipeSessionContext), not
  * independent flows. This outer component owns only what should genuinely
  * survive a process switch: the resizable panel layout (widths/collapsed
  * state). Everything that is legitimately *per-process* — the canvas's
- * nodes/edges, selection, undo/redo history, zoom/viewport — lives in
- * RecipeProcessCanvasContent below, which is deliberately remounted (via `key`)
- * whenever `processId` changes.
+ * nodes/edges, selection, zoom/viewport — lives in RecipeProcessCanvasContent
+ * below, which is deliberately remounted (via `key`) whenever `processId`
+ * changes. Undo/redo is recipe-wide and lives in the session itself, so it
+ * survives process switches and remounts.
  *
  * This is *not* the same kind of remount the Recipe Tool used to do: that
  * remounted this whole component (topbar, panels, layout *and* data) and
@@ -113,10 +118,9 @@ type RecipeProcessCanvasProps = {
  * data was already loaded once into RecipeSessionContext (no fetch on
  * switch), every edit is continuously pushed into that shared session as it
  * happens (not only on unmount), and only the small, genuinely per-process
- * slice of local UI state (selection, undo stack, zoom) resets — exactly
- * the "process-local" behavior the brief allows for undo/redo. Switching
- * back to a previously-edited process re-seeds straight from the session,
- * so its unsaved changes are still there.
+ * slice of local UI state (selection, zoom) resets. Switching back to a
+ * previously-edited process re-seeds straight from the session, so its
+ * unsaved changes are still there.
  */
 export default function RecipeProcessCanvas(props: RecipeProcessCanvasProps) {
   const session = useRecipeSession()
@@ -124,29 +128,6 @@ export default function RecipeProcessCanvas(props: RecipeProcessCanvasProps) {
   const [sidebarWidth, setSidebarWidth] = useState(260)
   const [propsCollapsed, setPropsCollapsed] = useState(true)
   const [propsWidth, setPropsWidth] = useState(280)
-
-  // Undo/redo history, keyed by processId, lives here rather than in RecipeProcessCanvasContent (which
-  // deliberately remounts fresh via `key={processId}` below) so switching Process A -> B -> A within
-  // this session doesn't lose A's history — everything else genuinely per-process (nodes/edges,
-  // selection, zoom) still resets on that remount; only these two stacks survive it.
-  const [historyByProcess, setHistoryByProcess] = useState<Record<number, HistoryEntry[]>>({})
-  const [futureByProcess, setFutureByProcess] = useState<Record<number, HistoryEntry[]>>({})
-
-  const { processId } = props
-  const setProcessHistory = useCallback<Dispatch<SetStateAction<HistoryEntry[]>>>((action) => {
-    setHistoryByProcess((prev) => {
-      const current = prev[processId] ?? []
-      const next = typeof action === 'function' ? (action as (h: HistoryEntry[]) => HistoryEntry[])(current) : action
-      return { ...prev, [processId]: next }
-    })
-  }, [processId])
-  const setProcessFuture = useCallback<Dispatch<SetStateAction<HistoryEntry[]>>>((action) => {
-    setFutureByProcess((prev) => {
-      const current = prev[processId] ?? []
-      const next = typeof action === 'function' ? (action as (h: HistoryEntry[]) => HistoryEntry[])(current) : action
-      return { ...prev, [processId]: next }
-    })
-  }, [processId])
 
   if (!session || session.loading) {
     return (
@@ -156,7 +137,10 @@ export default function RecipeProcessCanvas(props: RecipeProcessCanvasProps) {
     )
   }
 
-  const process = session.getProcess(props.processId)
+  // A save may have just given a pending (temporary-id) process its real id; follow it, so the open
+  // canvas keeps showing (and writing to) the same process until the selection catches up.
+  const processId = session.getProcess(props.processId) ? props.processId : session.resolveProcessId(props.processId)
+  const process = session.getProcess(processId)
 
   if (session.loadError || !process) {
     return (
@@ -171,12 +155,13 @@ export default function RecipeProcessCanvas(props: RecipeProcessCanvasProps) {
     )
   }
 
-  const availableSubprocesses = session.getProcesses().filter((candidate) => candidate.type === 'SUBPROCESS' && candidate.id !== props.processId)
+  const availableSubprocesses = session.getProcesses().filter((candidate) => candidate.type === 'SUBPROCESS' && candidate.id !== processId)
 
   return (
     <RecipeProcessCanvasContent
-      key={props.processId}
+      key={processId}
       {...props}
+      processId={processId}
       process={process}
       availableSubprocesses={availableSubprocesses}
       session={session}
@@ -188,10 +173,6 @@ export default function RecipeProcessCanvas(props: RecipeProcessCanvasProps) {
       setPropsCollapsed={setPropsCollapsed}
       propsWidth={propsWidth}
       setPropsWidth={setPropsWidth}
-      history={historyByProcess[props.processId] ?? []}
-      setHistory={setProcessHistory}
-      future={futureByProcess[props.processId] ?? []}
-      setFuture={setProcessFuture}
     />
   )
 }
@@ -208,11 +189,6 @@ type RecipeProcessCanvasContentProps = RecipeProcessCanvasProps & {
   setPropsCollapsed: Dispatch<SetStateAction<boolean>>
   propsWidth: number
   setPropsWidth: Dispatch<SetStateAction<number>>
-  /** Owned by the outer RecipeProcessCanvas (keyed by processId), not this remounting component — see its own comment. */
-  history: HistoryEntry[]
-  setHistory: Dispatch<SetStateAction<HistoryEntry[]>>
-  future: HistoryEntry[]
-  setFuture: Dispatch<SetStateAction<HistoryEntry[]>>
 }
 
 function RecipeProcessCanvasContent({
@@ -235,10 +211,6 @@ function RecipeProcessCanvasContent({
   setPropsCollapsed,
   propsWidth,
   setPropsWidth,
-  history,
-  setHistory,
-  future,
-  setFuture,
 }: RecipeProcessCanvasContentProps) {
   const { notifySuccess, notifyError } = useNotifications()
 
@@ -309,50 +281,61 @@ function RecipeProcessCanvasContent({
     setPropsCollapsed(selectedNodeId == null)
   }, [selectedNodeId, setPropsCollapsed])
 
-  // Publishes this process's current nodes/edges/viewport into the shared recipe session on every
-  // *real* change — not just on Save — so switching to a different process (or the Recipe Process view)
-  // always sees this process's latest unsaved edits. Must not push the data this instance was merely
-  // seeded with (not a real edit): a naive "skip the first effect firing" ref flag is not safe here,
-  // because React StrictMode's dev-only double-invoke of effects (mount -> cleanup -> mount, with no
-  // cleanup returned here) flips such a flag on the *first* simulated mount, so the *second* one no
-  // longer skips — reproduced live, it marked a freshly created, untouched process "unsaved"
-  // immediately. Comparing against the exact array references this instance was seeded with is safe
-  // under that double-invoke (state itself is not reset by it), and remains correct forever after:
-  // once a real edit calls setNodes/setEdges, the reference changes permanently.
-  const initialNodesRef = useRef(nodes)
-  const initialEdgesRef = useRef(edges)
+  // Publishes this process's nodes/edges into the shared recipe session on every *real* change —
+  // not just on Save — so switching to a different process (or the Recipe Process view) always sees
+  // this process's latest edits, and autosave persists them. "Real" is decided on exactly what a save
+  // would send (the payload's JSON), so selection, re-measuring the same sizes, or re-seeding never
+  // marks the recipe unsaved — robust under StrictMode's double-invoked effects too, unlike a
+  // "skip the first run" flag. Not pushed mid-gesture (each drag/resize tick): the gesture's end
+  // pushes once (see the drag/resize handlers below).
+  const [seededGraphJson] = useState(() => graphPayloadJson(nodes, edges))
+  const syncedGraphJsonRef = useRef(seededGraphJson)
+  const resizeSnapshotRef = useRef<{ nodeId: string; before: Process[]; width?: number; height?: number } | null>(null)
+  const pushToSession = useCallback((flowNodes: Node[], flowEdges: Edge[]) => {
+    const json = graphPayloadJson(flowNodes, flowEdges)
+    if (json === syncedGraphJsonRef.current) return
+    syncedGraphJsonRef.current = json
+    const flowData = createFlowDataPayload(flowNodes, flowEdges, currentViewportRef.current ?? undefined)
+    const { nodes: processNodes, edges: processEdges } = buildProcessUpdateRequest(process.name, process.description, flowData)
+    session.updateProcess(processId, { nodes: processNodes ?? [], edges: processEdges ?? [] })
+  }, [session, processId, process.name, process.description])
   useEffect(() => {
-    if (nodes === initialNodesRef.current && edges === initialEdgesRef.current) return
-    const flowData = createFlowDataPayload(nodes, edges, currentViewportRef.current ?? undefined)
-    session.updateProcess(processId, buildProcessUpdateRequest(process.name, process.description, flowData))
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- process.name/description are read at push time via the closure, not a reactive dependency: this effect's job is to react to *canvas* edits (nodes/edges), and process identity doesn't change within one mounted instance (key={processId} above).
-  }, [nodes, edges])
+    if (resizeSnapshotRef.current || nodes.some((node) => node.dragging)) return
+    pushToSession(nodes, edges)
+  }, [nodes, edges, pushToSession])
 
-  /** Snapshots nodes/edges *before* a mutation, for Undo. Deliberately not called on every field
-   * keystroke (only structural changes: add/delete/duplicate node, connect/remove edge, drag end) —
-   * snapshotting per-keystroke would flood the stack without much undo value. */
+  // Re-seeds the canvas in place when the session's content changed from outside it — undo/redo,
+  // recovering local changes, AI generation replacing this process, or a save assigning real ids
+  // to processes this one references. Keeps the current selection where the node still exists.
+  const { subscribeReseed, getProcess } = session
+  useEffect(() => subscribeReseed(() => {
+    const latest = getProcess(processId)
+    if (!latest) return
+    const flowData = processToFlowData(latest)
+    const nextNodes = flowData.nodes.map(normalizeFlowNode)
+    const nextEdges = normalizeFlowEdges(flowData.edges)
+    syncedGraphJsonRef.current = graphPayloadJson(nextNodes, nextEdges)
+    setNodes((current) => {
+      const selected = new Set(current.filter((node) => node.selected).map((node) => node.id))
+      return nextNodes.map((node) => (selected.has(node.id) ? { ...node, selected: true } : node))
+    })
+    setEdges(nextEdges)
+    setSelectedNodeId((current) => (current != null && nextNodes.some((node) => node.id === current) ? current : null))
+    setSelectedEdgeId((current) => (current != null && nextEdges.some((edge) => edge.id === current) ? current : null))
+  }), [subscribeReseed, getProcess, processId, setNodes, setEdges])
+
+  /** Records an undo step for a structural change (add/delete/duplicate node, connect/remove edge) — call before applying it. */
   const pushHistorySnapshot = useCallback(() => {
-    setHistory((h) => [...h, { nodes: structuredClone(nodes), edges: structuredClone(edges) }].slice(-50))
-    setFuture([])
-  }, [nodes, edges, setHistory, setFuture])
+    session.recordHistory({ focusProcessId: processId })
+  }, [session, processId])
 
-  const undo = useCallback(() => {
-    if (history.length === 0) return
-    const previous = history[history.length - 1]
-    setFuture((f) => [{ nodes: structuredClone(nodes), edges: structuredClone(edges) }, ...f])
-    setNodes(previous.nodes)
-    setEdges(previous.edges)
-    setHistory((h) => h.slice(0, -1))
-  }, [history, nodes, edges, setNodes, setEdges, setHistory, setFuture])
+  /** Field edits: one undo step per typing burst in one field, not one per keystroke. */
+  const recordFieldEdit = useCallback((nodeId: string, field: string) => {
+    session.recordHistory({ focusProcessId: processId, coalesceKey: `${processId}:${nodeId}:${field}` })
+  }, [session, processId])
 
-  const redo = useCallback(() => {
-    if (future.length === 0) return
-    const next = future[0]
-    setHistory((h) => [...h, { nodes: structuredClone(nodes), edges: structuredClone(edges) }])
-    setNodes(next.nodes)
-    setEdges(next.edges)
-    setFuture((f) => f.slice(1))
-  }, [future, nodes, edges, setNodes, setEdges, setHistory, setFuture])
+  const undo = session.undo
+  const redo = session.redo
 
   // Node move (drag) and resize each get their own start/end snapshot pair below instead — a
   // `remove` is the only structural node change left to catch here (add/connect/delete-edge already
@@ -370,53 +353,46 @@ function RecipeProcessCanvasContent({
   /**
    * One undo entry per completed drag, not per mouse-move: `onNodeDragStart`/`onNodeDragStop` are
    * React Flow's own start/end pair for a node-move gesture (unlike position NodeChange events,
-   * which fire continuously with `dragging: true` while the mouse moves and would have snapshotted
-   * the *already-moved* position by the time a single terminal event was ever seen). If the node is
-   * back at its starting position when the drag ends, no entry is recorded at all.
+   * which fire continuously with `dragging: true` while the mouse moves). The session snapshot from
+   * the gesture's start becomes the undo step, and only if the node actually ended up elsewhere.
    */
-  const dragSnapshotRef = useRef<{ nodeId: string; entry: HistoryEntry } | null>(null)
+  const dragSnapshotRef = useRef<{ nodeId: string; before: Process[]; x: number; y: number } | null>(null)
   const handleNodeDragStart = useCallback((_event: unknown, node: Node) => {
-    dragSnapshotRef.current = {
-      nodeId: node.id,
-      entry: { nodes: structuredClone(nodesRef.current), edges: structuredClone(edgesRef.current) },
-    }
-  }, [])
+    dragSnapshotRef.current = { nodeId: node.id, before: session.getProcesses(), x: node.position.x, y: node.position.y }
+  }, [session])
   const handleNodeDragStop = useCallback((_event: unknown, node: Node) => {
     const snapshot = dragSnapshotRef.current
     dragSnapshotRef.current = null
     if (!snapshot || snapshot.nodeId !== node.id) return
-    const before = snapshot.entry.nodes.find((n) => n.id === node.id)
-    if (before && before.position.x === node.position.x && before.position.y === node.position.y) return
-    setHistory((h) => [...h, snapshot.entry].slice(-50))
-    setFuture([])
-  }, [setHistory, setFuture])
+    if (snapshot.x === node.position.x && snapshot.y === node.position.y) return
+    session.recordHistory({ before: snapshot.before, focusProcessId: processId })
+  }, [session, processId])
 
   /**
    * Same one-entry-per-gesture treatment for resize, driven by RecipeProcessGraphContext's
    * onNodeResizeStart/onNodeResizeEnd (NodeResizeControl's own start/end callbacks live inside each
    * node component, not here — see RecipeStepNode.tsx/RecipeConditionNode.tsx) rather than the
-   * `dimensions` NodeChange stream, which fires on every intermediate resize tick and would flood
-   * history the same way raw position events would for dragging.
+   * `dimensions` NodeChange stream, which fires on every intermediate resize tick. Session pushes
+   * are paused in between, so the end pushes the final size once.
    */
-  const resizeSnapshotRef = useRef<{ nodeId: string; entry: HistoryEntry } | null>(null)
   const handleNodeResizeStart = useCallback((nodeId: string) => {
+    const node = nodesRef.current.find((n) => n.id === nodeId)
     resizeSnapshotRef.current = {
       nodeId,
-      entry: { nodes: structuredClone(nodesRef.current), edges: structuredClone(edgesRef.current) },
+      before: session.getProcesses(),
+      width: node?.width ?? node?.measured?.width,
+      height: node?.height ?? node?.measured?.height,
     }
-  }, [])
+  }, [session])
   const handleNodeResizeEnd = useCallback((nodeId: string) => {
     const snapshot = resizeSnapshotRef.current
     resizeSnapshotRef.current = null
     if (!snapshot || snapshot.nodeId !== nodeId) return
-    const before = snapshot.entry.nodes.find((n) => n.id === nodeId)
     const after = nodesRef.current.find((n) => n.id === nodeId)
-    const beforeSize = { width: before?.width ?? before?.measured?.width, height: before?.height ?? before?.measured?.height }
-    const afterSize = { width: after?.width ?? after?.measured?.width, height: after?.height ?? after?.measured?.height }
-    if (beforeSize.width === afterSize.width && beforeSize.height === afterSize.height) return
-    setHistory((h) => [...h, snapshot.entry].slice(-50))
-    setFuture([])
-  }, [setHistory, setFuture])
+    const resized = snapshot.width !== (after?.width ?? after?.measured?.width) || snapshot.height !== (after?.height ?? after?.measured?.height)
+    if (resized) session.recordHistory({ before: snapshot.before, focusProcessId: processId })
+    pushToSession(nodesRef.current, edgesRef.current)
+  }, [session, processId, pushToSession])
 
   const addNode = useCallback((nodeType: RecipeNodeType) => {
     pushHistorySnapshot()
@@ -498,6 +474,7 @@ function RecipeProcessCanvasContent({
   }, [setNodes, pushHistorySnapshot])
 
   const updateNodeField = useCallback((nodeId: string, field: string, value: string) => {
+    recordFieldEdit(nodeId, field)
     setNodes((nds) => nds.map((node) => (node.id === nodeId ? applyConditionFieldUpdate(node, field, value) : node)))
 
     if (field === 'condition.successLabel' || field === 'condition.failureLabel') {
@@ -508,23 +485,27 @@ function RecipeProcessCanvasContent({
           ? { ...edge, label: value.trim() || fallbackLabel }
           : edge))
     }
-  }, [setNodes, setEdges])
+  }, [setNodes, setEdges, recordFieldEdit])
 
   const updateRecipeStepField = useCallback((nodeId: string, field: string, value: string) => {
+    recordFieldEdit(nodeId, field)
     setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: applyRecipeStepFieldUpdate(node.data, field, value) } : node)))
-  }, [setNodes])
+  }, [setNodes, recordFieldEdit])
 
   const updateActionOnIngredients = useCallback((nodeId: string, ingredients: ActionOnIngredient[]) => {
+    recordFieldEdit(nodeId, 'actionOn.ingredients')
     setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnIngredients(node.data, ingredients) } : node)))
-  }, [setNodes])
+  }, [setNodes, recordFieldEdit])
 
   const updateActionOnProcesses = useCallback((nodeId: string, processIds: number[]) => {
+    recordFieldEdit(nodeId, 'actionOn.processes')
     setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnProcesses(node.data, processIds) } : node)))
-  }, [setNodes])
+  }, [setNodes, recordFieldEdit])
 
   const updateActionOnSteps = useCallback((nodeId: string, stepIds: string[]) => {
+    recordFieldEdit(nodeId, 'actionOn.steps')
     setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnSteps(node.data, stepIds) } : node)))
-  }, [setNodes])
+  }, [setNodes, recordFieldEdit])
 
   // Which earlier steps' Expected Outputs each step may reference, and their live labels — derived
   // from the current nodes/edges (see recipeStepOutputs.ts), never stored.
@@ -730,26 +711,41 @@ function RecipeProcessCanvasContent({
     ? `Generating… ${visualsJob.job.completedSteps}/${visualsJob.job.totalSteps}`
     : undefined
 
-  /** Guards any navigation away from this process (Back button, breadcrumb clicks, opening a subprocess) behind an unsaved-changes confirmation when the *recipe* (any process) has unsaved edits — navigating within the Recipe Tool never discards them either way, but a confirmation still matters when actually leaving via onBack. */
-  const confirmNavigatingAway = useCallback(() => !session.anyDirty || window.confirm('You have unsaved changes. Leave without saving?'), [session])
+  /**
+   * Guards actually leaving via onBack. Pending edits are simply saved on the way out (autosave
+   * flush); only when saving is currently failing is there anything to confirm — and even then the
+   * edits stay on this device and are offered back when the recipe is reopened.
+   */
+  const confirmNavigatingAway = useCallback(() => {
+    const { status } = session.saveState
+    if (status !== 'failed' && status !== 'conflict') return true
+    return window.confirm('Your latest changes could not be saved yet. They are kept on this device and will be offered back when you reopen this recipe. Leave anyway?')
+  }, [session])
 
   /** Called from RecipeStepPanel's "Open" button on a referenced subprocess — the only way to open a subprocess from inside a process's own canvas, now that there's no PROCESS node to double-click. */
   const handleOpenSubprocess = useCallback((subprocessId: number) => {
     onOpenSubprocess(subprocessId, process.name)
   }, [process, onOpenSubprocess])
 
+  /** Explicit Save: flushes the pending autosave right away. Autosave itself never toasts. */
   const handleSave = useCallback(async () => {
-    try {
-      await session.saveAll()
-      notifySuccess('Recipe saved')
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : 'Unable to save this recipe right now')
-    }
+    const { ok, error } = await session.saveNow()
+    if (ok) notifySuccess('Recipe saved')
+    else notifyError(error ?? 'Unable to save this recipe right now')
   }, [session, notifySuccess, notifyError])
 
+  const handleResolveConflict = useCallback((choice: 'reload' | 'keepMine') => {
+    if (choice === 'reload' && !window.confirm('Discard the changes made here and load the latest saved version of this recipe?')) return
+    session.resolveConflict(choice).catch((error) => {
+      notifyError(error instanceof Error ? error.message : 'Unable to resolve the conflict right now')
+    })
+  }, [session, notifyError])
+
   const handleBack = useCallback(() => {
-    if (confirmNavigatingAway()) onBack?.()
-  }, [confirmNavigatingAway, onBack])
+    if (!confirmNavigatingAway()) return
+    void session.saveNow()
+    onBack?.()
+  }, [confirmNavigatingAway, session, onBack])
 
   const handleNavigateToList = useCallback(() => {
     onNavigateToList()
@@ -797,13 +793,12 @@ function RecipeProcessCanvasContent({
         onNavigateToAncestor={handleNavigateToAncestor}
         onBack={onBack ? handleBack : undefined}
         onSave={() => void handleSave()}
-        isSaving={session.saving}
-        isDirty={session.anyDirty}
-        saveError={session.saveError}
+        saveState={session.saveState}
+        onResolveConflict={handleResolveConflict}
         onUndo={undo}
         onRedo={redo}
-        canUndo={history.length > 0}
-        canRedo={future.length > 0}
+        canUndo={session.canUndo}
+        canRedo={session.canRedo}
         onDeleteSelected={(selectedNodeId || selectedEdgeId) ? deleteSelected : undefined}
         zoomPercent={zoomPercent}
         onZoomIn={handleZoomIn}

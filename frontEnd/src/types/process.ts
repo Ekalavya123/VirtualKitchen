@@ -99,10 +99,17 @@ export interface ProcessUpdateRequest {
 
 /**
  * One process's replacement content within a recipe-level batch save — see
- * ProcessApi.updateAll and RecipeSessionContext.saveAll. Sent as
+ * ProcessApi.updateAll and RecipeSessionContext's save. Sent as
  * `{ processes: ProcessBatchUpdateItem[] }` to
  * `PUT /api/v1/recipes/{recipeId}/processes` (ProcessBatchUpdateRequestDTO).
  */
 export interface ProcessBatchUpdateItem extends ProcessUpdateRequest {
   processId: number
+}
+
+/** `PUT /api/v1/recipes/{recipeId}/processes` response (ProcessBatchUpdateResponseDTO). */
+export interface ProcessBatchUpdateResult {
+  /** The recipe's new process revision — the next save's `baseRevision`. */
+  revision: number
+  processes: Process[]
 }

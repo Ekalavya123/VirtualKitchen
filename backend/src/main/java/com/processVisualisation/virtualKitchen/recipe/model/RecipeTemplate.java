@@ -4,6 +4,7 @@ import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.annotation.ReadOnlyProperty;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
@@ -51,6 +52,16 @@ public class RecipeTemplate {
 
     /** The id of this recipe's top-level (type MAIN) {@link Process}. Null until migrated/created. */
     private Long mainProcessId;
+
+    /**
+     * Optimistic-concurrency counter for the recipe-level process save ({@code PUT .../processes}):
+     * bumped atomically by {@code RecipeTemplateRepository.claimProcessRevision} on every batch save,
+     * so a client saving from a stale base is rejected instead of silently overwriting a newer save.
+     * Null (absent on older documents) means 0. Read-only for whole-document saves (ingredients,
+     * nutrition, copy...), which must never write back a stale value read before a concurrent claim.
+     */
+    @ReadOnlyProperty
+    private Long processRevision;
 
     @CreatedDate
     private LocalDateTime createdAt;

@@ -43,4 +43,42 @@ public interface RecipeTemplateRepository extends MongoRepository<RecipeTemplate
     @Query("{ '_id': ?0, 'mainProcessId': null }")
     @Update("{ '$set': { 'mainProcessId': ?1 } }")
     long linkMainProcessIfUnset(Long recipeId, Long processId);
+
+    /**
+     * Atomically claims the next process revision of a recipe, but only if its current
+     * {@code processRevision} still equals {@code expectedRevision} (optimistic concurrency for the
+     * recipe-level process save). Use {@link #claimInitialProcessRevision} when the expected
+     * revision is 0, since older documents have no {@code processRevision} field at all.
+     *
+     * @return 1 if the revision was claimed, 0 if the recipe was saved by someone else since
+     *         {@code expectedRevision} (or doesn't exist)
+     */
+    @Query("{ '_id': ?0, 'processRevision': ?1 }")
+    @Update("{ '$inc': { 'processRevision': 1 } }")
+    long claimProcessRevision(Long recipeId, Long expectedRevision);
+
+    /**
+     * {@link #claimProcessRevision} for an expected revision of 0: matches a recipe whose
+     * {@code processRevision} is 0, null or absent (documents written before revisions existed).
+     */
+    @Query("{ '_id': ?0, '$or': [ { 'processRevision': 0 }, { 'processRevision': null } ] }")
+    @Update("{ '$inc': { 'processRevision': 1 } }")
+    long claimInitialProcessRevision(Long recipeId);
+
+    /**
+     * Unconditionally bumps a recipe's process revision — for a batch save sent without a base
+     * revision (older clients), so clients that do send one still notice the change.
+     */
+    @Query("{ '_id': ?0 }")
+    @Update("{ '$inc': { 'processRevision': 1 } }")
+    long incrementProcessRevision(Long recipeId);
+
+    /**
+     * Best-effort undo of a claim whose save then failed, so the client's retry from the same base
+     * revision isn't rejected as a conflict with itself. Only applies while nobody else has claimed
+     * a newer revision in the meantime.
+     */
+    @Query("{ '_id': ?0, 'processRevision': ?1 }")
+    @Update("{ '$inc': { 'processRevision': -1 } }")
+    long releaseProcessRevision(Long recipeId, Long claimedRevision);
 }
