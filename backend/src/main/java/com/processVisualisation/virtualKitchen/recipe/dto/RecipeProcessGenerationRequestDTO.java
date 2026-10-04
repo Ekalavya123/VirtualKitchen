@@ -1,14 +1,18 @@
 package com.processVisualisation.virtualKitchen.recipe.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /**
- * Request payload for generating a semantic Process structure (MAIN process
- * plus subprocesses) from free-form recipe text via AI. The target recipe id
- * is a path variable on the endpoint, not part of this body.
+ * Request payload for AI process generation. In CREATE mode (the default) {@code recipeText} is free-form recipe
+ * text converted into a semantic Process structure (MAIN process plus subprocesses); in EDIT mode it is a
+ * natural-language change applied to {@code targetProcess}. The target recipe id is a path variable on the
+ * endpoint, not part of this body.
  */
 @Data
 @NoArgsConstructor
@@ -23,4 +27,30 @@ public class RecipeProcessGenerationRequestDTO {
      * accidental double-submit of the same generation click never reserves/charges credits twice.
      */
     private String clientRequestId;
+
+    /** CREATE when absent, so older clients keep their behaviour. */
+    private ProcessGenerationMode mode;
+
+    /** EDIT only: the process being changed. */
+    @Valid
+    private EditTargetProcessDTO targetProcess;
+
+    /** EDIT only, optional: the node selected in the editor, so "this step" / "the previous step" can be resolved. */
+    private String selectedNodeId;
+
+    public RecipeProcessGenerationRequestDTO(String recipeText, String clientRequestId) {
+        this.recipeText = recipeText;
+        this.clientRequestId = clientRequestId;
+    }
+
+    @JsonIgnore
+    public ProcessGenerationMode effectiveMode() {
+        return mode == null ? ProcessGenerationMode.CREATE : mode;
+    }
+
+    @JsonIgnore
+    @AssertTrue(message = "targetProcess is required in EDIT mode")
+    public boolean isTargetProcessPresentForEdit() {
+        return effectiveMode() != ProcessGenerationMode.EDIT || targetProcess != null;
+    }
 }

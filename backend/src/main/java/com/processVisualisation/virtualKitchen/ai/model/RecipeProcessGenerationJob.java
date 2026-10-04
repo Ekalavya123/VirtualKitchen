@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.model;
 
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessGenerationMode;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationResultDTO;
 import com.processVisualisation.virtualKitchen.ai.usage.AiCostLedger;
 import lombok.Data;
@@ -33,6 +34,9 @@ public class RecipeProcessGenerationJob {
     private RecipeProcessGenerationJobStatus status;
 
     private RecipeProcessGenerationStage stage;
+
+    /** CREATE or EDIT; null on jobs stored before modes existed (= CREATE). */
+    private ProcessGenerationMode mode;
 
     private RecipeProcessGenerationResultDTO result;
 

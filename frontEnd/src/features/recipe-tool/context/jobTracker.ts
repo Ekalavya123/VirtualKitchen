@@ -1,7 +1,9 @@
 import { createContext } from 'react'
 import { RecipeJobsApi, RecipeProcessGenerationApi, RecipeProcessVisualizationApi } from '../../../api'
 import type {
+  ProcessGenerationMode,
   RecipeProcessGenerationJobResponse,
+  RecipeProcessGenerationRequest,
   RecipeProcessVisualizationJobResponse,
 } from '../../../types/recipe'
 
@@ -40,7 +42,12 @@ type TrackedBase = {
   pollError: string | null
 }
 
-export type TrackedGenerationJob = TrackedBase & { kind: 'generation'; job: RecipeProcessGenerationJobResponse }
+export type TrackedGenerationJob = TrackedBase & {
+  kind: 'generation'
+  job: RecipeProcessGenerationJobResponse
+  /** What this page asked for (unknown for a job rediscovered on load) — lets the editor refuse a result of the wrong kind. */
+  requestedMode?: ProcessGenerationMode
+}
 export type TrackedVisualsJob = TrackedBase & { kind: 'visuals'; processId: number; job: RecipeProcessVisualizationJobResponse }
 export type TrackedJob = TrackedGenerationJob | TrackedVisualsJob
 export type TrackedJobFor<K extends JobKey> = K extends GenerationJobKey ? TrackedGenerationJob : TrackedVisualsJob
@@ -57,7 +64,7 @@ export type JobNotifier = {
   info: (message: string) => void
 }
 
-const ALREADY_GENERATING = 'This recipe is already being generated — showing its progress.'
+const ALREADY_GENERATING = 'The AI is already working on this recipe — showing its progress.'
 const ALREADY_VISUALIZING = 'Visuals are already being generated for this process — showing their progress.'
 
 export class JobTracker {
@@ -93,8 +100,13 @@ export class JobTracker {
     }
   }
 
-  /** Starts (or joins the already-running) AI process generation for a recipe. Resolves once the backend accepted it. */
-  async startGeneration(recipeId: number, recipeText: string): Promise<TrackedGenerationJob | undefined> {
+  /**
+   * Starts (or joins the already-running) AI job for a recipe: a new flow from recipe text (CREATE) or a change to
+   * an existing process (EDIT). Both share the one-job-per-recipe slot. Resolves once the backend accepted it.
+   */
+  async startGeneration(
+    recipeId: number, request: Omit<RecipeProcessGenerationRequest, 'clientRequestId'>,
+  ): Promise<TrackedGenerationJob | undefined> {
     const key = generationJobKey(recipeId)
     if (this.starting.has(key)) return undefined
     const current = this.jobs.get(key)
@@ -105,12 +117,16 @@ export class JobTracker {
 
     this.starting.add(key)
     try {
-      const job = await RecipeProcessGenerationApi.startJob(recipeId, { recipeText, clientRequestId: crypto.randomUUID() })
-      const tracked: TrackedGenerationJob = { kind: 'generation', recipeId, job, connectionLost: false, pollError: null }
+      const job = await RecipeProcessGenerationApi.startJob(recipeId, { ...request, clientRequestId: crypto.randomUUID() })
+      const tracked: TrackedGenerationJob = {
+        kind: 'generation', recipeId, job, connectionLost: false, pollError: null, requestedMode: request.mode ?? 'CREATE',
+      }
       this.track(key, tracked)
       this.notifier.info(job.reused
         ? ALREADY_GENERATING
-        : 'Generating your recipe process in the background. You can keep working or come back later.')
+        : request.mode === 'EDIT'
+          ? 'The AI is working on your change. You can keep working; you will review it before anything changes.'
+          : 'Generating your recipe process in the background. You can keep working or come back later.')
       return tracked
     } finally {
       this.starting.delete(key)
@@ -243,7 +259,8 @@ export class JobTracker {
       else this.notifier.error(job.errorMessage || 'Unable to generate visuals right now.')
     } else if (tracked.job.status === 'FAILED') {
       // A successful generation is announced by the editor once it has loaded the result.
-      this.notifier.error(tracked.job.errorMessage || 'Unable to generate this recipe right now.')
+      this.notifier.error(tracked.job.errorMessage
+        || (tracked.job.mode === 'EDIT' ? 'Unable to apply that change right now.' : 'Unable to generate this recipe right now.'))
     }
   }
 

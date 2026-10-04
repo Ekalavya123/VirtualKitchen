@@ -44,7 +44,8 @@ public class RecipeProcessGenerationController {
      *
      * @param recipeId the id of the recipe this generation is for (not persisted against by this
      *                 endpoint — only used for job bookkeeping/analytics)
-     * @param request  the validated request containing the raw recipe text
+     * @param request  the validated request: recipe text (CREATE), or a change instruction plus the target
+     *                 process (EDIT)
      * @return an ApiResponse wrapping the newly started job's id and initial status
      */
     @PostMapping("/jobs")
@@ -52,8 +53,7 @@ public class RecipeProcessGenerationController {
             @PathVariable Long recipeId, @Valid @RequestBody RecipeProcessGenerationRequestDTO request
     ) {
         Long userId = currentUserId();
-        RecipeProcessGenerationJobResponseDTO data = recipeProcessGenerationJobService.startJob(
-                userId, recipeId, request.getRecipeText(), request.getClientRequestId());
+        RecipeProcessGenerationJobResponseDTO data = recipeProcessGenerationJobService.startJob(userId, recipeId, request);
         return build(data, "Process generation job started");
     }
 

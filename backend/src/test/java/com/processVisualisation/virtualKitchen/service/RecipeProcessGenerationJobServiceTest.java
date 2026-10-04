@@ -4,10 +4,14 @@ import com.processVisualisation.virtualKitchen.ai.model.RecipeProcessGenerationJ
 import com.processVisualisation.virtualKitchen.ai.model.RecipeProcessGenerationJobStatus;
 import com.processVisualisation.virtualKitchen.ai.model.RecipeProcessGenerationStage;
 import com.processVisualisation.virtualKitchen.ai.repository.RecipeProcessGenerationJobRepository;
+import com.processVisualisation.virtualKitchen.ai.service.RecipeProcessEditService;
 import com.processVisualisation.virtualKitchen.ai.service.RecipeProcessGenerationJobService;
 import com.processVisualisation.virtualKitchen.ai.service.RecipeProcessGenerationService;
 import com.processVisualisation.virtualKitchen.common.concurrent.ThreadPoolTaskPool;
+import com.processVisualisation.virtualKitchen.recipe.dto.EditTargetProcessDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessGenerationMode;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationJobResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationResultDTO;
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,6 +23,7 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
@@ -43,6 +48,7 @@ class RecipeProcessGenerationJobServiceTest {
     private static final String ACTIVE_KEY = "gen:7:100";
 
     private RecipeProcessGenerationService generationService;
+    private RecipeProcessEditService editService;
     private RecipeProcessGenerationJobRepository jobRepository;
     private MongoTemplate mongoTemplate;
     private RecipeProcessGenerationJobService service;
@@ -50,10 +56,11 @@ class RecipeProcessGenerationJobServiceTest {
     @BeforeEach
     void setUp() {
         generationService = mock(RecipeProcessGenerationService.class);
+        editService = mock(RecipeProcessEditService.class);
         jobRepository = mock(RecipeProcessGenerationJobRepository.class);
         mongoTemplate = mock(MongoTemplate.class);
         service = new RecipeProcessGenerationJobService(
-                generationService, jobRepository, mongoTemplate, new ThreadPoolTaskPool(1, "test-generation-orchestrator"));
+                generationService, editService, jobRepository, mongoTemplate, new ThreadPoolTaskPool(1, "test-generation-orchestrator"));
     }
 
     @Test
@@ -68,6 +75,25 @@ class RecipeProcessGenerationJobServiceTest {
         verify(jobRepository).insert(inserted.capture());
         assertEquals(ACTIVE_KEY, inserted.getValue().getActiveKey());
         verify(generationService, timeout(5000)).generate(eq(USER), eq("text"), eq("req-1"), any());
+        assertEquals(ProcessGenerationMode.CREATE, inserted.getValue().getMode());
+        assertEquals("CREATE", started.getMode());
+    }
+
+    @Test
+    void startJob_editMode_runsTheEditPipelineWithTheTargetProcess() {
+        EditTargetProcessDTO target = new EditTargetProcessDTO(11L, "Main Process", List.of(), List.of());
+        RecipeProcessGenerationRequestDTO request = new RecipeProcessGenerationRequestDTO("Remove the last step", "req-3");
+        request.setMode(ProcessGenerationMode.EDIT);
+        request.setTargetProcess(target);
+        request.setSelectedNodeId("node-4");
+        when(editService.edit(eq(USER), anyString(), any(), any(), any(), any()))
+                .thenReturn(RecipeProcessGenerationResultDTO.builder().mode(ProcessGenerationMode.EDIT).build());
+
+        RecipeProcessGenerationJobResponseDTO started = service.startJob(USER, RECIPE, request);
+
+        assertEquals("EDIT", started.getMode());
+        verify(editService, timeout(5000)).edit(eq(USER), eq("Remove the last step"), eq(target), eq("node-4"), eq("req-3"), any());
+        verifyNoInteractions(generationService);
     }
 
     @Test

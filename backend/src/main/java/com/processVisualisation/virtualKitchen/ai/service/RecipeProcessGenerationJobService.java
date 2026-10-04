@@ -7,7 +7,10 @@ import com.processVisualisation.virtualKitchen.ai.repository.RecipeProcessGenera
 import com.processVisualisation.virtualKitchen.common.concurrent.NamedTask;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskPool;
 import com.processVisualisation.virtualKitchen.common.logging.OperationLog;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessGenerationMode;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessEditResultDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationJobResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationResultDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,17 +47,20 @@ public class RecipeProcessGenerationJobService {
     private static final Logger log = LoggerFactory.getLogger(RecipeProcessGenerationJobService.class);
 
     private final RecipeProcessGenerationService recipeProcessGenerationService;
+    private final RecipeProcessEditService recipeProcessEditService;
     private final RecipeProcessGenerationJobRepository jobRepository;
     private final MongoTemplate mongoTemplate;
     private final TaskPool flowGenerationOrchestratorTaskPool;
 
     public RecipeProcessGenerationJobService(
             RecipeProcessGenerationService recipeProcessGenerationService,
+            RecipeProcessEditService recipeProcessEditService,
             RecipeProcessGenerationJobRepository jobRepository,
             MongoTemplate mongoTemplate,
             @Qualifier("flowGenerationOrchestratorTaskPool") TaskPool flowGenerationOrchestratorTaskPool
     ) {
         this.recipeProcessGenerationService = recipeProcessGenerationService;
+        this.recipeProcessEditService = recipeProcessEditService;
         this.jobRepository = jobRepository;
         this.mongoTemplate = mongoTemplate;
         this.flowGenerationOrchestratorTaskPool = flowGenerationOrchestratorTaskPool;
@@ -70,6 +76,16 @@ public class RecipeProcessGenerationJobService {
      * {@code reused=true} instead of starting (and paying for) a duplicate.
      */
     public RecipeProcessGenerationJobResponseDTO startJob(Long userId, Long recipeId, String recipeText, String clientRequestId) {
+        return startJob(userId, recipeId, new RecipeProcessGenerationRequestDTO(recipeText, clientRequestId));
+    }
+
+    /**
+     * Starts an async CREATE or EDIT job (see {@link RecipeProcessGenerationRequestDTO#effectiveMode()}). Both kinds
+     * share the one-running-job-per-user+recipe rule and the idempotency key.
+     */
+    public RecipeProcessGenerationJobResponseDTO startJob(Long userId, Long recipeId, RecipeProcessGenerationRequestDTO request) {
+        String clientRequestId = request.getClientRequestId();
+        ProcessGenerationMode mode = request.effectiveMode();
         if (StringUtils.hasText(clientRequestId)) {
             var existing = jobRepository.findByUserIdAndClientRequestId(userId, clientRequestId);
             if (existing.isPresent()) {
@@ -93,6 +109,7 @@ public class RecipeProcessGenerationJobService {
         job.setActiveKey(activeKey);
         job.setStatus(RecipeProcessGenerationJobStatus.QUEUED);
         job.setStage(RecipeProcessGenerationStage.QUEUED);
+        job.setMode(mode);
         job.setCreatedAt(Instant.now());
         job.setUpdatedAt(Instant.now());
         try {
@@ -109,7 +126,7 @@ public class RecipeProcessGenerationJobService {
         log.debug("event=process_generation_job_queued jobId={} recipeId={}", job.getId(), recipeId);
 
         flowGenerationOrchestratorTaskPool.submit(new NamedTask<>(job.getId(), () -> {
-            runPipeline(userId, recipeId, job.getId(), recipeText, clientRequestId);
+            runPipeline(userId, recipeId, job.getId(), request);
             return null;
         }));
 
@@ -161,15 +178,21 @@ public class RecipeProcessGenerationJobService {
                 .orElseThrow(() -> new NoSuchElementException("Process generation job not found: " + jobId));
     }
 
-    private void runPipeline(Long userId, Long recipeId, String jobId, String recipeText, String clientRequestId) {
+    private void runPipeline(Long userId, Long recipeId, String jobId, RecipeProcessGenerationRequestDTO request) {
+        String recipeText = request.getRecipeText();
+        ProcessGenerationMode mode = request.effectiveMode();
         // Runs on the orchestrator pool; the pool restores the thread's MDC afterwards.
         OperationLog operation = OperationLog.start(log, "process_generation_job", jobId,
-                "jobId=" + jobId + " recipeId=" + recipeId + " inputChars=" + (recipeText == null ? 0 : recipeText.length()));
+                "jobId=" + jobId + " recipeId=" + recipeId + " mode=" + mode
+                        + " inputChars=" + (recipeText == null ? 0 : recipeText.length()));
         markStatus(jobId, RecipeProcessGenerationJobStatus.IN_PROGRESS, RecipeProcessGenerationStage.QUEUED,
                 Map.of("startedAt", Instant.now()));
         try {
-            RecipeProcessGenerationResultDTO result = recipeProcessGenerationService.generate(
-                    userId, recipeText, clientRequestId, stage -> updateStage(jobId, stage));
+            RecipeProcessGenerationResultDTO result = mode == ProcessGenerationMode.EDIT
+                    ? recipeProcessEditService.edit(userId, recipeText, request.getTargetProcess(), request.getSelectedNodeId(),
+                            request.getClientRequestId(), stage -> updateStage(jobId, stage))
+                    : recipeProcessGenerationService.generate(
+                            userId, recipeText, request.getClientRequestId(), stage -> updateStage(jobId, stage));
 
             Update update = new Update()
                     .set("status", RecipeProcessGenerationJobStatus.COMPLETED)
@@ -180,9 +203,8 @@ public class RecipeProcessGenerationJobService {
                     .set("aiUsage", operation.aiTotals())
                     .unset("activeKey");
             mongoTemplate.updateFirst(query(where("_id").is(jobId)), update, RecipeProcessGenerationJob.class);
-            operation.completed("recipeId=" + recipeId + " modelKey=" + result.getModelUsed()
-                    + " usedFallback=" + result.isUsedFallback()
-                    + " subprocesses=" + (result.getSubprocesses() == null ? 0 : result.getSubprocesses().size()));
+            operation.completed("recipeId=" + recipeId + " mode=" + mode + " modelKey=" + result.getModelUsed()
+                    + " usedFallback=" + result.isUsedFallback() + " " + describeOutcome(result));
         } catch (Exception e) {
             // Anything the pipeline throws (validation failure after retry, AI timeout, an
             // unexpected error) must still terminate the job — otherwise a polling client would
@@ -197,6 +219,15 @@ public class RecipeProcessGenerationJobService {
                     .unset("activeKey");
             mongoTemplate.updateFirst(query(where("_id").is(jobId)), update, RecipeProcessGenerationJob.class);
         }
+    }
+
+    private static String describeOutcome(RecipeProcessGenerationResultDTO result) {
+        RecipeProcessEditResultDTO edit = result.getEdit();
+        if (edit != null) {
+            return "opCount=" + (edit.getOperations() == null ? 0 : edit.getOperations().size())
+                    + " hasClarification=" + (edit.getClarification() != null);
+        }
+        return "subprocesses=" + (result.getSubprocesses() == null ? 0 : result.getSubprocesses().size());
     }
 
     private void updateStage(String jobId, RecipeProcessGenerationStage stage) {
@@ -222,6 +253,7 @@ public class RecipeProcessGenerationJobService {
                 .jobId(job.getId())
                 .status(job.getStatus() != null ? job.getStatus().name() : null)
                 .stage(stage.name())
+                .mode((job.getMode() != null ? job.getMode() : ProcessGenerationMode.CREATE).name())
                 .progressPercent(stage.getPercent())
                 .result(job.getResult())
                 .errorMessage(job.getErrorMessage())

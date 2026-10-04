@@ -525,3 +525,57 @@
   display: flex;
   flex-direction: column;
 }
+/* --- AI edit mode (RecipeProcessGenerationModal) --- */
+
+.recipe-ai-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-md);
+  background: var(--flow-surface-muted);
+}
+
+.recipe-ai-mode-option {
+  flex: 1;
+  padding: 6px 10px;
+  border: none;
+  border-radius: calc(var(--flow-radius-md) - 2px);
+  background: transparent;
+  color: var(--flow-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.recipe-ai-mode-option.is-active {
+  background: var(--flow-surface);
+  color: var(--flow-accent-strong);
+  box-shadow: var(--flow-shadow-card);
+}
+
+.recipe-ai-mode-option:disabled {
+  cursor: not-allowed;
+}
+
+.recipe-ai-edit-review {
+  border: 1px solid var(--flow-magic-border);
+  border-radius: var(--flow-radius-md);
+  background: var(--flow-magic-soft);
+  color: var(--flow-text);
+  font-size: 12.5px;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
+/* Nodes an applied AI edit just added or changed — a brief pulse, then back to normal. */
+.react-flow__node.flow-node-ai-changed {
+  border-radius: var(--flow-radius-md);
+  animation: flow-node-ai-changed-pulse 1.4s ease-out 2;
+  box-shadow: 0 0 0 3px var(--flow-magic-border);
+}
+
+@keyframes flow-node-ai-changed-pulse {
+  0% { box-shadow: 0 0 0 0 var(--flow-magic); }
+  100% { box-shadow: 0 0 0 10px transparent; }
+}
