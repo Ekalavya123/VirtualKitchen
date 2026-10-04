@@ -81,6 +81,20 @@ class GeminiTtsProviderTest {
     }
 
     @Test
+    void reportsTheTokenUsageGeminiReturns() {
+        String body = audioResponse("audio/L16;codec=pcm;rate=24000", new byte[480]);
+        body = body.substring(0, body.length() - 1)
+                + ",\"usageMetadata\":{\"promptTokenCount\":12,\"candidatesTokenCount\":250,\"totalTokenCount\":262}}";
+        server.expect(requestTo(GENERATE_URL)).andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        GeneratedAudio audio = provider.synthesize(request());
+
+        assertEquals(12L, audio.usage().inputTokens());
+        assertEquals(250L, audio.usage().outputTokens());
+        assertEquals(262L, audio.usage().totalTokens());
+    }
+
+    @Test
     void fallsBackToConfiguredModelAndVoiceAndHonoursTheRateInTheMimeType() {
         properties.getTts().setModel(MODEL);
         properties.getTts().setVoice("Kore");

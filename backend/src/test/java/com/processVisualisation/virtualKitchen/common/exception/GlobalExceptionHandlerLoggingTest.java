@@ -76,11 +76,13 @@ class GlobalExceptionHandlerLoggingTest {
     }
 
     @Test
-    void notFoundIsDebugOnly() {
+    void notFoundIsInfoWithItsReason() {
         try (LogCapture logs = LogCapture.of(GlobalExceptionHandler.class)) {
             handler.handleNotFound(new NoSuchElementException("recipe 9"));
 
-            assertThat(single(logs).getLevel()).isEqualTo(Level.DEBUG);
+            ILoggingEvent event = single(logs);
+            assertThat(event.getLevel()).isEqualTo(Level.INFO);
+            assertThat(event.getFormattedMessage()).contains("errorType=NoSuchElementException").contains("recipe 9");
         }
     }
 

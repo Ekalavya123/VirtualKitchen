@@ -1,24 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Application logging configuration.
+  Application logging configuration. Four files under logs/, each with one job:
 
-  Console: INFO and above, compact, one line per event.
-  File:    logs/application.log, DEBUG and above for application code, rolled daily and by size.
-  Errors:  logs/application-error.log, ERROR only, kept longer for triage.
+    application.log        What the application did. INFO and above: every operation's started/completed/failed
+                           line (with duration, model, tokens and cost for AI work), one summary line per AI
+                           request, rejected/failed HTTP requests with their reason, warnings and errors.
+                           Read this one.
+    application-error.log  ERROR only, kept longer for triage. Bugs carry their stack trace.
+    debug.log              Everything in application.log plus DEBUG detail: intermediate steps (cache checks,
+                           provider calls, artifact staging, uploads), and third-party chatter such as the MongoDB
+                           driver's connection monitor. Shorter retention.
+    access.log             One line per HTTP request (method, path, status, duration). Polling lives here, so it
+                           never buries the operation log.
 
-  Every line carries the MDC keys set by RequestIdFilter / JwtAuthenticationFilter / the job services:
-  requestId, jobId, userId. Search a whole request with: grep "requestId=<id>" logs/application.log
+  Every line carries requestId, jobId and userId (MDC). jobId names the background operation a line belongs to
+  (a visualization or generation job id, or narration:<recipeId>::<stepId>), including its AI requests, so:
+      grep "jobId=<id>" logs/application.log      the story of one operation
+      grep "requestId=<id>" logs/debug.log        everything one HTTP request caused
 
-  Profiles: no profile (local development) gets coloured console and DEBUG for application code in the file;
-  "prod" gets a plain console and INFO in the file.
+  Profiles: no profile (local development) gets a coloured console and DEBUG detail in debug.log; "prod" gets a
+  plain console and keeps debug.log at INFO.
 
   Overrides (application.properties or env), all optional:
     logging.file.path                              directory for the log files (default: logs)
     logging.threshold.console                      console threshold (default: INFO)
     logging.logback.rollingpolicy.max-file-size    per-file size before rolling (default: 20MB)
-    logging.logback.rollingpolicy.max-history      days of archives to keep (default: 14)
-    logging.logback.rollingpolicy.total-size-cap   cap on all archives (default: 1GB)
-    logging.level.virtualKitchen.ai.payload=DEBUG  log truncated AI user prompts/responses (off by default)
+    logging.logback.rollingpolicy.max-history      days of application.log archives to keep (default: 14)
+    logging.logback.rollingpolicy.total-size-cap   cap on all application.log archives (default: 1GB)
+    app.logging.slow-request-ms                    HTTP requests at least this slow are also logged to application.log
+    logging.level.virtualKitchen.ai.payload=DEBUG  log truncated AI user prompts/responses to debug.log (off by default)
 -->
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
@@ -30,7 +40,11 @@
     <property name="FILE_PATTERN"
               value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5p [%t] [${MDC_PATTERN}] %logger{40} - %m%n%wEx"/>
 
+    <!-- application.log: INFO and above only, whatever level the loggers themselves run at. -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
         <file>${LOG_DIR}/application.log</file>
         <encoder>
             <pattern>${FILE_PATTERN}</pattern>
@@ -63,10 +77,57 @@
         </rollingPolicy>
     </appender>
 
-    <!-- Full AI prompts/responses: never on unless explicitly enabled, and only ever to the file. -->
-    <logger name="virtualKitchen.ai.payload" level="OFF" additivity="false">
-        <appender-ref ref="FILE"/>
+    <!-- debug.log: all levels the loggers allow, including DEBUG detail and third-party noise. -->
+    <appender name="DEBUG_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/debug.log</file>
+        <encoder>
+            <pattern>${FILE_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/debug.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${LOGBACK_ROLLINGPOLICY_MAX_FILE_SIZE:-20MB}</maxFileSize>
+            <maxHistory>3</maxHistory>
+            <totalSizeCap>300MB</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+
+    <!-- access.log: one line per HTTP request (see RequestIdFilter). -->
+    <appender name="ACCESS_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/access.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [requestId=%X{requestId:-} userId=%X{userId:-}] %m%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/access.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${LOGBACK_ROLLINGPOLICY_MAX_FILE_SIZE:-20MB}</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>300MB</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+
+    <logger name="virtualKitchen.access" level="INFO" additivity="false">
+        <appender-ref ref="ACCESS_FILE"/>
     </logger>
+
+    <!-- Full AI prompts/responses: never on unless explicitly enabled, and then only to debug.log. -->
+    <logger name="virtualKitchen.ai.payload" level="OFF" additivity="false">
+        <appender-ref ref="DEBUG_FILE"/>
+    </logger>
+
+    <!--
+      The MongoDB driver logs every idle Atlas socket reset as an INFO line with a full stack trace. Keep it out of
+      application.log; real database failures surface where the application's own operations fail.
+    -->
+    <logger name="org.mongodb.driver" level="INFO" additivity="false">
+        <appender-ref ref="DEBUG_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </logger>
+    <!-- Its startup line dumps the full client settings, including the database username. -->
+    <logger name="org.mongodb.driver.client" level="WARN"/>
 
     <springProfile name="!prod">
         <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
@@ -96,13 +157,10 @@
         <logger name="com.processVisualisation" level="INFO"/>
     </springProfile>
 
-    <logger name="org.mongodb.driver" level="INFO"/>
-    <!-- Its startup line dumps the full client settings, including the database username. -->
-    <logger name="org.mongodb.driver.client" level="WARN"/>
-
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
         <appender-ref ref="FILE"/>
         <appender-ref ref="ERROR_FILE"/>
+        <appender-ref ref="DEBUG_FILE"/>
     </root>
 </configuration>

@@ -18,6 +18,7 @@ import com.processVisualisation.virtualKitchen.common.concurrent.TaskPool;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeProcessAiException;
 import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
+import com.processVisualisation.virtualKitchen.common.logging.OperationLog;
 import com.processVisualisation.virtualKitchen.common.utils.VisualizationKeyBuilder;
 import com.processVisualisation.virtualKitchen.recipe.dto.StepNarrationResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
@@ -210,7 +211,7 @@ public class StepNarrationService {
             if (removed.getStoragePath() != null && storage.backendName().equals(removed.getStorageBackend())) {
                 storage.delete(removed.getStoragePath());
             }
-            log.info("event=narration_deleted narrationKey={}", key);
+            log.info("event=narration_deleted narrationKey={} recipeId={} stepId={}", key, recipeId, stepId);
         });
     }
 
@@ -227,11 +228,11 @@ public class StepNarrationService {
             StepNarration record = existing.get();
             boolean sameText = script.hash().equals(record.getSourceTextHash());
             if (sameText && record.getStatus() == StepNarrationStatus.READY) {
-                log.info("event=narration_cache_hit narrationKey={}", key);
+                log.debug("event=narration_cache_hit narrationKey={}", key);
                 return toDto(stepId, record, script, now);
             }
             if (sameText && isActive(record, now)) {
-                log.info("event=narration_generation_joined narrationKey={} reason=already_generating", key);
+                log.debug("event=narration_generation_joined narrationKey={} reason=already_generating", key);
                 return toDto(stepId, record, script, now);
             }
             if (sameText && inFailureBackoff(record, now)) {
@@ -239,10 +240,10 @@ public class StepNarrationService {
                 return toDto(stepId, record, script, now);
             }
             if (!sameText && record.getStatus() == StepNarrationStatus.READY) {
-                log.info("event=narration_stale narrationKey={}", key);
+                log.debug("event=narration_stale narrationKey={}", key);
             }
         }
-        log.info("event=narration_cache_miss narrationKey={} reason={}", key,
+        log.debug("event=narration_cache_miss narrationKey={} reason={}", key,
                 force ? "forced" : existing.map(r -> "status_" + r.getStatus().name().toLowerCase()).orElse("not_generated"));
 
         String token = UUID.randomUUID().toString();
@@ -251,7 +252,7 @@ public class StepNarrationService {
                 now, now.plusMillis(properties.getLeaseMs()), force));
         if (claimed.isEmpty()) {
             // Another request claimed this text first; report its state instead of generating again.
-            log.info("event=narration_generation_joined narrationKey={} reason=claim_lost", key);
+            log.debug("event=narration_generation_joined narrationKey={} reason=claim_lost", key);
             return toDto(stepId, store.find(key).orElse(null), script, now);
         }
 
@@ -259,7 +260,7 @@ public class StepNarrationService {
             generate(userId, key, token, script, force);
             return null;
         }));
-        log.info("event=narration_generation_requested narrationKey={} chars={} force={}", key, script.text().length(), force);
+        log.debug("event=narration_generation_requested narrationKey={} chars={} force={}", key, script.text().length(), force);
         return toDto(stepId, claimed.get(), script, now);
     }
 
@@ -268,7 +269,8 @@ public class StepNarrationService {
      * and only while this generation still owns the claim.
      */
     void generate(Long userId, String key, String token, NarrationScript script, boolean force) {
-        log.info("event=narration_generation_started narrationKey={}", key);
+        OperationLog operation = OperationLog.start(log, "narration_generation", "narration:" + key,
+                "narrationKey=" + key + " chars=" + script.text().length() + " force=" + force);
         try {
             // A forced regeneration must not be served the previous audio from the artifact store.
             String[] keyInputs = force ? new String[]{script.hash(), token} : new String[]{script.hash()};
@@ -286,7 +288,7 @@ public class StepNarrationService {
                     NarrationAudioArtifactConsumer.correlationId(key, token),
                     artifactSpec,
                     selection -> {
-                        log.info("event=narration_provider_selected narrationKey={} modelKey={} providerBean={} usedFallback={}",
+                        log.debug("event=narration_provider_selected narrationKey={} modelKey={} providerBean={} usedFallback={}",
                                 key, selection.model().getKey(), selection.model().getProviderBean(), selection.usedFallback());
                         return clientResolver.resolveTtsProvider(selection.model()).synthesize(new TtsRequest(
                                 script.text(),
@@ -304,10 +306,14 @@ public class StepNarrationService {
             if (outcome.artifact() != null) {
                 artifactService.markConsumed(outcome.artifact().getId());
             }
-            log.info("event=narration_generation_completed narrationKey={} committed={} reusedArtifact={}",
-                    key, url != null, outcome.reused());
+            operation.completed("narrationKey=" + key + " modelKey=" + outcome.selection().model().getKey()
+                    + " usedFallback=" + outcome.selection().usedFallback() + " voice=" + audio.voice()
+                    + " audioMs=" + audio.durationMs() + " bytes=" + audio.data().length
+                    + " reusedArtifact=" + outcome.reused()
+                    // false = the step was edited (or the lease taken over) mid-generation; newer audio won
+                    + " committed=" + (url != null));
         } catch (Exception e) {
-            FailureLogger.logFailure(log, "narration_generation_failed", e, "narrationKey=" + key);
+            operation.failed(e, "narrationKey=" + key);
             store.markFailed(key, token, describeFailure(e), now());
         }
     }

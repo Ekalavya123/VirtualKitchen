@@ -97,7 +97,7 @@ public class VisualizationImageArtifactConsumer implements AiArtifactConsumer {
                         .set("updatedAt", LocalDateTime.now()),
                 VisualizationAsset.class);
 
-        logger.info("event=image_upload_completed visualizationKey={} artifactId={} bytes={}",
+        logger.debug("event=image_upload_completed visualizationKey={} artifactId={} bytes={}",
                 visualizationKey, artifact.getId(), artifact.getPayloadSize());
         return imageUrl;
     }

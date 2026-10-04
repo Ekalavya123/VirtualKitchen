@@ -8,6 +8,7 @@ import com.processVisualisation.virtualKitchen.ai.credit.CreditService;
 import com.processVisualisation.virtualKitchen.ai.dispatch.AiClientResolver;
 import com.processVisualisation.virtualKitchen.ai.narration.storage.NarrationAudioStorage;
 import com.processVisualisation.virtualKitchen.ai.queue.AiQueueProperties;
+import com.processVisualisation.virtualKitchen.ai.queue.AiRequestJob;
 import com.processVisualisation.virtualKitchen.ai.queue.AiRequestJobRepository;
 import com.processVisualisation.virtualKitchen.ai.queue.AiRequestProperties;
 import com.processVisualisation.virtualKitchen.ai.queue.AiRequestQueueService;
@@ -29,6 +30,7 @@ import com.processVisualisation.virtualKitchen.recipe.model.ProcessNodeKind;
 import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
 import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
 import com.processVisualisation.virtualKitchen.recipe.repository.RecipeTemplateRepository;
+import com.processVisualisation.virtualKitchen.restclient.client.ProviderUsage;
 import com.processVisualisation.virtualKitchen.restclient.client.tts.AudioFormat;
 import com.processVisualisation.virtualKitchen.restclient.client.tts.GeneratedAudio;
 import com.processVisualisation.virtualKitchen.restclient.client.tts.TtsProvider;
@@ -86,6 +88,7 @@ class StepNarrationServiceTest {
     private final Map<String, TtsProvider> providers = new HashMap<>();
     private final Map<String, Function<TtsRequest, GeneratedAudio>> behaviour = new ConcurrentHashMap<>();
     private final Map<String, List<String>> spokenBy = new ConcurrentHashMap<>();
+    private final List<AiRequestJob> savedAiRequests = new java.util.concurrent.CopyOnWriteArrayList<>();
 
     private RecipeTemplate recipe;
     private InMemoryStepNarrationStore store;
@@ -398,6 +401,40 @@ class StepNarrationServiceTest {
     }
 
     @Test
+    void completedLineAndAiRequestRecordCarryModelTokensCostAndDuration() throws Exception {
+        modelProperties.getModels().get(0).setInputUsdPerMillion(0.50);
+        modelProperties.getModels().get(0).setOutputUsdPerMillion(10.00);
+        service = buildService();
+        behaviour.put("geminiTtsProvider", request -> {
+            GeneratedAudio audio = wav(request);
+            return new GeneratedAudio(audio.data(), audio.mimeType(), audio.format(), audio.durationMs(), audio.voice(),
+                    audio.providerModelId(), new ProviderUsage(10L, 100L, null, 110L));
+        });
+
+        try (LogCapture logs = LogCapture.of(StepNarrationService.class);
+             LogCapture queueLogs = LogCapture.of(AiRequestQueueService.class)) {
+            service.ensure(OWNER, RECIPE_ID, PROCESS_ID, STEP_1, false);
+            pool.runAll();
+
+            String completed = logs.events("narration_generation_completed").get(0).getFormattedMessage();
+            assertTrue(completed.contains("modelKey=gemini-tts"), completed);
+            assertTrue(completed.contains("aiRequests=1 inputTokens=10 outputTokens=100 costUsd=0.001005"), completed);
+            assertTrue(completed.contains("durationMs="), completed);
+
+            String request = queueLogs.events("ai_request_completed").get(0).getFormattedMessage();
+            assertTrue(request.contains("operation=step-narration capability=TEXT_TO_SPEECH modelKey=gemini-tts"), request);
+            assertTrue(request.contains("inputTokens=10") && request.contains("outputTokens=100"), request);
+            assertTrue(request.contains("costUsd=0.001005"), request);
+        }
+
+        AiRequestJob persisted = savedAiRequests.get(savedAiRequests.size() - 1);
+        assertEquals("narration:" + RECIPE_ID + "::" + STEP_1, persisted.getOperationId());
+        assertNotNull(persisted.getDurationMs());
+        assertEquals(0.001005, persisted.getUsage().estimatedCostUsd(), 1e-12);
+        assertEquals(10, persisted.getUsage().promptTokens());
+    }
+
+    @Test
     void narrationTextIsNeverLogged() throws Exception {
         String secretText = "Sprinkle the sentinel-spice-4711 over everything";
         stepInputs.put(STEP_1, input(secretText));
@@ -421,7 +458,10 @@ class StepNarrationServiceTest {
         CreditService creditService = new CreditService(
                 mock(MongoTemplate.class), new AiCreditProperties(), mock(AiCreditTransactionRepository.class));
         AiRequestJobRepository jobRepository = mock(AiRequestJobRepository.class);
-        when(jobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(jobRepository.save(any())).thenAnswer(inv -> {
+            savedAiRequests.add(inv.getArgument(0));
+            return inv.getArgument(0);
+        });
         AiArtifactService artifactService = mock(AiArtifactService.class);
         when(artifactService.findReusable(any(), any())).thenReturn(Optional.empty());
 

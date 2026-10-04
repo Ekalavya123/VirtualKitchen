@@ -3,6 +3,7 @@ package com.processVisualisation.virtualKitchen.restclient.client.gemini;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.processVisualisation.virtualKitchen.restclient.client.ProviderUsage;
 import com.processVisualisation.virtualKitchen.restclient.client.tts.AudioFormat;
 import com.processVisualisation.virtualKitchen.restclient.client.tts.GeneratedAudio;
 import com.processVisualisation.virtualKitchen.restclient.client.tts.TtsProvider;
@@ -145,13 +146,13 @@ public class GeminiTtsProvider implements TtsProvider {
                 } catch (IllegalArgumentException ex) {
                     throw new AIInvalidResponseException("Gemini TTS audio was not valid base64", ex);
                 }
-                return toGeneratedAudio(audio, inlineData.path("mimeType").asText(""), model, voice);
+                return toGeneratedAudio(audio, inlineData.path("mimeType").asText(""), model, voice, GeminiUsage.from(root));
             }
         }
         throw new AIInvalidResponseException("Gemini TTS response did not contain audio");
     }
 
-    private GeneratedAudio toGeneratedAudio(byte[] audio, String mimeType, String model, String voice) {
+    private GeneratedAudio toGeneratedAudio(byte[] audio, String mimeType, String model, String voice, ProviderUsage usage) {
         if (audio.length == 0) {
             throw new AIInvalidResponseException("Gemini TTS returned zero bytes of audio");
         }
@@ -159,13 +160,13 @@ public class GeminiTtsProvider implements TtsProvider {
         if (container != null) {
             // Already a playable container; pass it through.
             Long durationMs = container == AudioFormat.WAV ? WavAudio.durationMs(audio) : null;
-            return new GeneratedAudio(audio, container.mimeType(), container, durationMs, voice, model);
+            return new GeneratedAudio(audio, container.mimeType(), container, durationMs, voice, model, usage);
         }
         // Raw PCM (audio/L16 / audio/pcm): wrap it as WAV.
         int sampleRate = sampleRateOf(mimeType);
         byte[] wav = WavAudio.fromPcm(audio, sampleRate, CHANNELS, BITS_PER_SAMPLE);
         long durationMs = WavAudio.pcmDurationMs(audio.length, sampleRate, CHANNELS, BITS_PER_SAMPLE);
-        return new GeneratedAudio(wav, AudioFormat.WAV.mimeType(), AudioFormat.WAV, durationMs, voice, model);
+        return new GeneratedAudio(wav, AudioFormat.WAV.mimeType(), AudioFormat.WAV, durationMs, voice, model, usage);
     }
 
     private int sampleRateOf(String mimeType) {

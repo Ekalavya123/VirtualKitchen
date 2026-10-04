@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.usage;
 
+import com.processVisualisation.virtualKitchen.restclient.client.ProviderUsage;
 import com.processVisualisation.virtualKitchen.restclient.dto.AIResponse;
 
 import java.util.concurrent.Callable;
@@ -28,6 +29,14 @@ public final class AiUsageMeter {
             } else {
                 CURRENT.set(previous);
             }
+        }
+    }
+
+    /** Counts one image/speech provider call against the job bound to this thread, if any. */
+    public static void record(ProviderUsage providerUsage) {
+        AiUsage usage = CURRENT.get();
+        if (usage != null) {
+            usage.add(providerUsage);
         }
     }
 

@@ -9,12 +9,10 @@ import com.processVisualisation.virtualKitchen.common.concurrent.NamedTask;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskPool;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskResult;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeProcessAiException;
-import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
-import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
+import com.processVisualisation.virtualKitchen.common.logging.OperationLog;
 import com.processVisualisation.virtualKitchen.recipe.dto.VisualizationJobResponseDTO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -115,8 +113,7 @@ public class RecipeProcessVisualizationJobService {
             }
             throw e;
         }
-        log.info("event=visualization_job_started jobId={} recipeId={} processId={} steps={}",
-                job.getId(), recipeId, processId, job.getTotalSteps());
+        log.debug("event=visualization_job_queued jobId={} recipeId={} processId={}", job.getId(), recipeId, processId);
 
         visualizationOrchestratorTaskPool.submit(new NamedTask<>(job.getId(), () -> {
             runPipeline(userId, recipeId, job.getId(), preparation);
@@ -160,9 +157,9 @@ public class RecipeProcessVisualizationJobService {
     }
 
     private void runPipeline(Long userId, Long recipeId, String jobId, RecipeProcessVisualizationService.ProcessStepPreparation preparation) {
-        // Runs on the orchestrator pool; set before submitAll so every step task inherits the job ID.
-        MDC.put(MdcKeys.JOB_ID, jobId);
-        long startedAt = System.nanoTime();
+        // Runs on the orchestrator pool; binds the job ID before submitAll so every step task inherits it.
+        OperationLog operation = OperationLog.start(log, "visualization_job", jobId, "jobId=" + jobId
+                + " recipeId=" + recipeId + " processId=" + preparation.process().getId() + " steps=" + preparation.steps().size());
         markStatus(jobId, VisualizationJobStatus.IN_PROGRESS, Map.of("startedAt", Instant.now()));
         try {
             List<NamedTask<VisualizationAsset>> tasks = preparation.steps().stream()
@@ -190,25 +187,30 @@ public class RecipeProcessVisualizationJobService {
             VisualizationJobStatus finalStatus = anyStepFailed
                     ? VisualizationJobStatus.COMPLETED_WITH_ERRORS
                     : VisualizationJobStatus.COMPLETED;
-            markStatus(jobId, finalStatus, Map.of("completedAt", Instant.now()));
-            long failedSteps = batch.results().stream().filter(result -> !isEffectivelySuccessful(result)).count();
+            markStatus(jobId, finalStatus, Map.of("completedAt", Instant.now(), "aiUsage", operation.aiTotals()));
+            List<String> failedStepIds = batch.results().stream()
+                    .filter(result -> !isEffectivelySuccessful(result))
+                    .map(TaskResult::taskId)
+                    .toList();
+            String outcome = "status=" + finalStatus + " steps=" + batch.results().size()
+                    + " failedSteps=" + failedStepIds.size();
             if (anyStepFailed) {
-                log.warn("event=visualization_job_completed status={} steps={} failedSteps={} durationMs={}",
-                        finalStatus, batch.results().size(), failedSteps, (System.nanoTime() - startedAt) / 1_000_000L);
+                // Each failed step's reason is logged by the step itself (visualization_image_failed / _prompt_failed).
+                operation.completedWithErrors(outcome + " failedStepIds=" + failedStepIds);
             } else {
-                log.info("event=visualization_job_completed status={} steps={} failedSteps=0 durationMs={}",
-                        finalStatus, batch.results().size(), (System.nanoTime() - startedAt) / 1_000_000L);
+                operation.completed(outcome);
             }
         } catch (Exception e) {
             // Anything outside the per-step task boundary (e.g. the final save itself throwing)
             // must still terminate the job — otherwise a polling client would spin forever on a
             // job stuck IN_PROGRESS with no writer left to unstick it.
-            FailureLogger.logFailure(log, "visualization_job_failed", e);
+            operation.failed(e, "processId=" + preparation.process().getId());
             Update update = new Update()
                     .set("status", VisualizationJobStatus.FAILED)
                     .set("errorMessage", safeMessage(e))
                     .set("completedAt", Instant.now())
                     .set("updatedAt", Instant.now())
+                    .set("aiUsage", operation.aiTotals())
                     .unset("activeKey");
             mongoTemplate.updateFirst(query(where("_id").is(jobId)), update, VisualizationJob.class);
         }

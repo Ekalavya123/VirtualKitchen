@@ -6,8 +6,7 @@ import com.processVisualisation.virtualKitchen.ai.model.RecipeProcessGenerationJ
 import com.processVisualisation.virtualKitchen.ai.repository.RecipeProcessGenerationJobRepository;
 import com.processVisualisation.virtualKitchen.common.concurrent.NamedTask;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskPool;
-import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
-import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
+import com.processVisualisation.virtualKitchen.common.logging.OperationLog;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationJobResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationResultDTO;
 import org.slf4j.Logger;
@@ -107,11 +106,10 @@ public class RecipeProcessGenerationJobService {
             }
             throw e;
         }
-        log.info("event=process_generation_job_started jobId={} recipeId={} inputChars={}",
-                job.getId(), recipeId, recipeText == null ? 0 : recipeText.length());
+        log.debug("event=process_generation_job_queued jobId={} recipeId={}", job.getId(), recipeId);
 
         flowGenerationOrchestratorTaskPool.submit(new NamedTask<>(job.getId(), () -> {
-            runPipeline(userId, job.getId(), recipeText, clientRequestId);
+            runPipeline(userId, recipeId, job.getId(), recipeText, clientRequestId);
             return null;
         }));
 
@@ -163,10 +161,10 @@ public class RecipeProcessGenerationJobService {
                 .orElseThrow(() -> new NoSuchElementException("Process generation job not found: " + jobId));
     }
 
-    private void runPipeline(Long userId, String jobId, String recipeText, String clientRequestId) {
+    private void runPipeline(Long userId, Long recipeId, String jobId, String recipeText, String clientRequestId) {
         // Runs on the orchestrator pool; the pool restores the thread's MDC afterwards.
-        MDC.put(MdcKeys.JOB_ID, jobId);
-        long startedAt = System.nanoTime();
+        OperationLog operation = OperationLog.start(log, "process_generation_job", jobId,
+                "jobId=" + jobId + " recipeId=" + recipeId + " inputChars=" + (recipeText == null ? 0 : recipeText.length()));
         markStatus(jobId, RecipeProcessGenerationJobStatus.IN_PROGRESS, RecipeProcessGenerationStage.QUEUED,
                 Map.of("startedAt", Instant.now()));
         try {
@@ -179,28 +177,26 @@ public class RecipeProcessGenerationJobService {
                     .set("result", result)
                     .set("completedAt", Instant.now())
                     .set("updatedAt", Instant.now())
+                    .set("aiUsage", operation.aiTotals())
                     .unset("activeKey");
             mongoTemplate.updateFirst(query(where("_id").is(jobId)), update, RecipeProcessGenerationJob.class);
-            log.info("event=process_generation_job_completed modelKey={} usedFallback={} subprocesses={} durationMs={}",
-                    result.getModelUsed(), result.isUsedFallback(),
-                    result.getSubprocesses() == null ? 0 : result.getSubprocesses().size(), elapsedMs(startedAt));
+            operation.completed("recipeId=" + recipeId + " modelKey=" + result.getModelUsed()
+                    + " usedFallback=" + result.isUsedFallback()
+                    + " subprocesses=" + (result.getSubprocesses() == null ? 0 : result.getSubprocesses().size()));
         } catch (Exception e) {
             // Anything the pipeline throws (validation failure after retry, AI timeout, an
             // unexpected error) must still terminate the job — otherwise a polling client would
             // spin forever on a job stuck IN_PROGRESS with no writer left to unstick it.
-            FailureLogger.logFailure(log, "process_generation_job_failed", e);
+            operation.failed(e, "recipeId=" + recipeId);
             Update update = new Update()
                     .set("status", RecipeProcessGenerationJobStatus.FAILED)
                     .set("errorMessage", safeMessage(e))
                     .set("completedAt", Instant.now())
                     .set("updatedAt", Instant.now())
+                    .set("aiUsage", operation.aiTotals())
                     .unset("activeKey");
             mongoTemplate.updateFirst(query(where("_id").is(jobId)), update, RecipeProcessGenerationJob.class);
         }
-    }
-
-    private static long elapsedMs(long startedAtNanos) {
-        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
     }
 
     private void updateStage(String jobId, RecipeProcessGenerationStage stage) {

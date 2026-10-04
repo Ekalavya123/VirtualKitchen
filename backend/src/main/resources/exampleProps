@@ -109,6 +109,10 @@ ai.models[5].tier=PAID
 ai.models[5].provider-bean=geminiTtsProvider
 ai.models[5].provider-model-id=${ai.gemini.tts.model}
 ai.models[5].credit-cost=1
+# USD per 1M tokens for gemini-2.5-flash-preview-tts (Google AI pricing page, checked 2026-10-04): input $0.50
+# (text), output $10.00 (audio tokens). Update together with ai.gemini.tts.model.
+ai.models[5].input-usd-per-million=0.5
+ai.models[5].output-usd-per-million=10.0
 # Used only when the user has no credits left for the paid model.
 ai.models[5].fallback-model-key=local-tts
 ai.models[5].enabled=true
@@ -119,6 +123,9 @@ ai.models[6].tier=OPEN_SOURCE
 ai.models[6].provider-bean=localTtsProvider
 ai.models[6].provider-model-id=${ai.local-tts.model}
 ai.models[6].credit-cost=0
+# Local TTS engine: no per-request cost.
+ai.models[6].input-usd-per-million=0
+ai.models[6].output-usd-per-million=0
 ai.models[6].enabled=true
 
 ai.default-model.TEXT_TO_SPEECH=${AI_TTS_DEFAULT_MODEL:gemini-tts}
@@ -148,3 +155,7 @@ ai.narration.storage.type=${NARRATION_STORAGE:filesystem}
 ai.narration.storage.filesystem.root=${NARRATION_FS_ROOT:./data/narrations}
 ai.narration.storage.filesystem.public-base-url=${NARRATION_PUBLIC_BASE_URL:http://localhost:8080}
 ai.narration.storage.supabase.path-prefix=narrations
+
+# --- Logging ---
+# HTTP requests at least this slow are also written to application.log (all requests go to logs/access.log).
+app.logging.slow-request-ms=${SLOW_REQUEST_MS:3000}

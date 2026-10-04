@@ -69,8 +69,7 @@ public class GeminiImageClient implements ImageGenerationClient {
                 if (!inlineData.isMissingNode()) {
                     String mimeType = inlineData.path("mimeType").asText();
                     String base64 = inlineData.path("data").asText();
-                    return new GeneratedImage(mimeType, Base64.getDecoder().decode(base64)
-                    );
+                    return new GeneratedImage(mimeType, Base64.getDecoder().decode(base64), GeminiUsage.from(root));
                 }
             }
         }

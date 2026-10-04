@@ -46,7 +46,8 @@ class LoggingAIClientTest {
 
             List<ILoggingEvent> completed = logs.events("ai_call_completed");
             assertThat(completed).hasSize(1);
-            assertThat(completed.get(0).getLevel()).isEqualTo(Level.INFO);
+            // Per-call detail is DEBUG (debug.log); the operator summary is ai_request_completed.
+            assertThat(completed.get(0).getLevel()).isEqualTo(Level.DEBUG);
             assertThat(completed.get(0).getFormattedMessage()).contains(
                     "operation=RECIPE_TO_FLOW", "provider=gemini", "model=gemini-test-001", "durationMs=",
                     "inputTokens=742", "cachedTokens=100", "outputTokens=518", "finishReason=STOP",
@@ -71,7 +72,7 @@ class LoggingAIClientTest {
 
             List<ILoggingEvent> failed = logs.events("ai_call_failed");
             assertThat(failed).hasSize(1);
-            assertThat(failed.get(0).getLevel()).isEqualTo(Level.WARN);
+            assertThat(failed.get(0).getLevel()).isEqualTo(Level.DEBUG);
             assertThat(failed.get(0).getThrowableProxy()).as("stack is logged once, by the handling boundary").isNull();
             assertThat(failed.get(0).getFormattedMessage())
                     .contains("errorType=AICommunicationException", "status=400", "provider=gemini");

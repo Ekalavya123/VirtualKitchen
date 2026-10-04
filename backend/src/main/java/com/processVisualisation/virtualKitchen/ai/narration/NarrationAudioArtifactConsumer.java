@@ -105,12 +105,12 @@ public class NarrationAudioArtifactConsumer implements AiArtifactConsumer {
         // Cheap pre-check, so a superseded generation does not upload at all.
         Optional<StepNarration> current = store.find(narrationKey);
         if (current.isEmpty() || !token.equals(current.get().getGenerationToken())) {
-            log.info("event=narration_generation_superseded narrationKey={} stage=before_store", narrationKey);
+            log.debug("event=narration_generation_superseded narrationKey={} stage=before_store", narrationKey);
             return null;
         }
 
         StoredAudio stored = storage.store(audio.data(), audio.format(), narrationKey);
-        log.info("event=narration_audio_stored narrationKey={} backend={} bytes={} audioMs={}",
+        log.debug("event=narration_audio_stored narrationKey={} backend={} bytes={} audioMs={}",
                 narrationKey, stored.backend(), audio.data().length, audio.durationMs());
 
         Optional<StepNarration> previous = store.commitReady(narrationKey, token, new StepNarrationStore.ReadyAudio(
@@ -130,7 +130,7 @@ public class NarrationAudioArtifactConsumer implements AiArtifactConsumer {
 
         if (previous.isEmpty()) {
             // Superseded between the pre-check and the commit: keep the newer record, drop this file.
-            log.info("event=narration_generation_superseded narrationKey={} stage=after_store", narrationKey);
+            log.debug("event=narration_generation_superseded narrationKey={} stage=after_store", narrationKey);
             storage.delete(stored.path());
             return null;
         }

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -79,51 +80,69 @@ class RequestIdFilterTest {
             throw new IllegalStateException("boom");
         };
 
-        try (LogCapture logs = LogCapture.of(RequestIdFilter.class)) {
+        try (LogCapture access = LogCapture.of(RequestIdFilter.ACCESS_LOGGER);
+             LogCapture app = LogCapture.of(RequestIdFilter.class)) {
             assertThatThrownBy(() -> filter.doFilter(
                     new MockHttpServletRequest("POST", "/api/x"), new MockHttpServletResponse(), failing))
                     .isInstanceOf(IllegalStateException.class);
 
             assertThat(MDC.getCopyOfContextMap()).isNullOrEmpty();
-            List<ILoggingEvent> completed = logs.events("http_request_completed");
-            assertThat(completed).hasSize(1);
-            assertThat(completed.get(0).getFormattedMessage()).contains("status=500").contains("path=/api/x");
-            assertThat(completed.get(0).getMDCPropertyMap()).containsKey(MdcKeys.REQUEST_ID);
+            assertThat(access.events()).hasSize(1);
+            assertThat(access.events().get(0).getFormattedMessage()).contains("status=500").contains("path=/api/x");
+            assertThat(access.events().get(0).getMDCPropertyMap()).containsKey(MdcKeys.REQUEST_ID);
+
+            List<ILoggingEvent> crashed = app.events("http_request_crashed");
+            assertThat(crashed).hasSize(1);
+            assertThat(crashed.get(0).getLevel()).isEqualTo(Level.ERROR);
         }
     }
 
     @Test
-    void logsOneCompletionLinePerRequestWithoutQueryString() throws Exception {
+    void writesEveryRequestToTheAccessLogOnlyWithoutQueryString() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", "/api/v1/recipes");
         request.setQueryString("email=someone%40example.com");
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        try (LogCapture logs = LogCapture.of(RequestIdFilter.class)) {
+        try (LogCapture access = LogCapture.of(RequestIdFilter.ACCESS_LOGGER);
+             LogCapture app = LogCapture.of(RequestIdFilter.class)) {
             filter.doFilter(request, response, (req, res) -> ((HttpServletResponse) res).setStatus(201));
 
-            List<ILoggingEvent> completed = logs.events("http_request_completed");
-            assertThat(completed).hasSize(1);
-            assertThat(completed.get(0).getLevel()).isEqualTo(Level.INFO);
-            assertThat(completed.get(0).getFormattedMessage())
+            assertThat(access.events()).hasSize(1);
+            assertThat(access.events().get(0).getLevel()).isEqualTo(Level.INFO);
+            assertThat(access.events().get(0).getFormattedMessage())
                     .contains("method=GET", "path=/api/v1/recipes", "status=201", "durationMs=")
                     .doesNotContain("email");
+            assertThat(app.events()).as("a fast, successful request stays out of application.log").isEmpty();
+        }
+    }
+
+    @Test
+    void slowRequestIsAlsoReportedToTheApplicationLog() throws Exception {
+        ReflectionTestUtils.setField(filter, "slowRequestMs", 0L);
+        try (LogCapture app = LogCapture.of(RequestIdFilter.class)) {
+            filter.doFilter(new MockHttpServletRequest("GET", "/api/v1/slow"), new MockHttpServletResponse(), (q, s) -> { });
+
+            List<ILoggingEvent> slow = app.events("http_request_slow");
+            assertThat(slow).hasSize(1);
+            assertThat(slow.get(0).getLevel()).isEqualTo(Level.WARN);
+            assertThat(slow.get(0).getFormattedMessage()).contains("path=/api/v1/slow");
+        } finally {
+            ReflectionTestUtils.setField(filter, "slowRequestMs", 3000L);
         }
     }
 
     @Test
     void doesNotLogHealthChecksOrPreflights() throws Exception {
-        try (LogCapture logs = LogCapture.of(RequestIdFilter.class)) {
+        try (LogCapture access = LogCapture.of(RequestIdFilter.ACCESS_LOGGER);
+             LogCapture logs = LogCapture.of(RequestIdFilter.class)) {
             filter.doFilter(new MockHttpServletRequest("GET", "/actuator/health"), new MockHttpServletResponse(), (q, s) -> { });
             filter.doFilter(new MockHttpServletRequest("OPTIONS", "/api/x"), new MockHttpServletResponse(), (q, s) -> { });
 
+            assertThat(access.events()).isEmpty();
             assertThat(logs.events()).isEmpty();
         }
     }
 
-    /**
-     * Many concurrent requests on a small, reused thread pool (like Tomcat's): each request must see only its
-     * own ID, every ID must be unique, and no thread may carry an ID into the next request it serves.
-     */
     @Test
     void concurrentRequestsNeverShareOrLeakRequestIds() throws Exception {
         int requests = 200;
