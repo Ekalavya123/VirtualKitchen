@@ -185,6 +185,11 @@ public class RecipeProcessGenerationValidator {
             if (!isBlank(expectedResult) && !EXPECTED_RESULTS.contains(expectedResult.toLowerCase())) {
                 errors.add(label + ".expectedResult must be success or failure, got: " + expectedResult);
             }
+            // Its "No" branch loops back to the step right before it (see the prompt's CONDITION BRANCHES).
+            GeneratedRecipeStepDTO previous = scope.consumerIndex() > 0 ? scope.steps().get(scope.consumerIndex() - 1) : null;
+            if (previous == null || !"STEP".equals(previous.getNodeType())) {
+                errors.add(label + " is a CONDITION that must come immediately after the STEP it checks");
+            }
             return;
         }
 

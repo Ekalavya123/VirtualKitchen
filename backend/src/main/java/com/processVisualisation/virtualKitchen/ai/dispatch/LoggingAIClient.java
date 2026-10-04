@@ -46,7 +46,7 @@ public class LoggingAIClient implements AIClient {
         try {
             response = delegate.chat(request);
         } catch (RuntimeException ex) {
-            log.warn("event=ai_call_failed operation={} provider={} model={} durationMs={} errorType={} status={}",
+            log.debug("event=ai_call_failed operation={} provider={} model={} durationMs={} errorType={} status={}",
                     operation, provider, request.getModel(), elapsedMs(startedAt),
                     ex.getClass().getSimpleName(), httpStatusOf(ex));
             throw ex;
@@ -54,11 +54,11 @@ public class LoggingAIClient implements AIClient {
 
         long durationMs = elapsedMs(startedAt);
         if (response == null) {
-            log.info("event=ai_call_completed operation={} provider={} model={} durationMs={} inputChars={} outputChars=0",
+            log.debug("event=ai_call_completed operation={} provider={} model={} durationMs={} inputChars={} outputChars=0",
                     operation, provider, request.getModel(), durationMs, inputChars);
             return null;
         }
-        log.info("event=ai_call_completed operation={} provider={} model={} durationMs={} inputTokens={} cachedTokens={} "
+        log.debug("event=ai_call_completed operation={} provider={} model={} durationMs={} inputTokens={} cachedTokens={} "
                         + "outputTokens={} thoughtsTokens={} inputChars={} outputChars={} finishReason={}",
                 operation, provider, response.getModel(), durationMs, response.getPromptTokens(),
                 response.getCachedTokens(), response.getCompletionTokens(), response.getThoughtsTokens(),

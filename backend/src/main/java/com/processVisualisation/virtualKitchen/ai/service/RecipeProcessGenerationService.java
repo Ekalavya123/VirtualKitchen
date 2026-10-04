@@ -186,7 +186,7 @@ public class RecipeProcessGenerationService {
     }
 
     private void logValidationCompleted(int attempt, RecipeProcessGenerationResultDTO result) {
-        logger.info("event=process_validation_completed attempt={} promptVersion={} subprocesses={}",
+        logger.debug("event=process_validation_completed attempt={} promptVersion={} subprocesses={}",
                 attempt, RecipeProcessGenerationPromptBuilder.PROMPT_VERSION,
                 result.getSubprocesses() == null ? 0 : result.getSubprocesses().size());
     }

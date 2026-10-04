@@ -13,6 +13,8 @@ type ConditionNodeProps = {
   data: ConditionNodeData
 }
 
+const DIAMOND_RADIUS = 8
+
 const toNumber = (value: unknown, fallback: number) => {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string') {
@@ -35,6 +37,11 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
   const height = toNumber(nodeHeight, toNumber(nodeStyle?.height, 190))
   const size = Math.min(width, height)
   const diamondSize = size * 0.72
+  // Center-to-tip distance of the rotated square (half its diagonal, less what the rounded corners
+  // cut off). Handles are placed from this rather than at the box's edges, so edges meet the
+  // diamond's tips — on the node's center lines — whatever the box's shape mid-resize.
+  const tipDistance = diamondSize * Math.SQRT1_2 - DIAMOND_RADIUS * (Math.SQRT2 - 1)
+  const centeredHandle = { transform: 'translate(-50%, -50%)', right: 'auto', bottom: 'auto' } as const
 
   const titleRef = useRef<HTMLDivElement | null>(null)
   const notesRef = useRef<HTMLDivElement | null>(null)
@@ -140,12 +147,13 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
             ? 'linear-gradient(135deg, #fef3c7, #fde68a)'
             : 'linear-gradient(135deg, #fffbeb, #fef3c7)',
           border: `2px solid ${selected ? '#d97706' : '#fcd34d'}`,
-          borderRadius: 8,
+          borderRadius: DIAMOND_RADIUS,
           transform: 'rotate(45deg)',
           boxShadow: selected
             ? '0 0 0 3px #d9770622, 0 4px 16px rgba(217,119,6,0.15)'
             : '0 2px 8px rgba(217,119,6,0.1)',
-          transition: 'all 0.18s',
+          // Never width/height: an animated size trails the instantly-moved handles while resizing.
+          transition: 'background 0.18s, border-color 0.18s, box-shadow 0.18s',
         }}
       />
 
@@ -219,7 +227,7 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
         )}
       </div>
 
-      {/* Handles — Top (incoming), Bottom-right (Yes), Bottom-left (No) */}
+      {/* Handles — Top (incoming), Right (Yes), Left (No), each on a diamond tip */}
       <Handle
         id="condition-target"
         type="target"
@@ -229,13 +237,13 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
           background: '#d97706',
           border: '2px solid white',
           boxShadow: '0 0 0 1.5px #d97706',
-          top: 0,
+          ...centeredHandle,
+          top: height / 2 - tipDistance,
           left: '50%',
-          transform: 'translate(-50%, -50%)',
         }}
       />
 
-      {/* YES — right side */}
+      {/* YES — right tip */}
       <Handle
         id="condition-yes"
         type="source"
@@ -245,11 +253,13 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
           background: '#16a34a',
           border: '2px solid white',
           boxShadow: '0 0 0 1.5px #16a34a',
-          right: 0,
+          ...centeredHandle,
+          top: '50%',
+          left: width / 2 + tipDistance,
         }}
       />
 
-      {/* NO — left side */}
+      {/* NO — left tip */}
       <Handle
         id="condition-no"
         type="source"
@@ -259,7 +269,9 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
           background: '#dc2626',
           border: '2px solid white',
           boxShadow: '0 0 0 1.5px #dc2626',
-          left: 0,
+          ...centeredHandle,
+          top: '50%',
+          left: width / 2 - tipDistance,
         }}
       />
 

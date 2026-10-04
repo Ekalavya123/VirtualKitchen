@@ -37,3 +37,6 @@ application.properties
 
 ### Logs ###
 logs/
+
+# Generated narration audio (filesystem storage, see ai.narration.storage.*)
+data/

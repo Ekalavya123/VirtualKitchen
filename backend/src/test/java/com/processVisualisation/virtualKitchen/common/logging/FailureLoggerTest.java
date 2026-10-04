@@ -20,7 +20,7 @@ class FailureLoggerTest {
         assertThat(event.getLevel()).isEqualTo(Level.WARN);
         assertThat(event.getThrowableProxy()).isNull();
         assertThat(event.getFormattedMessage())
-                .isEqualTo("event=job_failed jobKind=test errorType=RecipeProcessAiException error=invalid process");
+                .isEqualTo("event=job_failed jobKind=test errorType=RecipeProcessAiException error=\"invalid process\"");
     }
 
     @Test

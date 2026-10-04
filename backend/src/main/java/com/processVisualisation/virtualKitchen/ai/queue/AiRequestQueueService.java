@@ -10,6 +10,7 @@ import com.processVisualisation.virtualKitchen.ai.routing.FallbackReason;
 import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionOutcome;
 import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionService;
 import com.processVisualisation.virtualKitchen.ai.credit.CreditService;
+import com.processVisualisation.virtualKitchen.ai.usage.AiCostLedger;
 import com.processVisualisation.virtualKitchen.ai.usage.AiUsage;
 import com.processVisualisation.virtualKitchen.ai.usage.AiUsageMeter;
 import com.processVisualisation.virtualKitchen.ai.usage.AiUsageSummary;
@@ -20,6 +21,9 @@ import com.processVisualisation.virtualKitchen.restclient.exception.AICommunicat
 import com.processVisualisation.virtualKitchen.restclient.exception.AITimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
+import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -68,6 +72,7 @@ public class AiRequestQueueService {
 
     private static final String AI_TEXT_POOL = "ai-text";
     private static final String AI_IMAGE_POOL = "visualization";
+    private static final String AI_TTS_POOL = "narration";
 
     private final AiRequestJobRepository jobRepository;
     private final ModelSelectionService modelSelectionService;
@@ -98,6 +103,7 @@ public class AiRequestQueueService {
         this.requestProperties = requestProperties;
         this.artifactService = artifactService;
         this.modelRegistry = modelRegistry;
+        AiCostLedger.configureUsdToInr(requestProperties.getUsdToInr());
     }
 
     /** Bounded, pool-submitted execution — see class javadoc. Used for {@link AiCapability#TEXT_TO_TEXT}. */
@@ -154,7 +160,10 @@ public class AiRequestQueueService {
         });
     }
 
-    /** Inline, calling-thread execution — see class javadoc. Used for {@link AiCapability#TEXT_TO_IMAGE}. */
+    /**
+     * Inline, calling-thread execution — see class javadoc. Used for {@link AiCapability#TEXT_TO_IMAGE}
+     * and {@link AiCapability#TEXT_TO_SPEECH} (the latter is admitted against its own depth limit).
+     */
     public <R> AiRequestOutcome<R> executeInline(
             Long userId, AiCapability capability, String preferredModelKey, String idempotencyKey,
             String correlationType, String correlationId, AiWork<R> work
@@ -180,7 +189,8 @@ public class AiRequestQueueService {
             return reused.get();
         }
 
-        return withAdmissionControl(AI_IMAGE_POOL, capability, () -> {
+        String pool = capability == AiCapability.TEXT_TO_SPEECH ? AI_TTS_POOL : AI_IMAGE_POOL;
+        return withAdmissionControl(pool, capability, () -> {
             AiRequestJob job = createJob(userId, capability, preferredModelKey, idempotencyKey, correlationType, correlationId);
             ModelSelectionOutcome selection = beginProcessing(job, capability, preferredModelKey);
 
@@ -269,7 +279,11 @@ public class AiRequestQueueService {
     private <R> AiRequestOutcome<R> withAdmissionControl(String poolName, AiCapability capability,
                                                           java.util.function.Supplier<AiRequestOutcome<R>> body) {
         AtomicInteger counter = inFlightByPool.computeIfAbsent(poolName, k -> new AtomicInteger());
-        int maxDepth = poolName.equals(AI_TEXT_POOL) ? queueProperties.getAiTextMaxDepth() : queueProperties.getAiImageMaxDepth();
+        int maxDepth = switch (poolName) {
+            case AI_TEXT_POOL -> queueProperties.getAiTextMaxDepth();
+            case AI_TTS_POOL -> queueProperties.getAiTtsMaxDepth();
+            default -> queueProperties.getAiImageMaxDepth();
+        };
 
         if (counter.incrementAndGet() > maxDepth) {
             counter.decrementAndGet();
@@ -297,6 +311,7 @@ public class AiRequestQueueService {
         job.setMaxAttempts(requestProperties.getMaxRetries() + 1);
         job.setCorrelationType(correlationType);
         job.setCorrelationId(correlationId);
+        job.setOperationId(MDC.get(MdcKeys.JOB_ID));
         job.setQueuedAt(Instant.now());
         // A DuplicateKeyException here (same userId+idempotencyKey already exists) is intentionally
         // left to propagate to GlobalExceptionHandler's existing 409 handler rather than caught here —
@@ -356,7 +371,7 @@ public class AiRequestQueueService {
                     creditService.consume(job.getUserId(), selection.reservation(), job.getId(), summary);
                 }
                 job.setStatus(AiRequestStatus.COMPLETED);
-                job.setCompletedAt(Instant.now());
+                markFinished(job);
                 jobRepository.save(job);
                 logOutcome("ai_request_completed", job, selection, summary, null);
                 return AiRequestOutcome.fresh(job.getId(), value, selection, null);
@@ -380,7 +395,7 @@ public class AiRequestQueueService {
         }
         job.setStatus(AiRequestStatus.FAILED);
         job.setErrorMessage(lastError != null ? lastError.getMessage() : "Unknown failure");
-        job.setCompletedAt(Instant.now());
+        markFinished(job);
         jobRepository.save(job);
         // WARN, no stack: the exception is rethrown and logged once by whichever boundary handles it.
         logOutcome("ai_request_failed", job, selection, summary, lastError);
@@ -397,24 +412,48 @@ public class AiRequestQueueService {
         return summary;
     }
 
-    /** One line per AI request job (across all its attempts and provider calls), with its usage and estimated cost. */
+    private static void markFinished(AiRequestJob job) {
+        Instant now = Instant.now();
+        job.setCompletedAt(now);
+        if (job.getStartedAt() != null) {
+            job.setDurationMs(now.toEpochMilli() - job.getStartedAt().toEpochMilli());
+        }
+    }
+
+    /**
+     * The one INFO/WARN line per AI request (across all its attempts and provider calls): what it was for, which
+     * model served it, how long it took, the tokens it used and what it cost. The same figures are persisted on
+     * the {@code ai_request_jobs} row, and attributed to the surrounding operation via {@link AiCostLedger}.
+     * Cost is tokens x the model's configured prices ({@code ai.models[n].*-usd-per-million}); {@code NA} means
+     * the model has no prices configured.
+     */
     private void logOutcome(String event, AiRequestJob job, ModelSelectionOutcome selection,
                             AiUsageSummary summary, Exception error) {
+        AiCostLedger.record(job.getOperationId(), summary);
         Double costUsd = summary.estimatedCostUsd();
         String costUsdText = costUsd == null ? "NA" : String.format("%.6f", costUsd);
         String costInrText = costUsd == null ? "NA" : String.format("%.4f", costUsd * requestProperties.getUsdToInr());
-        String format = "event={} aiRequestId={} capability={} correlationType={} modelKey={} model={} tier={} "
-                + "usedFallback={} attempts={} calls={} inputTokens={} cachedTokens={} outputTokens={} thoughtsTokens={} "
-                + "estimatedCostUsd={} estimatedCostInr={}";
-        Object[] args = {event, job.getId(), job.getCapability(), job.getCorrelationType(), selection.model().getKey(),
+        String format = "event={} operation={} capability={} modelKey={} model={} tier={} usedFallback={} "
+                + "durationMs={} attempts={} providerCalls={} inputTokens={} cachedTokens={} outputTokens={} "
+                + "thoughtsTokens={} costUsd={} costInr={} aiRequestId={}";
+        Object[] args = {event, job.getCorrelationType(), job.getCapability(), selection.model().getKey(),
                 selection.model().getProviderModelId(), selection.model().getTier(), selection.usedFallback(),
-                job.getAttempt(), summary.providerCalls(), summary.promptTokens(), summary.cachedTokens(),
-                summary.completionTokens(), summary.thoughtsTokens(), costUsdText, costInrText};
+                job.getDurationMs(), job.getAttempt(), summary.providerCalls(), summary.promptTokens(),
+                summary.cachedTokens(), summary.completionTokens(), summary.thoughtsTokens(), costUsdText,
+                costInrText, job.getId()};
         if (error == null) {
             log.info(format, args);
         } else {
-            log.warn(format + " errorType=" + error.getClass().getSimpleName(), args);
+            // No stack: the exception is rethrown and logged once by whichever operation handles it.
+            log.warn(format + " errorType={} error=\"{}\"", append(args, error.getClass().getSimpleName(),
+                    FailureLogger.oneLine(error.getMessage())));
         }
+    }
+
+    private static Object[] append(Object[] args, Object... more) {
+        Object[] all = java.util.Arrays.copyOf(args, args.length + more.length);
+        System.arraycopy(more, 0, all, args.length, more.length);
+        return all;
     }
 
     private boolean isRetryable(Throwable error) {

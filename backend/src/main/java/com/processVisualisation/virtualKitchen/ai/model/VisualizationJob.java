@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.model;
 
+import com.processVisualisation.virtualKitchen.ai.usage.AiCostLedger;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -74,4 +75,7 @@ public class VisualizationJob {
         private String tier;
         private boolean usedFallback;
     }
+
+    /** Total AI requests, tokens and estimated cost of this job, recorded when it finishes. */
+    private AiCostLedger.Totals aiUsage;
 }

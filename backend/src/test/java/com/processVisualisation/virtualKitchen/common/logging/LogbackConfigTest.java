@@ -52,7 +52,7 @@ class LogbackConfigTest {
     }
 
     @Test
-    void devProfileConsoleIsInfoAndFileIsDebugWithMdc(CapturedOutput output) throws Exception {
+    void devProfileKeepsApplicationLogAtInfoAndDetailInDebugLog(CapturedOutput output) throws Exception {
         initialize();
         org.slf4j.Logger log = LoggerFactory.getLogger(APP_LOGGER);
 
@@ -70,10 +70,15 @@ class LogbackConfigTest {
 
         String file = read("application.log");
         assertThat(file)
-                .contains("event=probe_debug_only")
+                .contains("event=probe_info")
                 .contains("requestId=8f32ab91c0de4a17 jobId=job-123 userId=")
+                .contains("java.lang.IllegalStateException: probe stack")
+                .as("DEBUG detail goes to debug.log only").doesNotContain("event=probe_debug_only");
+
+        assertThat(read("debug.log"))
+                .contains("event=probe_debug_only")
                 .contains("DEBUG [main]")
-                .contains("java.lang.IllegalStateException: probe stack");
+                .contains("event=probe_info");
 
         String errors = read("application-error.log");
         assertThat(errors).contains("event=probe_error").doesNotContain("event=probe_info");
@@ -88,6 +93,27 @@ class LogbackConfigTest {
         log.info("event=probe_info");
 
         assertThat(read("application.log")).contains("event=probe_info").doesNotContain("event=probe_debug_only");
+    }
+
+    @Test
+    void accessLinesGoToAccessLogOnly() throws Exception {
+        initialize();
+
+        LoggerFactory.getLogger(RequestIdFilter.ACCESS_LOGGER).info("method=GET path=/api/probe status=200 durationMs=1");
+
+        assertThat(read("access.log")).contains("path=/api/probe");
+        assertThat(read("application.log")).doesNotContain("path=/api/probe");
+        assertThat(read("debug.log")).doesNotContain("path=/api/probe");
+    }
+
+    @Test
+    void mongoDriverChatterStaysOutOfTheApplicationLog() throws Exception {
+        initialize();
+
+        LoggerFactory.getLogger("org.mongodb.driver.cluster").info("Exception in monitor thread while connecting to server");
+
+        assertThat(read("debug.log")).contains("Exception in monitor thread");
+        assertThat(read("application.log")).doesNotContain("Exception in monitor thread");
     }
 
     @Test

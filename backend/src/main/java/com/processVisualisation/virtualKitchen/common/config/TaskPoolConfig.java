@@ -71,6 +71,24 @@ public class TaskPoolConfig {
     }
 
     /**
+     * Registers the {@link TaskPool} that runs step narration (text-to-speech)
+     * generations started by {@code StepNarrationService}, sized via the {@code
+     * app.taskpool.narration.n-threads} property (defaults to 2 threads). Each
+     * task calls {@code AiRequestQueueService#executeInline} on its own worker
+     * thread, so it never blocks waiting on another pool.
+     *
+     * @param taskPoolFactory factory used to create or reuse the named pool
+     * @param nThreads number of worker threads to size this pool with
+     * @return the {@code "narration"} {@link TaskPool}
+     */
+    @Bean
+    public TaskPool narrationTaskPool(
+            TaskPoolFactory taskPoolFactory,
+            @Value("${app.taskpool.narration.n-threads:2}") int nThreads) {
+        return taskPoolFactory.getOrCreate("narration", nThreads);
+    }
+
+    /**
      * Registers the {@link TaskPool} that runs the coordinating task for an
      * async recipe-flow generation job, sized via the {@code
      * app.taskpool.flow-generation-orchestrator.n-threads} property (defaults

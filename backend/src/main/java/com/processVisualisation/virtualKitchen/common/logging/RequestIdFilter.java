@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.lang.NonNull;
@@ -25,6 +26,11 @@ import java.util.regex.Pattern;
  * anything else is replaced, which keeps client-controlled text out of the logs. The ID is echoed back in the
  * response header so a user or bug report can quote it.
  * <p>
+ * Every request is written once, on completion, to the {@value #ACCESS_LOGGER} logger, which logback routes to
+ * {@code logs/access.log} only: polling (job status, narration) would otherwise bury the operation log. The
+ * application log hears about a request only when it is slow ({@code app.logging.slow-request-ms}) or crashed
+ * past the exception handler; handled failures are logged with their reason by {@code GlobalExceptionHandler}.
+ * <p>
  * The MDC is cleared when the request finishes: servlet threads are pooled, so anything left behind would
  * leak into the next request served by the same thread. Work handed to a {@code TaskPool} carries a copy of
  * the MDC (see {@code ThreadPoolTaskPool}).
@@ -35,8 +41,15 @@ public class RequestIdFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-Request-ID";
 
+    /** Logger for one line per HTTP request; logback sends it to access.log only. */
+    public static final String ACCESS_LOGGER = "virtualKitchen.access";
+
     private static final Logger log = LoggerFactory.getLogger(RequestIdFilter.class);
+    private static final Logger accessLog = LoggerFactory.getLogger(ACCESS_LOGGER);
     private static final Pattern VALID_INBOUND_ID = Pattern.compile("^[A-Za-z0-9-]{8,64}$");
+
+    @Value("${app.logging.slow-request-ms:3000}")
+    private long slowRequestMs = 3000;
 
     @Override
     protected void doFilterInternal(
@@ -50,9 +63,6 @@ public class RequestIdFilter extends OncePerRequestFilter {
 
         boolean quiet = isQuiet(request);
         long startedAt = System.nanoTime();
-        if (!quiet) {
-            log.debug("event=http_request_started method={} path={}", request.getMethod(), request.getRequestURI());
-        }
 
         boolean failed = false;
         try {
@@ -64,8 +74,16 @@ public class RequestIdFilter extends OncePerRequestFilter {
             if (!quiet) {
                 // An exception escaping the chain means the container will answer 500, whatever the response says now.
                 int status = failed ? HttpServletResponse.SC_INTERNAL_SERVER_ERROR : response.getStatus();
-                log.info("event=http_request_completed method={} path={} status={} durationMs={}",
-                        request.getMethod(), request.getRequestURI(), status, (System.nanoTime() - startedAt) / 1_000_000L);
+                long durationMs = (System.nanoTime() - startedAt) / 1_000_000L;
+                String method = request.getMethod();
+                String path = request.getRequestURI();
+                accessLog.info("method={} path={} status={} durationMs={}", method, path, status, durationMs);
+                if (failed) {
+                    log.error("event=http_request_crashed method={} path={} status={} durationMs={}", method, path, status, durationMs);
+                } else if (durationMs >= slowRequestMs) {
+                    log.warn("event=http_request_slow method={} path={} status={} durationMs={} thresholdMs={}",
+                            method, path, status, durationMs, slowRequestMs);
+                }
             }
             MDC.clear();
         }

@@ -1,0 +1,125 @@
+.narration-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 18px 14px;
+}
+
+.narration-controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.narration-control-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--flow-border);
+  background: var(--flow-surface);
+  color: var(--flow-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.narration-control-btn:disabled,
+.narration-speed select:disabled,
+.narration-toggle input:disabled + span {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.narration-speed,
+.narration-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--flow-text-muted);
+}
+
+.narration-speed select {
+  padding: 5px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--flow-border);
+  background: var(--flow-surface);
+  color: var(--flow-text);
+  font-size: 12px;
+}
+
+.narration-toggle input {
+  accent-color: var(--flow-accent);
+}
+
+.narration-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 18px;
+}
+
+.narration-status {
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.narration-status-muted {
+  color: var(--flow-text-muted);
+}
+
+.narration-status-info,
+.narration-status-active {
+  color: var(--flow-info);
+}
+
+.narration-status-active::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: narration-pulse 1.2s ease-in-out infinite;
+}
+
+.narration-status-warn {
+  color: var(--flow-warning);
+}
+
+.narration-status-error {
+  color: var(--flow-danger);
+}
+
+.narration-link-btn {
+  border: none;
+  background: transparent;
+  color: var(--flow-accent);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 2px 4px;
+  text-decoration: underline;
+}
+
+@keyframes narration-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .narration-status-active::before {
+    animation: none;
+  }
+}

@@ -1,5 +1,9 @@
 package com.processVisualisation.virtualKitchen.common.exception;
 
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import com.processVisualisation.virtualKitchen.ai.queue.AiQueueFullException;
 import com.processVisualisation.virtualKitchen.ai.queue.AiRequestTimeoutException;
 import com.processVisualisation.virtualKitchen.ai.routing.NoAvailableModelException;
@@ -55,7 +59,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DuplicateKeyException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateKey(DuplicateKeyException ex) {
         // The driver message quotes the duplicate value (often an email address), so it is not logged.
-        log.warn("event=request_rejected status=409 errorType={}", ex.getClass().getSimpleName());
+        // No message: a duplicate-key error quotes the duplicated value (e.g. a user's email).
+        log.warn("event=request_rejected status=409 {} errorType={}", route(), ex.getClass().getSimpleName());
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.CONFLICT.value(),
@@ -392,10 +397,10 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) throws Exception {
         if (isHandledByFramework(ex)) {
-            log.debug("event=request_rejected errorType={} error={}", ex.getClass().getSimpleName(), ex.getMessage());
+            log.debug("event=request_rejected {} errorType={} error=\"{}\"", route(), ex.getClass().getSimpleName(), FailureLogger.oneLine(ex.getMessage()));
             throw ex;
         }
-        log.error("event=request_failed status=500 errorType={}", ex.getClass().getSimpleName(), ex);
+        log.error("event=request_failed status=500 {} errorType={}", route(), ex.getClass().getSimpleName(), ex);
         ErrorResponse error = new ErrorResponse(
                 LocalDateTime.now(),
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
@@ -417,18 +422,42 @@ public class GlobalExceptionHandler {
                 || AnnotatedElementUtils.hasAnnotation(ex.getClass(), ResponseStatus.class);
     }
 
-    /** 400/404: the caller's mistake, not worth a line in the main log by default. */
+    /**
+     * 400/404: the caller's mistake; INFO, so the operation log still says why a request did nothing. Only safe
+     * detail is logged: validation errors list the offending field names (their messages echo the rejected values,
+     * which can be personal data), lookups give their message (ids), and anything else just its type.
+     */
     private static void logClientError(Exception ex) {
-        log.debug("event=request_rejected errorType={} error={}", ex.getClass().getSimpleName(), ex.getMessage());
+        String detail;
+        if (ex instanceof MethodArgumentNotValidException invalid) {
+            detail = "fields=" + invalid.getBindingResult().getFieldErrors().stream()
+                    .map(org.springframework.validation.FieldError::getField).distinct().toList();
+        } else if (ex instanceof NoSuchElementException) {
+            detail = "error=\"" + FailureLogger.oneLine(ex.getMessage()) + "\"";
+        } else {
+            detail = "";
+        }
+        log.info("event=request_rejected {} errorType={} {}", route(), ex.getClass().getSimpleName(), detail);
     }
 
     /** Handled, expected-but-unwanted outcomes: forbidden, conflict, invalid AI output, capacity. */
     private static void logRejected(Exception ex) {
-        log.warn("event=request_rejected errorType={} error={}", ex.getClass().getSimpleName(), ex.getMessage());
+        log.warn("event=request_rejected {} errorType={} error=\"{}\"", route(), ex.getClass().getSimpleName(),
+                FailureLogger.oneLine(ex.getMessage()));
     }
 
     /** A dependency (AI provider, model routing) failed; needs attention but the stack adds nothing. */
     private static void logUpstreamFailure(Exception ex) {
-        log.error("event=request_failed errorType={} error={}", ex.getClass().getSimpleName(), ex.getMessage());
+        log.error("event=request_failed {} errorType={} error=\"{}\"", route(), ex.getClass().getSimpleName(),
+                FailureLogger.oneLine(ex.getMessage()));
+    }
+
+    /** {@code method=.. path=..} of the request being handled, so a rejection says which call it was. */
+    private static String route() {
+        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes attributes) {
+            HttpServletRequest request = attributes.getRequest();
+            return "method=" + request.getMethod() + " path=" + request.getRequestURI();
+        }
+        return "method=- path=-";
     }
 }

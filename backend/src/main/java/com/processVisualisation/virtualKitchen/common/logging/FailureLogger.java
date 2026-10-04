@@ -35,12 +35,26 @@ public final class FailureLogger {
         String prefix = details == null || details.isEmpty() ? "event=" + event : "event=" + event + " " + details;
         String errorType = error.getClass().getSimpleName();
         if (isBusinessFailure(error)) {
-            log.warn("{} errorType={} error={}", prefix, errorType, error.getMessage());
+            log.warn("{} errorType={} error=\"{}\"", prefix, errorType, oneLine(error.getMessage()));
         } else if (isKnownExternalFailure(error)) {
-            log.error("{} errorType={} error={}", prefix, errorType, error.getMessage());
+            log.error("{} errorType={} error=\"{}\"", prefix, errorType, oneLine(error.getMessage()));
         } else {
             log.error("{} errorType={}", prefix, errorType, error);
         }
+    }
+
+    private static final int MAX_MESSAGE_CHARS = 300;
+
+    /**
+     * An exception message made safe for a single {@code key="value"} log field: newlines and quotes flattened,
+     * long provider error bodies truncated.
+     */
+    public static String oneLine(String message) {
+        if (message == null) {
+            return "";
+        }
+        String flat = message.replaceAll("\\s+", " ").replace('"', '\'').trim();
+        return flat.length() <= MAX_MESSAGE_CHARS ? flat : flat.substring(0, MAX_MESSAGE_CHARS) + "...";
     }
 
     static boolean isBusinessFailure(Throwable error) {

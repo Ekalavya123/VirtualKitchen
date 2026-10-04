@@ -23,6 +23,23 @@ public class GeminiProperties {
     private String imageModel;
     private Long timeoutMs;
     private Cache cache = new Cache();
+    private Tts tts = new Tts();
+
+    /**
+     * Speech generation ({@code GeminiTtsProvider}). Shares the API key, base URL and
+     * {@code generateContent} endpoint above, so Gemini is configured in exactly one place.
+     */
+    @Data
+    public static class Tts {
+        /** Fallback model id when the registry entry does not name one. */
+        private String model = "gemini-2.5-flash-preview-tts";
+        /** Prebuilt voice name (e.g. Kore, Puck, Charon). */
+        private String voice = "Kore";
+        /** Gemini TTS returns 16-bit mono little-endian PCM at this rate. */
+        private int sampleRateHz = 24000;
+        /** Optional style instruction prepended to the text, e.g. "Say in a calm, friendly voice:". */
+        private String stylePrompt;
+    }
 
     /**
      * Explicit context caching ({@code cachedContents}) for requests that opt in via

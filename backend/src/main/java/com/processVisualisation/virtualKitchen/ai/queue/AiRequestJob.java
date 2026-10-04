@@ -60,9 +60,18 @@ public class AiRequestJob {
     /** e.g. a recipeId, or {@code "<recipeId>:<stepId>"}. */
     private String correlationId;
 
+    /**
+     * The background operation this request ran for (the {@code jobId} MDC key: a visualization or generation
+     * job id, or {@code narration:<recipeId>::<stepId>}); null for requests made directly from an HTTP call.
+     */
+    @Indexed(sparse = true)
+    private String operationId;
+
     private Instant queuedAt;
     private Instant startedAt;
     private Instant completedAt;
+    /** From model selection to the final outcome, across every attempt and retry back-off. */
+    private Long durationMs;
 
     private String errorMessage;
 

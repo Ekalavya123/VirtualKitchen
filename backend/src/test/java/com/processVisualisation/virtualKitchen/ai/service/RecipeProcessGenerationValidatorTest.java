@@ -290,11 +290,36 @@ class RecipeProcessGenerationValidatorTest {
         condition.setActionDescription("Check if the water is boiling.");
         condition.setExpectedOutput("Water is at a rolling boil.");
 
-        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(condition));
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                step("cut", actionOn(List.of(ingredient("onion", 2.0, "COUNT", "medium")), List.of()), "Cut the onions.", "Onions are diced."),
+                condition
+        ));
 
         ProcessValidationResult result = validator.validate(main, List.of());
 
         assertTrue(result.isValid(), () -> String.join("; ", result.getErrors()));
+    }
+
+    @Test
+    void validate_conditionNotDirectlyAfterAStep_isRejected() {
+        GeneratedRecipeStepDTO first = new GeneratedRecipeStepDTO();
+        first.setNodeType("CONDITION");
+        first.setTitle("Is the water boiling?");
+        first.setActionDescription("Check the water.");
+        first.setExpectedOutput("");
+        GeneratedRecipeStepDTO second = new GeneratedRecipeStepDTO();
+        second.setNodeType("CONDITION");
+        second.setTitle("Is it salted?");
+        second.setActionDescription("Taste the water.");
+        second.setExpectedOutput("");
+
+        // A leading CONDITION, and one directly after another, both have no step for "No" to loop back to.
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(first, second));
+        ProcessValidationResult result = validator.validate(main, List.of());
+
+        assertFalse(result.isValid());
+        assertTrue(result.getErrors().stream().filter(e -> e.contains("immediately after the STEP")).count() == 2,
+                () -> String.join("; ", result.getErrors()));
     }
 
     @Test

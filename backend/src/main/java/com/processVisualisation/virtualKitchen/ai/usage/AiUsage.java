@@ -1,6 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.usage;
 
 import com.processVisualisation.virtualKitchen.ai.registry.ModelDefinition;
+import com.processVisualisation.virtualKitchen.restclient.client.ProviderUsage;
 import com.processVisualisation.virtualKitchen.restclient.dto.AIResponse;
 
 /**
@@ -28,6 +29,16 @@ public class AiUsage {
         totalTokens += orZero(response.getTotalTokens());
     }
 
+    /** Counts one image/speech provider call; a provider that reports no tokens still counts as a call. */
+    public synchronized void add(ProviderUsage usage) {
+        providerCalls++;
+        if (usage == null) return;
+        promptTokens += orZero(usage.inputTokens());
+        completionTokens += orZero(usage.outputTokens());
+        thoughtsTokens += orZero(usage.thoughtsTokens());
+        totalTokens += orZero(usage.totalTokens());
+    }
+
     /** Totals so far, priced with {@code model}'s configured list prices (cost null when it has none). */
     public synchronized AiUsageSummary summarize(ModelDefinition model) {
         return new AiUsageSummary(providerCalls, promptTokens, cachedTokens, completionTokens, thoughtsTokens,
@@ -46,6 +57,10 @@ public class AiUsage {
     }
 
     private static long orZero(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private static long orZero(Long value) {
         return value == null ? 0 : value;
     }
 }
