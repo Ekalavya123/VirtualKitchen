@@ -134,10 +134,10 @@ const buildConditionNode = (step: GeneratedRecipeStep, nodeId: string, x: number
 /**
  * Builds one process's nodes/edges from its ordered step list. Steps are already in execution
  * order (the AI was asked for an ordered list, not a graph — see RecipeProcessGenerationPromptBuilder),
- * so consecutive steps are connected linearly; a CONDITION step's YES and NO branches both default
- * to the next step, since the AI doesn't generate branch targets in this first version (see the
- * module doc comment on why: asking for real graph topology is a substantially harder and more
- * error-prone generation task than an ordered step list).
+ * so consecutive steps are connected linearly. A CONDITION's YES branch goes to the next node and
+ * its NO branch back to the step before it (a "repeat until" loop) — the AI doesn't generate branch
+ * targets itself (asking for real graph topology is a substantially harder and more error-prone
+ * generation task than an ordered step list), so the prompt fixes that convention instead.
  */
 const buildNodesAndEdges = (steps: GeneratedRecipeStep[], refToProcessId: Map<string, number>): { nodes: ProcessNode[]; edges: ProcessEdge[] } => {
   const columns = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, steps.length))))
@@ -161,16 +161,20 @@ const buildNodesAndEdges = (steps: GeneratedRecipeStep[], refToProcessId: Map<st
   })
 
   const edges: ProcessEdge[] = []
-  for (let i = 0; i < nodes.length - 1; i++) {
-    const source = nodes[i]
-    const target = nodes[i + 1]
-    if (source.kind === 'CONDITION') {
-      edges.push({ id: crypto.randomUUID(), source: source.id, target: target.id, sourceHandle: 'condition-yes', label: 'Yes' })
-      edges.push({ id: crypto.randomUUID(), source: source.id, target: target.id, sourceHandle: 'condition-no', label: 'No' })
-    } else {
-      edges.push({ id: crypto.randomUUID(), source: source.id, target: target.id })
+  nodes.forEach((source, i) => {
+    const next = nodes[i + 1]
+    if (source.kind !== 'CONDITION') {
+      if (next) edges.push({ id: crypto.randomUUID(), source: source.id, target: next.id })
+      return
     }
-  }
+    // YES continues to the next node; NO loops back to the step being checked (the nearest STEP
+    // before the condition) so it's repeated until the check passes. The prompt asks for every
+    // condition to be phrased that way and placed right after the step it checks.
+    const checkedStep = nodes.slice(0, i).reverse().find((node) => node.kind === 'STEP')
+    if (next) edges.push({ id: crypto.randomUUID(), source: source.id, target: next.id, sourceHandle: 'condition-yes', label: 'Yes' })
+    const noTarget = checkedStep ?? next
+    if (noTarget) edges.push({ id: crypto.randomUUID(), source: source.id, target: noTarget.id, sourceHandle: 'condition-no', label: 'No' })
+  })
 
   return { nodes, edges }
 }

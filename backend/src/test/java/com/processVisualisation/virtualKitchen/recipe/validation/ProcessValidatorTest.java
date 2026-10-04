@@ -234,15 +234,32 @@ class ProcessValidatorTest {
     }
 
     @Test
-    void stepOutputReference_toALaterOrUnconnectedStep_isInvalid() {
+    void stepOutputReference_toALaterStep_isInvalid() {
         Process future = process(1L, ProcessType.MAIN, RECIPE_ID);
         future.setNodes(List.of(recipeStep("boil", "boiled eggs", "fry"), recipeStep("fry", "fried eggs")));
         future.setEdges(List.of(edge("e1", "boil", "fry")));
-        assertStepOutputError(future, "not connected before");
+        assertStepOutputError(future, "comes after");
 
-        Process unconnected = process(2L, ProcessType.SUBPROCESS, RECIPE_ID);
-        unconnected.setNodes(List.of(recipeStep("boil", "boiled eggs"), recipeStep("fry", "fried eggs", "boil")));
-        assertStepOutputError(unconnected, "not connected before");
+        Process laterUnconnected = process(2L, ProcessType.SUBPROCESS, RECIPE_ID);
+        laterUnconnected.setNodes(List.of(recipeStep("boil", "boiled eggs", "fry"), recipeStep("fry", "fried eggs")));
+        assertStepOutputError(laterUnconnected, "comes after");
+    }
+
+    @Test
+    void stepOutputReference_toAnEarlierUnconnectedStep_isValidByNodeOrder() {
+        // Steps added manually but not wired up yet: node order decides, so the editor can offer them right away.
+        Process process = process(1L, ProcessType.MAIN, RECIPE_ID);
+        process.setNodes(List.of(recipeStep("boil", "boiled eggs"), recipeStep("fry", "fried eggs", "boil")));
+        assertTrue(validator.validate(process).isValid(), () -> validator.validate(process).getErrors().toString());
+    }
+
+    @Test
+    void stepOutputReference_edgesOverrideNodeOrder() {
+        // fry was created first but the edge puts boil before it.
+        Process process = process(1L, ProcessType.MAIN, RECIPE_ID);
+        process.setNodes(List.of(recipeStep("fry", "fried eggs", "boil"), recipeStep("boil", "boiled eggs")));
+        process.setEdges(List.of(edge("e1", "boil", "fry")));
+        assertTrue(validator.validate(process).isValid(), () -> validator.validate(process).getErrors().toString());
     }
 
     @Test
@@ -256,7 +273,7 @@ class ProcessValidatorTest {
         Process backwards = process(2L, ProcessType.SUBPROCESS, RECIPE_ID);
         backwards.setNodes(List.of(recipeStep("boil", "boiled eggs", "fry"), conditionNode("check"), recipeStep("fry", "fried eggs")));
         backwards.setEdges(process.getEdges());
-        assertStepOutputError(backwards, "not connected before");
+        assertStepOutputError(backwards, "comes after");
     }
 
     // --- test fixtures ---

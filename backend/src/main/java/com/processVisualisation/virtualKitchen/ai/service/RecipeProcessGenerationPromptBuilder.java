@@ -36,7 +36,7 @@ public class RecipeProcessGenerationPromptBuilder {
      * Logged with every generation so a change in output quality can be tied to a prompt change.
      * Bump it whenever the system/initial/retry prompt wording or structure changes.
      */
-    public static final String PROMPT_VERSION = "1";
+    public static final String PROMPT_VERSION = "2";
 
     /** Aliases shown per ingredient — enough to recognise regional names without bloating the prompt. */
     private static final int MAX_INGREDIENT_ALIASES = 3;
@@ -122,6 +122,17 @@ public class RecipeProcessGenerationPromptBuilder {
                 - STEP: a concrete cooking action.
                 - CONDITION: a decision/check/repetition (if, otherwise, until, unless, check, verify, repeat until).
                   Do not create a condition for an ordinary cooking instruction that isn't actually a check.
+
+                CONDITION BRANCHES
+                - The application wires every CONDITION the same way: "Yes" continues to the NEXT node in
+                  "steps"; "No" goes back to the STEP immediately BEFORE the condition, which is repeated until
+                  the check passes. You do not output branches — only phrase and place the condition so this is right.
+                - Place a CONDITION immediately AFTER the STEP whose result it checks, never as the first node of
+                  a process, and never directly after another CONDITION.
+                - Phrase "title" as a yes/no question whose "Yes" means the step is done and cooking moves on, and
+                  whose "No" means that previous step must continue/repeat (e.g. after "Fry the onions":
+                  "Are the onions golden brown?" — not "Are the onions still pale?").
+                - Since "Yes" is always the hoped-for answer, omit expectedResult (it defaults to success).
 
                 CHOOSING THE ACTION
                 - action must be an id from ACTIONS below. Use the most specific action that fits

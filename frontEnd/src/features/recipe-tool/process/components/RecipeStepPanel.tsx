@@ -25,6 +25,7 @@ import {
   getAvailableStepOutputs,
   getStepOutputLabel,
   getStepOutputReferenceProblem,
+  getStepsMissingOutput,
   type StepOutputGraph,
 } from '../model/recipeStepOutputs'
 
@@ -117,6 +118,7 @@ export default function RecipeStepPanel({
   const selectedProcessIds = step.actionOn.processes.map((entry) => entry.processId)
   const selectedStepIds = step.actionOn.steps.map((entry) => entry.stepId)
   const unselectedStepOutputs = getAvailableStepOutputs(stepOutputGraph, node.id).filter((source) => !selectedStepIds.includes(source.stepId))
+  const stepsMissingOutput = getStepsMissingOutput(stepOutputGraph, node.id)
 
   const addActionOnStep = (stepId: string) => {
     if (selectedStepIds.includes(stepId)) return
@@ -505,7 +507,10 @@ export default function RecipeStepPanel({
               </div>
             )}
             <div style={{ fontSize: 10.5, color: 'var(--flow-text-muted)', background: 'var(--flow-surface-muted)', border: '1px solid var(--flow-border)', borderRadius: 8, padding: '6px 8px' }}>
-              Only steps connected before this one that have an Expected Output are listed.
+              Every earlier step with an Expected Output is listed (by its connections, or its order while unconnected).
+              {stepsMissingOutput.length > 0 && (
+                <> Add an Expected Output to step{stepsMissingOutput.length > 1 ? 's' : ''} {stepsMissingOutput.map((source) => source.stepNumber).join(', ')} to use {stepsMissingOutput.length > 1 ? 'them' : 'it'} here.</>
+              )}
             </div>
           </div>
         )}

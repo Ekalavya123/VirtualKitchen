@@ -5,8 +5,9 @@
  * nodes/edges — there is no separate dependency model.
  *
  * "Earlier" is defined by the existing graph: step A is available to step B when an edge path leads
- * from A to B. When each can reach the other (a loop through a CONDITION), node order breaks the tie,
- * so only one direction is ever valid. The backend ProcessValidator applies the identical rule.
+ * from A to B and not back. When the edges don't decide it — each can reach the other (a loop through
+ * a CONDITION), or neither reaches the other (steps not wired up yet) — node order breaks the tie, so
+ * exactly one direction is ever valid. The backend ProcessValidator applies the identical rule.
  */
 
 import { isRecipeStepNode } from './recipeNodeTypes'
@@ -76,10 +77,24 @@ export const getStepOutputReferenceProblem = (graph: StepOutputGraph, sourceId: 
   const source = findStep(graph, sourceId)
   if (!source) return graph.nodeIndex.has(sourceId) ? 'not-a-step' : 'missing'
   if (!source.label) return 'empty-output'
-  if (!reaches(graph, sourceId, consumerId)) return 'not-before'
-  if (reaches(graph, consumerId, sourceId) && (graph.nodeIndex.get(sourceId) ?? 0) > (graph.nodeIndex.get(consumerId) ?? 0)) return 'not-before'
-  return null
+  return comesBefore(graph, sourceId, consumerId) ? null : 'not-before'
 }
+
+/**
+ * Edges decide order where they connect the two steps; node order decides it where they don't —
+ * both in a loop (each reaches the other) and while steps are still unconnected (neither reaches
+ * the other), so every earlier step is offered as soon as it's created, not only once it's wired up.
+ */
+const comesBefore = (graph: StepOutputGraph, sourceId: string, consumerId: string): boolean => {
+  const forward = reaches(graph, sourceId, consumerId)
+  const backward = reaches(graph, consumerId, sourceId)
+  if (forward !== backward) return forward
+  return (graph.nodeIndex.get(sourceId) ?? 0) < (graph.nodeIndex.get(consumerId) ?? 0)
+}
+
+/** Earlier steps that would be offered to `consumerId` if they had an Expected Output, in step order. */
+export const getStepsMissingOutput = (graph: StepOutputGraph, consumerId: string): StepOutputSource[] =>
+  graph.steps.filter((step) => step.stepId !== consumerId && !step.label && comesBefore(graph, step.stepId, consumerId))
 
 /** The step outputs `consumerId` can pick from, in step order. */
 export const getAvailableStepOutputs = (graph: StepOutputGraph, consumerId: string): StepOutputSource[] =>
@@ -93,5 +108,5 @@ export const STEP_OUTPUT_PROBLEM_LABELS: Record<StepOutputReferenceProblem, stri
   'missing': 'the referenced step no longer exists',
   'not-a-step': 'only a STEP has an output (this is a CONDITION)',
   'empty-output': 'the referenced step has no Expected Output',
-  'not-before': 'the referenced step is not connected before this one',
+  'not-before': 'the referenced step comes after this one',
 }

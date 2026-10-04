@@ -572,10 +572,10 @@ class ProcessServiceImplTest {
         self.setNodes(List.of(recipeStepDTO("boil", "boiled eggs", "boil")));
         assertThrows(ProcessValidationException.class, () -> service.update(recipeId, created.getId(), OWNER_ID, self));
 
-        ProcessUpdateDTO unconnected = new ProcessUpdateDTO();
-        unconnected.setName("Eggs");
-        unconnected.setNodes(List.of(recipeStepDTO("boil", "boiled eggs"), recipeStepDTO("fry", "fried", "boil")));
-        assertThrows(ProcessValidationException.class, () -> service.update(recipeId, created.getId(), OWNER_ID, unconnected));
+        ProcessUpdateDTO later = new ProcessUpdateDTO();
+        later.setName("Eggs");
+        later.setNodes(List.of(recipeStepDTO("boil", "boiled eggs", "fry"), recipeStepDTO("fry", "fried")));
+        assertThrows(ProcessValidationException.class, () -> service.update(recipeId, created.getId(), OWNER_ID, later));
     }
 
     @Test

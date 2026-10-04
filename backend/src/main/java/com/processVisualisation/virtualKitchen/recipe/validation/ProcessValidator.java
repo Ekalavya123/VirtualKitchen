@@ -34,8 +34,9 @@ import java.util.Set;
  * The one exception is Action On <em>step-output</em> references
  * ({@code data.step.actionOn.steps[].stepId}), because they point at other nodes of this same
  * graph: each must name an existing STEP (not a CONDITION, not itself) that has an Expected Output
- * and comes before the consuming step — an edge path leads from it to the consumer, with node
- * order breaking the tie when both reach each other through a loop. This mirrors the frontend's
+ * and comes before the consuming step — an edge path leads from it to the consumer and not back,
+ * with node order breaking the tie when the edges don't decide it (both reach each other through a
+ * loop, or neither reaches the other because the steps aren't connected yet). This mirrors the frontend's
  * recipe-tool/process/model/recipeStepOutputs.ts, so a reference the editor offers always saves.
  */
 @Component
@@ -203,16 +204,21 @@ public class ProcessValidator {
                 } else if (isBlank(expectedOutput(source))) {
                     errors.add(label + ": the referenced step has no Expected Output");
                 } else if (!comesBefore(sourceId, consumer.getId(), successors, nodeIndex)) {
-                    errors.add(label + ": the referenced step is not connected before the consuming step");
+                    errors.add(label + ": the referenced step comes after the consuming step");
                 }
             }
         }
     }
 
-    /** Earlier-than: {@code sourceId} reaches {@code consumerId} along edges, and in a loop (each reaches the other) it is also earlier in node order. */
+    /**
+     * Earlier-than: edges decide when only one of the two reaches the other; otherwise (a loop, or no
+     * connecting path yet) the earlier node in node order comes first.
+     */
     private boolean comesBefore(String sourceId, String consumerId, Map<String, List<String>> successors, Map<String, Integer> nodeIndex) {
-        if (!reaches(sourceId, consumerId, successors)) return false;
-        return !reaches(consumerId, sourceId, successors) || nodeIndex.get(sourceId) < nodeIndex.get(consumerId);
+        boolean forward = reaches(sourceId, consumerId, successors);
+        boolean backward = reaches(consumerId, sourceId, successors);
+        if (forward != backward) return forward;
+        return nodeIndex.get(sourceId) < nodeIndex.get(consumerId);
     }
 
     private boolean reaches(String from, String to, Map<String, List<String>> successors) {

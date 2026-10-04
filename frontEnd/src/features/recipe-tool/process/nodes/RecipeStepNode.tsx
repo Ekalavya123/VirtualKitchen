@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useLayoutEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, NodeResizeControl, useNodeId, useUpdateNodeInternals } from '@xyflow/react'
 import '../../styles/recipe-tool.css'
@@ -83,6 +83,12 @@ const MIN_HEIGHT = 140
 const MAX_WIDTH = 460
 const MAX_HEIGHT = 560
 
+const BORDER_WIDTH = 1.5
+const ACCENT_BORDER_WIDTH = 5
+// A handle's `left: 50%` is measured inside the borders, and the accent border makes the left one
+// thicker — shift back by half the difference so top/bottom handles sit on the card's true center.
+const HANDLE_CENTER_LEFT = `calc(50% - ${(ACCENT_BORDER_WIDTH - BORDER_WIDTH) / 2}px)`
+
 /** Action On lines shown before collapsing into "+N more" (a compact summary, not the full detail — that stays in the Step Properties panel). */
 const COLLAPSED_ACTION_ON_LIMIT = 3
 
@@ -113,6 +119,13 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
   const syncNodeLayout = useCallback(() => {
     if (nodeId) updateNodeInternals(nodeId)
   }, [nodeId, updateNodeInternals])
+
+  // React Flow hands this component the node's *measured* size, which lags the resized wrapper by a
+  // render — so the handle bounds it measured during the resize describe the old box. Re-measure
+  // once this render has laid the card out at its new size, or edges keep pointing at the old center.
+  useLayoutEffect(() => {
+    syncNodeLayout()
+  }, [syncNodeLayout, width, minHeight, expanded, imageUrl])
 
   const ingredientLines = step.actionOn.ingredients.map((entry, index) => {
     const name = getActionOnIngredientDisplayName(entry)
@@ -194,10 +207,10 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
         minHeight,
         background: 'var(--flow-surface)',
         borderRadius: 14,
-        borderTop: `1.5px solid ${selected ? theme.accent : 'var(--flow-border)'}`,
-        borderRight: `1.5px solid ${selected ? theme.accent : 'var(--flow-border)'}`,
-        borderBottom: `1.5px solid ${selected ? theme.accent : 'var(--flow-border)'}`,
-        borderLeft: `5px solid ${theme.accent}`,
+        borderTop: `${BORDER_WIDTH}px solid ${selected ? theme.accent : 'var(--flow-border)'}`,
+        borderRight: `${BORDER_WIDTH}px solid ${selected ? theme.accent : 'var(--flow-border)'}`,
+        borderBottom: `${BORDER_WIDTH}px solid ${selected ? theme.accent : 'var(--flow-border)'}`,
+        borderLeft: `${ACCENT_BORDER_WIDTH}px solid ${theme.accent}`,
         boxShadow: selected
           ? `0 0 0 3px ${theme.accent}26, 0 8px 20px rgba(15, 23, 42, 0.12)`
           : '0 2px 10px rgba(15, 23, 42, 0.08)',
@@ -238,7 +251,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
       <Handle
         type="target"
         position={Position.Top}
-        style={{ width: 10, height: 10, background: theme.accent, border: '2px solid white', boxShadow: `0 0 0 1.5px ${theme.accent}`, left: '50%', transform: 'translate(-50%, -50%)', zIndex: 20 }}
+        style={{ width: 10, height: 10, background: theme.accent, border: '2px solid white', boxShadow: `0 0 0 1.5px ${theme.accent}`, left: HANDLE_CENTER_LEFT, transform: 'translate(-50%, -50%)', zIndex: 20 }}
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -361,7 +374,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
       <Handle
         type="source"
         position={Position.Bottom}
-        style={{ width: 10, height: 10, background: theme.accent, border: '2px solid white', boxShadow: `0 0 0 1.5px ${theme.accent}`, left: '50%', transform: 'translate(-50%, 50%)', zIndex: 20 }}
+        style={{ width: 10, height: 10, background: theme.accent, border: '2px solid white', boxShadow: `0 0 0 1.5px ${theme.accent}`, left: HANDLE_CENTER_LEFT, transform: 'translate(-50%, 50%)', zIndex: 20 }}
       />
     </div>
   )
