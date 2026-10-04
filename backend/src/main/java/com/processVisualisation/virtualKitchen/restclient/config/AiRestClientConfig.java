@@ -72,6 +72,18 @@ public class AiRestClientConfig {
     }
 
     /**
+     * Builds the {@link RestClient} used to call the self-hosted text-to-speech engine.
+     *
+     * @param properties the configured local TTS base URL and timeout
+     * @return a {@link RestClient} configured for local TTS, registered as {@code localTtsRestClient}
+     */
+    @Bean("localTtsRestClient")
+    public RestClient localTtsRestClient(LocalTtsProperties properties) {
+        long configuredTimeout = properties.getTimeoutMs() == null ? 60000L : properties.getTimeoutMs();
+        return createRestClient(properties.getBaseUrl(), configuredTimeout);
+    }
+
+    /**
      * Builds the {@link RestClient} used to call the Supabase Storage API.
      *
      * @param properties the configured Supabase URL and timeout

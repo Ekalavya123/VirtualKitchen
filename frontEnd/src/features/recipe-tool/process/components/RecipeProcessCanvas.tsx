@@ -227,6 +227,13 @@ function RecipeProcessCanvasContent({
   const [zoomPercent, setZoomPercent] = useState(Math.round((initialFlowData.viewport?.zoom ?? 1) * 100))
   const [exportJson, setExportJson] = useState<string | null>(null)
   const [showSlideshow, setShowSlideshow] = useState(false)
+  // Narration is generated from the *saved* step text, so opening the slideshow first flushes any
+  // pending autosave; the slideshow waits on this before asking the backend for narration.
+  const [narrationReady, setNarrationReady] = useState<Promise<boolean> | null>(null)
+  const openSlideshow = useCallback(() => {
+    setNarrationReady(session.saveNow().then((result) => result.ok, () => false))
+    setShowSlideshow(true)
+  }, [session])
   // Generate Visuals state lives in the app-level JobTracker (keyed by process), so it's still
   // correct after this instance remounts or the page reloads; only the start request is local.
   const jobTracker = useJobTracker()
@@ -804,7 +811,7 @@ function RecipeProcessCanvasContent({
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onFitView={handleFitView}
-        onVisualize={() => setShowSlideshow(true)}
+        onVisualize={openSlideshow}
         onExport={handleExport}
         onGenerateVisuals={() => void generateVisuals()}
         isGeneratingVisuals={generatingVisuals}
@@ -1015,7 +1022,13 @@ function RecipeProcessCanvasContent({
       </div>
 
       {showSlideshow && (
-        <RecipeVisualizationSlideshow steps={buildSlideshowSteps()} onClose={() => setShowSlideshow(false)} />
+        <RecipeVisualizationSlideshow
+          steps={buildSlideshowSteps()}
+          recipeId={recipeId}
+          processId={processId}
+          narrationReady={narrationReady}
+          onClose={() => setShowSlideshow(false)}
+        />
       )}
 
       {exportJson && (

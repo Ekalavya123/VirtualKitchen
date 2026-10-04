@@ -68,6 +68,7 @@ public class AiRequestQueueService {
 
     private static final String AI_TEXT_POOL = "ai-text";
     private static final String AI_IMAGE_POOL = "visualization";
+    private static final String AI_TTS_POOL = "narration";
 
     private final AiRequestJobRepository jobRepository;
     private final ModelSelectionService modelSelectionService;
@@ -154,7 +155,10 @@ public class AiRequestQueueService {
         });
     }
 
-    /** Inline, calling-thread execution — see class javadoc. Used for {@link AiCapability#TEXT_TO_IMAGE}. */
+    /**
+     * Inline, calling-thread execution — see class javadoc. Used for {@link AiCapability#TEXT_TO_IMAGE}
+     * and {@link AiCapability#TEXT_TO_SPEECH} (the latter is admitted against its own depth limit).
+     */
     public <R> AiRequestOutcome<R> executeInline(
             Long userId, AiCapability capability, String preferredModelKey, String idempotencyKey,
             String correlationType, String correlationId, AiWork<R> work
@@ -180,7 +184,8 @@ public class AiRequestQueueService {
             return reused.get();
         }
 
-        return withAdmissionControl(AI_IMAGE_POOL, capability, () -> {
+        String pool = capability == AiCapability.TEXT_TO_SPEECH ? AI_TTS_POOL : AI_IMAGE_POOL;
+        return withAdmissionControl(pool, capability, () -> {
             AiRequestJob job = createJob(userId, capability, preferredModelKey, idempotencyKey, correlationType, correlationId);
             ModelSelectionOutcome selection = beginProcessing(job, capability, preferredModelKey);
 
@@ -269,7 +274,11 @@ public class AiRequestQueueService {
     private <R> AiRequestOutcome<R> withAdmissionControl(String poolName, AiCapability capability,
                                                           java.util.function.Supplier<AiRequestOutcome<R>> body) {
         AtomicInteger counter = inFlightByPool.computeIfAbsent(poolName, k -> new AtomicInteger());
-        int maxDepth = poolName.equals(AI_TEXT_POOL) ? queueProperties.getAiTextMaxDepth() : queueProperties.getAiImageMaxDepth();
+        int maxDepth = switch (poolName) {
+            case AI_TEXT_POOL -> queueProperties.getAiTextMaxDepth();
+            case AI_TTS_POOL -> queueProperties.getAiTtsMaxDepth();
+            default -> queueProperties.getAiImageMaxDepth();
+        };
 
         if (counter.incrementAndGet() > maxDepth) {
             counter.decrementAndGet();

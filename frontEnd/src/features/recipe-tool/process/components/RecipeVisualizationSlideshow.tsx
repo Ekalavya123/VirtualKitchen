@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import NarrationControls from '../narration/NarrationControls'
+import { useNarrationPlayer } from '../narration/useNarrationPlayer'
 import './RecipeVisualizationSlideshow.css'
 
 export type SlideshowStep = {
@@ -11,50 +13,73 @@ export type SlideshowStep = {
 
 type RecipeVisualizationSlideshowProps = {
   steps: SlideshowStep[]
+  recipeId: number
+  processId: number
+  /** Settles once the editor's pending edits are saved; narration waits for it (see useNarrationPlayer). */
+  narrationReady?: Promise<boolean> | null
   onClose: () => void
 }
 
-const AUTO_PLAY_INTERVAL_MS = 1800
-
-export default function RecipeVisualizationSlideshow({ steps, onClose }: RecipeVisualizationSlideshowProps) {
-  const [index, setIndex] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [direction, setDirection] = useState<'next' | 'prev'>('next')
+/**
+ * Step-by-step walkthrough of a process. In play mode each step is narrated aloud and the next
+ * step follows when its narration ends (steps without narration stay up for a reading-time dwell).
+ * All playback rules live in NarrationPlayer; this component only renders its state.
+ */
+export default function RecipeVisualizationSlideshow({
+  steps,
+  recipeId,
+  processId,
+  narrationReady,
+  onClose,
+}: RecipeVisualizationSlideshowProps) {
+  const playerSteps = useMemo(
+    () => steps.map((step) => ({ id: step.id, text: [step.title, step.description].filter(Boolean).join('. ') })),
+    [steps],
+  )
+  const { player, state, unavailable, syncWarning } = useNarrationPlayer({
+    recipeId,
+    processId,
+    steps: playerSteps,
+    ready: narrationReady,
+  })
 
   const hasSteps = steps.length > 0
-  const currentStep = hasSteps ? steps[Math.min(index, steps.length - 1)] : undefined
+  const index = Math.min(state.index, Math.max(0, steps.length - 1))
+  const currentStep = hasSteps ? steps[index] : undefined
 
-  const goToPrevious = () => {
-    setDirection('prev')
-    setIndex((current) => Math.max(0, current - 1))
-  }
-  const goToNext = () => {
-    setDirection('next')
-    setIndex((current) => Math.min(steps.length - 1, current + 1))
+  // Slide direction follows the index change, whoever caused it (buttons or auto-advance).
+  const [view, setView] = useState({ index, direction: 'next' as 'next' | 'prev' })
+  if (view.index !== index) {
+    setView({ index, direction: index > view.index ? 'next' : 'prev' })
   }
 
   useEffect(() => {
-    if (!isPlaying || !hasSteps) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return
+      // A focused button already activates on Space; handling it here too would toggle twice.
+      if (event.key === ' ' && target?.tagName === 'BUTTON') return
+      if (event.key === 'ArrowRight') player.next()
+      else if (event.key === 'ArrowLeft') player.previous()
+      else if (event.key === ' ') {
+        event.preventDefault()
+        player.toggle()
+      } else if (event.key === 'Escape') onClose()
+      else return
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [player, onClose])
 
-    const timer = window.setInterval(() => {
-      setDirection('next')
-      setIndex((current) => {
-        if (current >= steps.length - 1) {
-          return 0
-        }
-        return current + 1
-      })
-    }, AUTO_PLAY_INTERVAL_MS)
-
-    return () => window.clearInterval(timer)
-  }, [isPlaying, hasSteps, steps.length])
+  const isPlaying = state.autoplay && state.phase !== 'blocked'
+  const playLabel = isPlaying ? '⏸ Pause' : state.finished ? '↺ Play again' : '▶ Play'
 
   return (
     <div className="flow-canvas-export-modal-overlay" onClick={onClose}>
       <div className="recipe-slideshow-modal" onClick={(event) => event.stopPropagation()}>
         <div className="recipe-slideshow-header">
           <div className="recipe-slideshow-title">🎬 Recipe Visualization</div>
-          <button type="button" className="recipe-slideshow-close-btn" onClick={onClose}>✕</button>
+          <button type="button" className="recipe-slideshow-close-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
         {!hasSteps ? (
@@ -65,7 +90,7 @@ export default function RecipeVisualizationSlideshow({ steps, onClose }: RecipeV
           <>
             <div
               key={currentStep?.id ?? index}
-              className={`recipe-slideshow-stage recipe-slideshow-stage-${direction}`}
+              className={`recipe-slideshow-stage recipe-slideshow-stage-${view.direction}`}
             >
               <div className="recipe-slideshow-body">
                 {currentStep?.imageUrl ? (
@@ -93,7 +118,7 @@ export default function RecipeVisualizationSlideshow({ steps, onClose }: RecipeV
               <button
                 type="button"
                 className="recipe-slideshow-control-btn"
-                onClick={goToPrevious}
+                onClick={() => player.previous()}
                 disabled={index === 0}
               >
                 ⏮ Previous
@@ -101,19 +126,27 @@ export default function RecipeVisualizationSlideshow({ steps, onClose }: RecipeV
               <button
                 type="button"
                 className="recipe-slideshow-control-btn recipe-slideshow-play-btn"
-                onClick={() => setIsPlaying((current) => !current)}
+                onClick={() => player.toggle()}
               >
-                {isPlaying ? '⏸ Pause' : '▶ Play'}
+                {playLabel}
               </button>
               <button
                 type="button"
                 className="recipe-slideshow-control-btn"
-                onClick={goToNext}
+                onClick={() => player.next()}
                 disabled={index === steps.length - 1}
               >
                 Next ⏭
               </button>
             </div>
+
+            <NarrationControls
+              player={player}
+              state={state}
+              stepId={currentStep?.id}
+              unavailable={unavailable}
+              syncWarning={syncWarning}
+            />
           </>
         )}
       </div>

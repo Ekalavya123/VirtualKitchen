@@ -16,4 +16,6 @@ import org.springframework.stereotype.Component;
 public class AiQueueProperties {
     private int aiTextMaxDepth = 20;
     private int aiImageMaxDepth = 30;
+    /** In-flight step narrations ({@code TEXT_TO_SPEECH}), which run on the "narration" pool. */
+    private int aiTtsMaxDepth = 20;
 }

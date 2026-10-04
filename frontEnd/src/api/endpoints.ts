@@ -94,6 +94,14 @@ export const API = {
       `/api/v1/recipes/${recipeId}/processes/${processId}/visualization/jobs/${jobId}`,
   },
 
+  // Spoken step narration for the slideshow — generated lazily, cached server-side by step text.
+  stepNarration: {
+    list: (recipeId: number, processId: number) =>
+      `/api/v1/recipes/${recipeId}/processes/${processId}/narrations`,
+    step: (recipeId: number, processId: number, stepId: string) =>
+      `/api/v1/recipes/${recipeId}/processes/${processId}/steps/${encodeURIComponent(stepId)}/narration`,
+  },
+
   // AI model management / credits
   ai: {
     models: '/api/v1/ai/models',

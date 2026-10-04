@@ -98,3 +98,53 @@ spring.data.mongodb.gridfs.bucket=${MONGODB_GRIDFS_BUCKET:ai_artifacts}
 
 # Thread pool for the scheduled jobs (credit cycle reset, AI artifact recovery).
 spring.task.scheduling.pool.size=${SCHEDULING_POOL_SIZE:2}
+
+# --- Text-to-speech (step narration) ---
+# Requires the ai.models[0..4] registry entries from application.properties; indexes 5 and 6 follow them.
+# Provider selection follows the model registry: point ai.default-model.TEXT_TO_SPEECH at gemini-tts or
+# local-tts (or set AI_TTS_DEFAULT_MODEL). Adding a provider = a TtsProvider bean + one ai.models[n] entry.
+ai.models[5].key=gemini-tts
+ai.models[5].capability=TEXT_TO_SPEECH
+ai.models[5].tier=PAID
+ai.models[5].provider-bean=geminiTtsProvider
+ai.models[5].provider-model-id=${ai.gemini.tts.model}
+ai.models[5].credit-cost=1
+# Used only when the user has no credits left for the paid model.
+ai.models[5].fallback-model-key=local-tts
+ai.models[5].enabled=true
+
+ai.models[6].key=local-tts
+ai.models[6].capability=TEXT_TO_SPEECH
+ai.models[6].tier=OPEN_SOURCE
+ai.models[6].provider-bean=localTtsProvider
+ai.models[6].provider-model-id=${ai.local-tts.model}
+ai.models[6].credit-cost=0
+ai.models[6].enabled=true
+
+ai.default-model.TEXT_TO_SPEECH=${AI_TTS_DEFAULT_MODEL:gemini-tts}
+app.queue.ai-tts-max-depth=${AI_TTS_MAX_DEPTH:20}
+app.taskpool.narration.n-threads=${NARRATION_THREADS:2}
+
+# Gemini speech reuses ai.gemini.api-key / base-url / chat-endpoint; only the model and voice are TTS-specific.
+ai.gemini.tts.model=${AI_GEMINI_TTS_MODEL:gemini-2.5-flash-preview-tts}
+ai.gemini.tts.voice=${AI_GEMINI_TTS_VOICE:Kore}
+ai.gemini.tts.sample-rate-hz=24000
+
+# Self-hosted engine speaking the OpenAI-compatible POST /v1/audio/speech contract (e.g. Kokoro-FastAPI).
+ai.local-tts.base-url=${LOCAL_TTS_BASE_URL:http://localhost:8880}
+ai.local-tts.speech-endpoint=${LOCAL_TTS_ENDPOINT:/v1/audio/speech}
+ai.local-tts.model=${LOCAL_TTS_MODEL:kokoro}
+ai.local-tts.voice=${LOCAL_TTS_VOICE:af_heart}
+ai.local-tts.response-format=${LOCAL_TTS_FORMAT:wav}
+ai.local-tts.timeout-ms=${LOCAL_TTS_TIMEOUT_MS:60000}
+ai.local-tts.api-key=${LOCAL_TTS_API_KEY:}
+
+# Narration: provider-independent settings and audio storage (filesystem for dev, supabase for shared deployments).
+ai.narration.language-code=${NARRATION_LANGUAGE:en-US}
+ai.narration.max-script-chars=1200
+ai.narration.lease-ms=300000
+ai.narration.failed-retry-after-ms=30000
+ai.narration.storage.type=${NARRATION_STORAGE:filesystem}
+ai.narration.storage.filesystem.root=${NARRATION_FS_ROOT:./data/narrations}
+ai.narration.storage.filesystem.public-base-url=${NARRATION_PUBLIC_BASE_URL:http://localhost:8080}
+ai.narration.storage.supabase.path-prefix=narrations
