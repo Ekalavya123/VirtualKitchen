@@ -81,6 +81,19 @@ export const API = {
     markApplied: (recipeId: number, jobId: string) => `/api/v1/recipes/${recipeId}/processes/generate/jobs/${jobId}/applied`,
   },
 
+  // AI Recipe Creation: one workflow over process generation, visuals and narration, gated by approval.
+  recipeAiWorkflows: {
+    list: (recipeId: number) => `/api/v1/recipes/${recipeId}/ai-workflows`,
+    estimate: (recipeId: number) => `/api/v1/recipes/${recipeId}/ai-workflows/estimate`,
+    byId: (recipeId: number, workflowId: string) => `/api/v1/recipes/${recipeId}/ai-workflows/${workflowId}`,
+    approvalEstimate: (recipeId: number, workflowId: string) => `/api/v1/recipes/${recipeId}/ai-workflows/${workflowId}/estimate`,
+    approve: (recipeId: number, workflowId: string) => `/api/v1/recipes/${recipeId}/ai-workflows/${workflowId}/approve`,
+    retryTask: (recipeId: number, workflowId: string, task: string) =>
+      `/api/v1/recipes/${recipeId}/ai-workflows/${workflowId}/tasks/${task}/retry`,
+    discard: (recipeId: number, workflowId: string) => `/api/v1/recipes/${recipeId}/ai-workflows/${workflowId}/discard`,
+    dismiss: (recipeId: number, workflowId: string) => `/api/v1/recipes/${recipeId}/ai-workflows/${workflowId}/dismiss`,
+  },
+
   // The caller's running background jobs for a recipe — re-attached to after a reload/navigation.
   recipeJobs: {
     active: (recipeId: number) => `/api/v1/recipes/${recipeId}/jobs/active`,

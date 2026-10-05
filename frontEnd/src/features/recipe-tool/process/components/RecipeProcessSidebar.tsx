@@ -11,10 +11,14 @@ type RecipeProcessSidebarProps = {
   onCreateMainProcess: () => void
   creatingMainProcess: boolean
   onCreateSubprocess: (name: string, description: string) => Promise<void>
-  /** Opens the "Generate with AI" modal — omitted (button hidden) for a non-owner. */
+  /** Opens AI Recipe Creation — omitted (button hidden) for a non-owner. */
   onOpenGenerate?: () => void
   /** Set while an AI generation runs for this recipe — the AI button then shows its progress and reopens the modal. */
   generationProgress?: { percent: number; stageLabel: string } | null
+  /** AI Recipe Creation's state while it needs showing (running, waiting for approval, needs attention). */
+  aiStatus?: { badge: string; title: string } | null
+  /** Opens "Edit with AI" for the open process — omitted (button hidden) when there is nothing to edit. */
+  onOpenEdit?: () => void
 }
 
 /**
@@ -36,6 +40,8 @@ export default function RecipeProcessSidebar({
   onCreateSubprocess,
   onOpenGenerate,
   generationProgress,
+  aiStatus,
+  onOpenEdit,
 }: RecipeProcessSidebarProps) {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [name, setName] = useState('')
@@ -117,10 +123,20 @@ export default function RecipeProcessSidebar({
               <button
                 type="button"
                 onClick={onOpenGenerate}
-                title={generationProgress ? `Generating with AI — ${generationProgress.stageLabel}` : 'Generate with AI'}
+                title={aiStatus?.title ?? (generationProgress ? `Generating with AI — ${generationProgress.stageLabel}` : 'AI Recipe Creation')}
                 style={{ padding: '4px 9px', borderRadius: 7, border: '1px solid var(--flow-magic-border)', background: 'var(--flow-magic-soft)', color: 'var(--flow-magic)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
               >
-                {generationProgress ? `✨ ${generationProgress.percent}%` : '✨ AI'}
+                {aiStatus?.badge ?? (generationProgress ? `✨ ${generationProgress.percent}%` : '✨ AI')}
+              </button>
+            )}
+            {onOpenEdit && (
+              <button
+                type="button"
+                onClick={onOpenEdit}
+                title="Edit the open process with AI"
+                style={{ padding: '4px 9px', borderRadius: 7, border: '1px solid var(--flow-magic-border)', background: 'var(--flow-surface)', color: 'var(--flow-magic)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+              >
+                ✏️ Edit
               </button>
             )}
             <button

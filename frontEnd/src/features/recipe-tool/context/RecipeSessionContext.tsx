@@ -116,6 +116,11 @@ export type RecipeSessionContextValue = {
   /** "Save everything now": flushes any pending autosave immediately (queued behind one in flight). */
   saveNow: () => Promise<{ ok: boolean; error: string | null }>
   /**
+   * The recipe process revision of the last confirmed save. Right after a successful `saveNow` it
+   * identifies exactly what the backend holds (e.g. what the user approved for AI Recipe Creation).
+   */
+  getPersistedRevision: () => number
+  /**
    * Records an undo step — call *before* applying a mutation. `before` defaults to the session's
    * current content; pass the snapshot captured at a gesture's start (drag/resize) instead.
    */
@@ -382,6 +387,7 @@ export function RecipeSessionProvider({ recipeId, canEdit = true, children }: { 
 
   const getProcesses = useCallback(() => store.processes, [store])
   const getProcess = useCallback((processId: number) => store.processes.find((process) => process.id === processId), [store])
+  const getPersistedRevision = useCallback(() => store.persisted.revision, [store])
   const resolveProcessId = useCallback((processId: number) => store.resolveId(processId), [store])
 
   const updateProcess = useCallback<RecipeSessionContextValue['updateProcess']>((processId, patch) => {
@@ -488,6 +494,7 @@ export function RecipeSessionProvider({ recipeId, canEdit = true, children }: { 
     removeProcess,
     saveState,
     saveNow,
+    getPersistedRevision,
     recordHistory,
     undo,
     redo,
@@ -498,7 +505,7 @@ export function RecipeSessionProvider({ recipeId, canEdit = true, children }: { 
     resolveProcessId,
     resolveConflict,
   }), [recipeId, loading, loadError, canEdit, version, getProcesses, getProcess, saveState, updateProcess, addProcess, removeProcess,
-    saveNow, recordHistory, undo, redo, historyFlags, subscribeReseed, focusRequest, resolveProcessId, resolveConflict])
+    saveNow, getPersistedRevision, recordHistory, undo, redo, historyFlags, subscribeReseed, focusRequest, resolveProcessId, resolveConflict])
 
   return (
     <RecipeSessionContext.Provider value={value}>

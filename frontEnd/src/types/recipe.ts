@@ -5,6 +5,8 @@
  * NutritionInfoDTO, RecipeProcessGeneration*DTO, Generated*DTO, VisualizationJobResponseDTO).
  */
 
+import type { RecipeAiWorkflowResponse } from './recipeAiWorkflow'
+
 /** Mirrors the backend's UnitType enum (also duplicated locally in orderApi.ts as OrderUnitType — there is no single shared source for it yet). */
 export type UnitType = 'KG' | 'GRAM' | 'LITER' | 'ML' | 'COUNT'
 
@@ -200,6 +202,8 @@ export interface RecipeActiveJobsResponse {
   /** The running generation, else a completed one whose result was never applied, else null. */
   generation: RecipeProcessGenerationJobResponse | null
   visualizations: RecipeProcessVisualizationJobResponse[]
+  /** The open AI Recipe Creation workflow, else a recently finished one not yet dismissed (older backends: absent). */
+  workflow?: RecipeAiWorkflowResponse | null
 }
 
 export interface RecipeIngredient {

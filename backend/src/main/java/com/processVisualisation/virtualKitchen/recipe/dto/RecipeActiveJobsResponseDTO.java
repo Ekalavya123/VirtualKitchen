@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.recipe.dto;
 
+import com.processVisualisation.virtualKitchen.ai.workflow.dto.RecipeAiWorkflowResponseDTO;
 import lombok.Builder;
 import lombok.Data;
 
@@ -17,4 +18,6 @@ public class RecipeActiveJobsResponseDTO {
     private RecipeProcessGenerationJobResponseDTO generation;
     /** Every visualization job still QUEUED/IN_PROGRESS for one of this recipe's processes. */
     private List<VisualizationJobResponseDTO> visualizations;
+    /** The open AI Recipe Creation workflow, else a recently finished one not yet dismissed, else null. */
+    private RecipeAiWorkflowResponseDTO workflow;
 }

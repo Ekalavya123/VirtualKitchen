@@ -568,6 +568,147 @@
   padding: 10px 12px;
 }
 
+/* --- AI Recipe Creation (RecipeAiCreationModal) --- */
+
+.recipe-ai-task-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recipe-ai-task-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-md);
+  background: var(--flow-surface);
+  cursor: pointer;
+}
+
+.recipe-ai-task-option.is-checked {
+  border-color: var(--flow-accent-soft-border);
+  background: var(--flow-accent-soft);
+}
+
+.recipe-ai-task-option.is-complete {
+  border-style: dashed;
+}
+
+.recipe-ai-task-option input {
+  margin-top: 2px;
+  accent-color: var(--flow-accent);
+}
+
+.recipe-ai-task-option-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--flow-text);
+}
+
+.recipe-ai-task-option-description {
+  font-size: 11.5px;
+  color: var(--flow-text-muted);
+  margin-top: 1px;
+}
+
+.recipe-ai-estimate {
+  border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-md);
+  background: var(--flow-surface-muted);
+  padding: 9px 12px;
+  font-size: 11.5px;
+  color: var(--flow-text-muted);
+}
+
+.recipe-ai-estimate-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.recipe-ai-estimate-total {
+  border-top: 1px solid var(--flow-border);
+  margin-top: 4px;
+  padding-top: 5px;
+  font-weight: 700;
+  color: var(--flow-text);
+}
+
+.recipe-ai-task-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-md);
+  overflow: hidden;
+}
+
+.recipe-ai-task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--flow-surface);
+}
+
+.recipe-ai-task-row + .recipe-ai-task-row {
+  border-top: 1px solid var(--flow-border);
+}
+
+.recipe-ai-task-icon {
+  width: 22px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.recipe-ai-task-row.tone-done .recipe-ai-task-icon { color: var(--flow-success); }
+.recipe-ai-task-row.tone-running .recipe-ai-task-icon { color: var(--flow-accent); animation: recipe-ai-spin 1.4s linear infinite; }
+.recipe-ai-task-row.tone-waiting .recipe-ai-task-icon { color: var(--flow-warning); }
+.recipe-ai-task-row.tone-failed .recipe-ai-task-icon { color: var(--flow-danger); }
+.recipe-ai-task-row.tone-skipped .recipe-ai-task-icon,
+.recipe-ai-task-row.tone-pending .recipe-ai-task-icon { color: var(--flow-text-subtle); }
+
+@keyframes recipe-ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+.recipe-ai-task-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--flow-text);
+}
+
+.recipe-ai-task-detail {
+  font-size: 11.5px;
+  color: var(--flow-text-muted);
+  margin-top: 1px;
+}
+
+.recipe-ai-task-status {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--flow-text-muted);
+  white-space: nowrap;
+}
+
+.recipe-ai-task-row.tone-failed .recipe-ai-task-detail,
+.recipe-ai-task-row.tone-failed .recipe-ai-task-status { color: var(--flow-danger); }
+
+.recipe-ai-approval {
+  border: 1px solid var(--flow-magic-border);
+  border-radius: var(--flow-radius-md);
+  background: var(--flow-magic-soft);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--flow-text);
+  line-height: 1.45;
+}
+
 /* Nodes an applied AI edit just added or changed — a brief pulse, then back to normal. */
 .react-flow__node.flow-node-ai-changed {
   border-radius: var(--flow-radius-md);

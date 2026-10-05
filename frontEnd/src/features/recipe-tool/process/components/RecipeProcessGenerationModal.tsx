@@ -30,6 +30,12 @@ type RecipeProcessGenerationModalProps = {
   pendingEdit: PendingProcessEdit | null
   onApplyEdit: () => void
   onDiscardEdit: () => void
+  /**
+   * False when creating a new flow lives elsewhere (AI Recipe Creation): the modal is then the
+   * "Edit with AI" dialog only, and "Generate a new flow instead" hands over via `onRequestCreate`.
+   */
+  allowCreate?: boolean
+  onRequestCreate?: () => void
 }
 
 const CREATE_PLACEHOLDER = `Describe your recipe here...
@@ -68,13 +74,15 @@ const secondaryButton = {
  */
 export default function RecipeProcessGenerationModal({
   onClose, onGenerate, onEdit, isGenerating, runningMode, progress, jobError, willReplaceMain,
-  editTargetName, selectedStepLabel, pendingEdit, onApplyEdit, onDiscardEdit,
+  editTargetName, selectedStepLabel, pendingEdit, onApplyEdit, onDiscardEdit, allowCreate = true, onRequestCreate,
 }: RecipeProcessGenerationModalProps) {
   const [chosenMode, setChosenMode] = useState<ProcessGenerationMode>(editTargetName ? 'EDIT' : 'CREATE')
   const [text, setText] = useState('')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const mode: ProcessGenerationMode = pendingEdit ? 'EDIT' : (isGenerating && runningMode) ? runningMode : (editTargetName ? chosenMode : 'CREATE')
+  const mode: ProcessGenerationMode = !allowCreate || pendingEdit
+    ? 'EDIT'
+    : (isGenerating && runningMode) ? runningMode : (editTargetName ? chosenMode : 'CREATE')
   const editing = mode === 'EDIT'
 
   const handleSubmit = async () => {
@@ -93,7 +101,8 @@ export default function RecipeProcessGenerationModal({
 
   const switchToCreate = () => {
     onDiscardEdit()
-    setChosenMode('CREATE')
+    if (allowCreate) setChosenMode('CREATE')
+    else onRequestCreate?.()
   }
 
   return (
@@ -121,7 +130,7 @@ export default function RecipeProcessGenerationModal({
         </div>
 
         <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {editTargetName && !pendingEdit && (
+          {allowCreate && editTargetName && !pendingEdit && (
             <div className="recipe-ai-mode-toggle" role="radiogroup" aria-label="What should the AI do?">
               {(['EDIT', 'CREATE'] as const).map((option) => (
                 <button
@@ -146,7 +155,7 @@ export default function RecipeProcessGenerationModal({
               {!editing && willReplaceMain && (
                 <div style={{ fontSize: 11.5, color: 'var(--flow-warning)', background: 'var(--flow-warning-soft)', border: '1px solid var(--flow-warning-border)', borderRadius: 8, padding: '8px 10px' }}>
                   ⚠ This recipe already has a MAIN process. Generating will replace its content (existing subprocesses are kept; new ones may be added). You can Undo it afterwards.
-                  {editTargetName ? ' To change only part of it, use “Edit current flow”.' : ''}
+                  {editTargetName && allowCreate ? ' To change only part of it, use “Edit current flow”.' : ''}
                 </div>
               )}
 

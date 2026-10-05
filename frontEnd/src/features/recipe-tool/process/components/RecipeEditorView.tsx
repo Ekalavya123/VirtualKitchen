@@ -12,8 +12,10 @@ import { applyProcessEdit, describeProcessEdit, ProcessEditConflictError } from 
 import { serializeProcessForEdit } from '../adapters/recipeProcessEditSerializer'
 import { normalizeConditionNodeData } from '../model/recipeConditionData'
 import { normalizeRecipeStepNodeData } from '../model/recipeStepData'
-import { generationJobKey, isTrackedJobActive } from '../../context/jobTracker'
+import { generationJobKey, isTrackedJobActive, isWorkflowOpen, workflowJobKey } from '../../context/jobTracker'
 import { useJobTracker, useTrackedJob } from '../../context/useJobTracker'
+import RecipeAiCreationModal from '../../workflow/components/RecipeAiCreationModal'
+import { workflowBadge, workflowChipLabel, workflowHeadline } from '../../workflow/model/workflowView'
 
 const GENERATION_STAGE_LABELS: Record<string, string> = {
   QUEUED: 'Queued…',
@@ -65,6 +67,18 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
   // leaving the recipe tool and reloads; only the start request itself is local.
   const jobTracker = useJobTracker()
   const generationJob = useTrackedJob(generationJobKey(recipeId))
+  // AI Recipe Creation (process → review/approval → visuals + narration), followed by the same tracker.
+  const workflow = useTrackedJob(workflowJobKey(recipeId))?.job ?? null
+  const [showAiCreation, setShowAiCreation] = useState(false)
+  // A generated process waiting for review opens the approval card by itself — once per workflow,
+  // also when the user comes back to a recipe whose workflow is still waiting.
+  const awaitingReviewId = workflow?.status === 'WAITING_FOR_APPROVAL' && workflow.selectedTasks.includes('PROCESS') && workflow.generationApplied
+    ? workflow.workflowId : null
+  const [openedReviewFor, setOpenedReviewFor] = useState<string | null>(null)
+  if (awaitingReviewId && awaitingReviewId !== openedReviewFor) {
+    setOpenedReviewFor(awaitingReviewId)
+    setShowAiCreation(true)
+  }
   const [startingGeneration, setStartingGeneration] = useState<'CREATE' | 'EDIT' | null>(null)
   const generating = startingGeneration != null || isTrackedJobActive(generationJob)
   const runningMode = startingGeneration ?? (isTrackedJobActive(generationJob) ? (generationJob?.job.mode ?? 'CREATE') : null)
@@ -232,10 +246,19 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
 
     setShowGenerationModal(false)
     jobTracker.dismiss(generationJobKey(recipeId))
+    // Part of AI Recipe Creation: the process now waits for the user's review and approval (being
+    // in the editor — and autosaved — is not approval). The workflow is re-read once the backend
+    // knows the result was loaded, which is what enables "Approve & Continue".
+    const forWorkflow = workflow?.generationJobId === job.jobId
     RecipeProcessGenerationApi.markApplied(recipeId, job.jobId)
+      .then(() => { if (forWorkflow) jobTracker.refresh(workflowJobKey(recipeId)) })
       .catch((error) => console.error('Unable to mark the generated recipe as applied:', error))
-    notifySuccess('AI recipe process ready — it\'s saved automatically. Use Undo to go back to your previous version.')
-  }, [session, generationJob, recipeId, existingMain, onMainProcessChanged, jobTracker, notifySuccess])
+    if (forWorkflow) {
+      notifySuccess('Recipe process ready. Review and edit it, then approve to continue. Use Undo to go back to your previous version.')
+    } else {
+      notifySuccess('AI recipe process ready — it\'s saved automatically. Use Undo to go back to your previous version.')
+    }
+  }, [session, generationJob, recipeId, existingMain, onMainProcessChanged, jobTracker, notifySuccess, workflow?.generationJobId])
 
   // A backend without edit support ignores the mode and returns a whole new flow for an edit request:
   // that must never replace the user's process.
@@ -354,6 +377,11 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
     )
   }
 
+  // Shown while AI Recipe Creation is in progress, waiting for approval, or has failed tasks to retry.
+  const aiStatus = workflow && (isWorkflowOpen(workflow) || workflow.status === 'PARTIALLY_COMPLETED' || workflow.status === 'FAILED')
+    ? { label: workflowChipLabel(workflow), badge: workflowBadge(workflow), title: workflowHeadline(workflow).title }
+    : null
+
   const processListSidebar = (
     <RecipeProcessSidebar
       processes={processes}
@@ -363,9 +391,15 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
       onCreateMainProcess={() => void handleCreateMainProcess()}
       creatingMainProcess={creatingMainProcess}
       onCreateSubprocess={handleCreateSubprocess}
-      onOpenGenerate={isOwner ? () => setShowGenerationModal(true) : undefined}
+      onOpenGenerate={isOwner ? () => setShowAiCreation(true) : undefined}
       generationProgress={generationProgress}
+      aiStatus={aiStatus && { badge: aiStatus.badge, title: `AI Recipe Creation — ${aiStatus.title}` }}
+      onOpenEdit={isOwner && editableTarget ? () => setShowGenerationModal(true) : undefined}
     />
+  )
+
+  const aiCreationModal = showAiCreation && (
+    <RecipeAiCreationModal recipeId={recipeId} onClose={() => setShowAiCreation(false)} willReplaceMain={existingMain != null && existingMain.nodes.length > 0} />
   )
 
   const generationModal = showGenerationModal && (
@@ -383,6 +417,11 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
       pendingEdit={pendingEditReview}
       onApplyEdit={handleApplyEdit}
       onDiscardEdit={handleDiscardEdit}
+      allowCreate={false}
+      onRequestCreate={() => {
+        setShowGenerationModal(false)
+        setShowAiCreation(true)
+      }}
     />
   )
 
@@ -401,14 +440,15 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
           {isOwner && (
             <button
               type="button"
-              onClick={() => setShowGenerationModal(true)}
+              onClick={() => setShowAiCreation(true)}
               style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--flow-accent)', background: 'var(--flow-accent)', color: 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
             >
-              {generationProgress ? `✨ Generating… ${generationProgress.percent}%` : '✨ Generate with AI'}
+              {aiStatus ? aiStatus.label : '✨ AI Recipe Creation'}
             </button>
           )}
         </div>
         {generationModal}
+        {aiCreationModal}
       </div>
     )
   }
@@ -429,6 +469,7 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
         highlightedNodeIds={highlightedNodeIds}
       />
       {generationModal}
+      {aiCreationModal}
     </>
   )
 }

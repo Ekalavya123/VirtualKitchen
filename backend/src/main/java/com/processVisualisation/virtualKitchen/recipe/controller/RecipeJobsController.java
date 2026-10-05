@@ -2,6 +2,7 @@ package com.processVisualisation.virtualKitchen.recipe.controller;
 
 import com.processVisualisation.virtualKitchen.ai.service.RecipeProcessGenerationJobService;
 import com.processVisualisation.virtualKitchen.ai.service.RecipeProcessVisualizationJobService;
+import com.processVisualisation.virtualKitchen.ai.workflow.RecipeAiWorkflowService;
 import com.processVisualisation.virtualKitchen.common.exception.AuthException;
 import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeActiveJobsResponseDTO;
@@ -25,17 +26,20 @@ public class RecipeJobsController {
 
     private final RecipeProcessGenerationJobService recipeProcessGenerationJobService;
     private final RecipeProcessVisualizationJobService recipeProcessVisualizationJobService;
+    private final RecipeAiWorkflowService recipeAiWorkflowService;
 
     public RecipeJobsController(
             RecipeProcessGenerationJobService recipeProcessGenerationJobService,
-            RecipeProcessVisualizationJobService recipeProcessVisualizationJobService) {
+            RecipeProcessVisualizationJobService recipeProcessVisualizationJobService,
+            RecipeAiWorkflowService recipeAiWorkflowService) {
         this.recipeProcessGenerationJobService = recipeProcessGenerationJobService;
         this.recipeProcessVisualizationJobService = recipeProcessVisualizationJobService;
+        this.recipeAiWorkflowService = recipeAiWorkflowService;
     }
 
     /**
-     * Returns the running (or completed-but-unapplied) generation job and every running
-     * visualization job the caller has for this recipe.
+     * Returns the running (or completed-but-unapplied) generation job, every running
+     * visualization job and the AI Recipe Creation workflow the caller has for this recipe.
      */
     @GetMapping("/active")
     public ApiResponse<RecipeActiveJobsResponseDTO> getActiveJobs(@PathVariable Long recipeId) {
@@ -43,6 +47,7 @@ public class RecipeJobsController {
         RecipeActiveJobsResponseDTO data = RecipeActiveJobsResponseDTO.builder()
                 .generation(recipeProcessGenerationJobService.findResumable(userId, recipeId).orElse(null))
                 .visualizations(recipeProcessVisualizationJobService.findActive(userId, recipeId))
+                .workflow(recipeAiWorkflowService.findCurrent(userId, recipeId).orElse(null))
                 .build();
         return ApiResponse.<RecipeActiveJobsResponseDTO>builder()
                 .success(true)
