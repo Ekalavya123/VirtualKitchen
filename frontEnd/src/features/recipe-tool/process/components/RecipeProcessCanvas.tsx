@@ -636,8 +636,8 @@ function RecipeProcessCanvasContent({
       const subprocessNames = step.actionOn.processes
         .map((entry) => availableSubprocesses.find((candidate) => candidate.id === entry.processId)?.name)
         .filter((name): name is string => Boolean(name))
+      // The action description is the slide's instruction text; the rest are supporting details.
       const descriptionParts = [
-        step.actionDescription,
         ingredientNames.length > 0 ? `On: ${ingredientNames.join(', ')}` : '',
         subprocessNames.length > 0 ? `Using: ${subprocessNames.join(', ')}` : '',
         getRecipeStepDurationLabel(step),
@@ -648,6 +648,7 @@ function RecipeProcessCanvasContent({
       return {
         id: node.id,
         title: normalized.title,
+        instruction: step.actionDescription?.trim() || undefined,
         description: descriptionParts.join(' · ') || undefined,
         imageUrl: normalized.visualization?.imageUrl,
         stepNumber: index + 1,

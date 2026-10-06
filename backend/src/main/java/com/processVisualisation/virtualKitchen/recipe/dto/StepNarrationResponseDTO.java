@@ -17,6 +17,11 @@ public class StepNarrationResponseDTO {
     private String status;
     /** False when the step has no text to speak; such a step never generates narration. */
     private boolean narratable;
+    /**
+     * The exact script spoken for the step's current saved content (null when not narratable).
+     * When {@code status} is READY it is word for word what the audio says, so the player can show it.
+     */
+    private String text;
     private String audioUrl;
     private String mimeType;
     private Double durationSeconds;

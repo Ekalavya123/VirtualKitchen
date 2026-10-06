@@ -13,6 +13,34 @@
   gap: 8px;
 }
 
+.narration-seek-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.narration-seek {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  accent-color: var(--flow-accent);
+  cursor: pointer;
+}
+
+.narration-seek:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.narration-seek-time {
+  flex: none;
+  min-width: 72px;
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--flow-text-muted);
+}
+
 .narration-control-btn {
   padding: 6px 10px;
   border-radius: 8px;

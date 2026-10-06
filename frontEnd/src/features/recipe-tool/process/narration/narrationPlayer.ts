@@ -29,7 +29,18 @@ export interface NarrationAudio {
   setPlaybackRate(rate: number): void
   /** Registers the handlers once; the player ignores events for audio it has since replaced. */
   setHandlers(handlers: { onEnded: () => void; onError: () => void }): void
+  /** Moves the playback position of the loaded audio, keeping play/pause state. */
+  seek(seconds: number): void
+  /** The playback position; `duration` is NaN (or Infinity) while unknown. */
+  getProgress(): NarrationProgress
+  /**
+   * Notifies whenever the position may have changed (time updates, seeks, source changes). Kept
+   * apart from the player state on purpose: it fires many times a second while audio plays.
+   */
+  subscribeProgress(listener: () => void): () => void
 }
+
+export type NarrationProgress = { currentTime: number; duration: number }
 
 /** Narration state from the backend for one process's steps. */
 export interface NarrationSource {
@@ -270,6 +281,18 @@ export class NarrationPlayer {
     this.audio.setPlaybackRate(rate)
     this.update({ playbackRate: rate })
   }
+
+  /** Seeks the current step's narration; only while it is playing or paused, so loading and the end-of-step dwell are untouched. */
+  seek(seconds: number) {
+    if (this.state.phase !== 'playing' && this.state.phase !== 'paused') return
+    if (!Number.isFinite(seconds)) return
+    this.audio.seek(Math.max(0, seconds))
+  }
+
+  /** Playback position of the current narration (see NarrationAudio.subscribeProgress). */
+  getProgress = (): NarrationProgress => this.audio.getProgress()
+
+  subscribeProgress = (listener: () => void) => this.audio.subscribeProgress(listener)
 
   /** Turning narration off stops the audio; play mode then continues on reading-time dwells. */
   setNarrationEnabled(enabled: boolean) {

@@ -53,6 +53,16 @@ class FakeAudio implements NarrationAudio {
   setHandlers(handlers: { onEnded: () => void; onError: () => void }) {
     this.handlers = handlers
   }
+  seeks: number[] = []
+  seek(seconds: number) {
+    this.seeks.push(seconds)
+  }
+  getProgress() {
+    return { currentTime: 0, duration: Number.NaN }
+  }
+  subscribeProgress() {
+    return () => {}
+  }
   /** The narration reached its end. */
   end() {
     this.playing = false
@@ -178,6 +188,28 @@ describe('NarrationPlayer', () => {
     assert.equal(state().phase, 'playing')
     assert.equal(audio.rewinds, 1)
     assert.equal(audio.loads.length, 1)
+  })
+
+  it('seeks only while the narration is playing or paused', async () => {
+    const { audio, source, player } = setup()
+    source.narrations.set('a', ready('a'))
+    await player.init()
+
+    player.seek(3)
+    assert.deepEqual(audio.seeks, [], 'nothing loaded yet')
+
+    player.play()
+    await flushMicrotasks()
+    player.seek(3)
+    player.pause()
+    player.seek(-2)
+    assert.deepEqual(audio.seeks, [3, 0], 'negative positions clamp to the start')
+
+    player.play()
+    await flushMicrotasks()
+    audio.end()
+    player.seek(1)
+    assert.deepEqual(audio.seeks, [3, 0], 'ignored once ended, so the advance dwell is untouched')
   })
 
   it('keeps advancing while muted, because muted audio still ends', async () => {

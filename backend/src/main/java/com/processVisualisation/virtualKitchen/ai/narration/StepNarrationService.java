@@ -195,6 +195,7 @@ public class StepNarrationService {
                         .stepId(stepId)
                         .status(StepNarrationStatus.FAILED.name())
                         .narratable(true)
+                        .text(script.text())
                         .failureReason(describeFailure(e))
                         .build());
             }
@@ -321,7 +322,9 @@ public class StepNarrationService {
     private StepNarrationResponseDTO toDto(String stepId, StepNarration record, NarrationScript script, Instant now) {
         StepNarrationResponseDTO.StepNarrationResponseDTOBuilder dto = StepNarrationResponseDTO.builder()
                 .stepId(stepId)
-                .narratable(script.narratable());
+                .narratable(script.narratable())
+                // READY implies the same hash, so this is exactly the text the audio was generated from.
+                .text(script.narratable() ? script.text() : null);
         if (!script.narratable() || record == null) {
             return dto.status(StepNarrationStatus.NOT_GENERATED.name()).build();
         }

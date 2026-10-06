@@ -10,6 +10,8 @@ export interface StepNarration {
   status: StepNarrationStatus
   /** False when the step has no text to speak; such a step never gets narration. */
   narratable: boolean
+  /** The exact script spoken for the step's current saved content; when READY it matches the audio word for word. */
+  text?: string | null
   audioUrl?: string | null
   mimeType?: string | null
   durationSeconds?: number | null
