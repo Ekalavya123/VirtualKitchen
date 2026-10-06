@@ -272,6 +272,19 @@
   transform: scale(1.08);
 }
 
+/* Generated recipe visual (backend-resolved thumbnail), filling the card image area */
+.recipe-card-thumbnail {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.25s ease;
+}
+
+.recipe-card:hover .recipe-card-thumbnail {
+  transform: scale(1.04);
+}
+
 .recipe-card-body {
   padding: 1rem 1rem 0.75rem;
 }

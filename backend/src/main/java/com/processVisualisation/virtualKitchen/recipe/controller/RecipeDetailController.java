@@ -6,7 +6,9 @@ import com.processVisualisation.virtualKitchen.recipe.dto.NutritionInfoDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeDetailResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeIngredientDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeThumbnailDTO;
 import com.processVisualisation.virtualKitchen.recipe.service.IProcessTemplateService;
+import com.processVisualisation.virtualKitchen.recipe.service.RecipeThumbnailService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -38,6 +40,9 @@ public class RecipeDetailController {
     @Autowired
     private IProcessTemplateService recipeService;
 
+    @Autowired
+    private RecipeThumbnailService thumbnailService;
+
     /**
      * Retrieves a recipe's detail view (ingredients, nutrition, main process id, plus base
      * fields). Follows the recipe's existing visibility: owner can always read it; a non-owner
@@ -49,6 +54,19 @@ public class RecipeDetailController {
     @GetMapping
     public ApiResponse<RecipeDetailResponseDTO> get(@PathVariable Long recipeId) {
         return build(recipeService.getRecipeDetails(recipeId, optionalCurrentUserId()), "fetched");
+    }
+
+    /**
+     * Retrieves the image that represents a recipe: its most recently generated step visual, or
+     * the default recipe icon when it has none. Follows the same visibility rule as {@link #get}.
+     * Never generates an image.
+     *
+     * @param recipeId the id of the recipe whose thumbnail to resolve
+     * @return an ApiResponse wrapping the resolved thumbnail
+     */
+    @GetMapping("/thumbnail")
+    public ApiResponse<RecipeThumbnailDTO> getThumbnail(@PathVariable Long recipeId) {
+        return build(thumbnailService.resolve(recipeId, optionalCurrentUserId()), "fetched");
     }
 
     /**

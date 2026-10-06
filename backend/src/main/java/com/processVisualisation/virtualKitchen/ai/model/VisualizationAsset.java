@@ -1,5 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.model;
 
+import com.processVisualisation.virtualKitchen.ai.globalasset.GlobalAssetStatus;
+import com.processVisualisation.virtualKitchen.ai.globalasset.GlobalResourceType;
 import com.processVisualisation.virtualKitchen.ai.registry.ModelTier;
 import lombok.Data;
 import org.springframework.data.annotation.CreatedDate;
@@ -8,6 +10,7 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
 
 /**
@@ -51,6 +54,26 @@ public class VisualizationAsset {
 
     /** Whether {@link #resolvedModelKey} was a fallback because premium credits were exhausted. */
     private boolean usedFallback;
+
+    // --- Global asset fields: only set when type == GLOBAL; null for step visualizations ---
+
+    /** Which catalog the global resource belongs to. */
+    private GlobalResourceType resourceType;
+
+    /** Id of the resource within its catalog (e.g. the store {@code Ingredient} id). */
+    private Long resourceId;
+
+    /** Lifecycle of the global image generation; step visualizations leave this null. */
+    private GlobalAssetStatus generationStatus;
+
+    /** Identifies the generation that currently owns this asset; stale generations cannot overwrite it. */
+    private String generationToken;
+
+    /** Until when the owning generation's claim blocks a new one; past it, a stuck generation can be re-claimed. */
+    private Instant leaseUntil;
+
+    /** The admin who requested the current generation (also the user charged for it). */
+    private Long requestedBy;
 
     @CreatedDate
     private LocalDateTime createdAt;

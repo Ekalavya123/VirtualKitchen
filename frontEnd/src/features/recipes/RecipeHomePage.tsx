@@ -40,6 +40,10 @@ function RecipeCard({
   onAddToMyRecipes,
   onOpenRecipeTool,
 }: RecipeCardProps) {
+  // Falls back to the recipe icon when there is no thumbnail or it fails to load.
+  const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null)
+  const showThumbnail = Boolean(recipe.thumbnailUrl) && recipe.thumbnailUrl !== failedThumbnail
+
   return (
     <article className={`recipe-card group${highlighted ? ' recipe-card-highlighted' : ''}`}>
       <button
@@ -48,9 +52,19 @@ function RecipeCard({
         aria-label={`Open ${recipe.name}`}
       >
         <div className="recipe-card-image">
-          <div className="recipe-card-image-placeholder">
-            <img src={recipeIcon} alt="Recipe" className="recipe-card-logo" />
-          </div>
+          {showThumbnail ? (
+            <img
+              src={recipe.thumbnailUrl!}
+              alt={recipe.name}
+              className="recipe-card-thumbnail"
+              loading="lazy"
+              onError={() => setFailedThumbnail(recipe.thumbnailUrl ?? null)}
+            />
+          ) : (
+            <div className="recipe-card-image-placeholder">
+              <img src={recipeIcon} alt="Recipe" className="recipe-card-logo" />
+            </div>
+          )}
         </div>
 
         <div className="recipe-card-body">
@@ -762,7 +776,8 @@ export default function RecipeHomePage({
       const updated = await RecipeApi.updateVisibility(recipe.id, userId, nextVisibility)
 
       setRecipes(current =>
-        current.map(item => (item.id === recipe.id ? updated : item)),
+        // The visibility endpoint doesn't resolve thumbnails, so keep the one already shown.
+        current.map(item => (item.id === recipe.id ? { ...updated, thumbnailUrl: item.thumbnailUrl } : item)),
       )
       setVisibilityRecipe(null)
       notifySuccess(

@@ -109,4 +109,23 @@ public class TaskPoolConfig {
             @Value("${app.taskpool.flow-generation-orchestrator.n-threads:2}") int nThreads) {
         return taskPoolFactory.getOrCreate("flow-generation-orchestrator", nThreads);
     }
+
+    /**
+     * Registers the {@link TaskPool} that runs admin global-asset image generations (ingredient
+     * and equipment images) started by {@code GlobalAssetImageService}, sized via the {@code
+     * app.taskpool.global-asset.n-threads} property (defaults to 2 threads). Kept separate from
+     * {@link #visualizationTaskPool} so a bulk "generate all missing" run can never starve users'
+     * recipe visualizations. Like {@link #narrationTaskPool}, each task calls {@code
+     * AiRequestQueueService#executeInline} on its own worker thread.
+     *
+     * @param taskPoolFactory factory used to create or reuse the named pool
+     * @param nThreads number of worker threads to size this pool with
+     * @return the {@code "global-asset"} {@link TaskPool}
+     */
+    @Bean
+    public TaskPool globalAssetTaskPool(
+            TaskPoolFactory taskPoolFactory,
+            @Value("${app.taskpool.global-asset.n-threads:2}") int nThreads) {
+        return taskPoolFactory.getOrCreate("global-asset", nThreads);
+    }
 }

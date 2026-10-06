@@ -6,6 +6,7 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.data.mongodb.repository.Query;
 import org.springframework.data.mongodb.repository.Update;
 
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -21,6 +22,15 @@ public interface ProcessRepository extends MongoRepository<Process, Long> {
      * @return the matching processes
      */
     List<Process> findByRecipeId(Long recipeId);
+
+    /**
+     * Fetches every process belonging to any of the given recipes in one query (used to resolve
+     * a whole recipe list's thumbnails at once).
+     *
+     * @param recipeIds the ids of the owning recipes
+     * @return the matching processes
+     */
+    List<Process> findByRecipeIdIn(Collection<Long> recipeIds);
 
     /**
      * Fetches every process of a given type belonging to a recipe, used to check for

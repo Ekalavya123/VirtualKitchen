@@ -18,6 +18,8 @@ export interface Recipe {
   createdAt?: string
   createdBy?: number
   visibility?: RecipeVisibility
+  /** The recipe's latest generated step visual, resolved by the backend. Only the recipe list endpoints fill it; null when there is none. */
+  thumbnailUrl?: string | null
 }
 
 export interface RecipeCreateRequest {

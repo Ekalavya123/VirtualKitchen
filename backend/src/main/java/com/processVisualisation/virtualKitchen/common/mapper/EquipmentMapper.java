@@ -39,6 +39,7 @@ public class EquipmentMapper {
                 .id(e.getId())
                 .name(e.getName())
                 .description(e.getDescription())
+                .imageUrl(e.getImageUrl())
                 .createdAt(e.getCreatedAt())
                 .updatedAt(e.getUpdatedAt())
                 .build();

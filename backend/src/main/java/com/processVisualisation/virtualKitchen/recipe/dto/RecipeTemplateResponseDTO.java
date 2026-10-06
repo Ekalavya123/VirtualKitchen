@@ -21,4 +21,13 @@ public class RecipeTemplateResponseDTO {
     private Visibility visibility;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    /**
+     * The recipe's thumbnail (its latest generated step visual), or null when it has none and
+     * {@link #fallbackIcon} should be shown. Populated by the recipe list endpoints only.
+     */
+    private String thumbnailUrl;
+
+    /** The default recipe icon to show when {@link #thumbnailUrl} is null. Populated with {@link #thumbnailUrl}. */
+    private String fallbackIcon;
 }
