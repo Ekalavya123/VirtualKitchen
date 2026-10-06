@@ -3,6 +3,7 @@ import '../styles/RecipePropertiesPanel.css'
 import '../../styles/recipe-tool.css'
 import SearchableSelect, { type SearchableSelectOption } from '../../../../shared/components/SearchableSelect'
 import IngredientSelector from '../../components/IngredientSelector'
+import { draftKeys } from '../../../../shared/drafts/draftStore'
 import type { Process } from '../../../../types/process'
 import { PreparationStyleSelect, UnitSelect } from '../../components/StepFieldInputs'
 import {
@@ -373,7 +374,7 @@ export default function RecipeStepPanel({
               })
             )}
             {actionAllowsIngredients(step.action) ? (
-              <IngredientSelector excludeIngredientIds={ingredientIds} action={step.action} onAdd={addActionOnIngredient} />
+              <IngredientSelector excludeIngredientIds={ingredientIds} action={step.action} onAdd={addActionOnIngredient} draftKey={draftKeys.stepIngredient(node.id)} />
             ) : (
               <div style={{ fontSize: 11, color: 'var(--flow-text-muted)', background: 'var(--flow-warning-soft)', border: '1px solid var(--flow-warning-border)', borderRadius: 8, padding: '6px 8px' }}>
                 {actionDefinition?.displayName ?? 'This action'} doesn't act on ingredients — remove these, or choose another action.

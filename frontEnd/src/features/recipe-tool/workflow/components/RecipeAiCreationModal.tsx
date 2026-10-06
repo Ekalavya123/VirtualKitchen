@@ -26,7 +26,12 @@ import {
   type WorkflowTaskRow,
 } from '../model/workflowView'
 import { useRecipeAiWorkflow } from '../useRecipeAiWorkflow'
+import { draftKeys } from '../../../../shared/drafts/draftStore'
+import { useDraft } from '../../../../shared/drafts/useDraft'
+import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
 import '../../process/styles/RecipeProcessCanvas.css'
+
+type AiRecipeCreationDraft = { selection: WorkflowTaskSelection; recipeText: string }
 
 type RecipeAiCreationModalProps = {
   recipeId: number
@@ -99,7 +104,9 @@ export default function RecipeAiCreationModal({ recipeId, onClose, willReplaceMa
               error={ai.error}
               onCreate={async (request) => {
                 if (workflow && !isWorkflowOpen(workflow)) await ai.dismiss()
-                if (await ai.start(request)) setStartingOver(false)
+                const started = await ai.start(request)
+                if (started) setStartingOver(false)
+                return started
               }}
               onCancel={onClose}
             />
@@ -125,12 +132,21 @@ function TaskSelectionStep({ recipeId, willReplaceMain, busy, error, onCreate, o
   willReplaceMain: boolean
   busy: boolean
   error: string | null
-  onCreate: (request: { selection: ReturnType<typeof toTaskSelectionRequest>; recipeText?: string }) => Promise<void>
+  onCreate: (request: { selection: ReturnType<typeof toTaskSelectionRequest>; recipeText?: string }) => Promise<boolean>
   onCancel: () => void
 }) {
   const session = useRecipeSession()
-  const [selection, setSelection] = useState<WorkflowTaskSelection>(() => createWorkflowTaskSelection(true))
-  const [recipeText, setRecipeText] = useState('')
+  // Kept as a draft until it has done its job: the recipe text until its process has been generated
+  // and loaded (RecipeEditorView clears it then), so closing, navigating away or a failed run never
+  // loses it.
+  const draft = useDraft<AiRecipeCreationDraft>(draftKeys.aiRecipeCreation(recipeId), {
+    selection: createWorkflowTaskSelection(true),
+    recipeText: '',
+  })
+  const { selection, recipeText } = draft.value
+  const setSelection = (update: (current: WorkflowTaskSelection) => WorkflowTaskSelection) =>
+    draft.setValue((current) => ({ ...current, selection: update(current.selection) }))
+  const setRecipeText = (text: string) => draft.setValue((current) => ({ ...current, recipeText: text }))
   const [estimate, setEstimate] = useState<RecipeAiWorkflowEstimate | null>(null)
   const [estimateError, setEstimateError] = useState(false)
   const [touched, setTouched] = useState(false)
@@ -167,10 +183,12 @@ function TaskSelectionStep({ recipeId, willReplaceMain, busy, error, onCreate, o
   const handleCreate = async () => {
     setTouched(true)
     if (problem) return
-    await onCreate({
+    const started = await onCreate({
       selection: toTaskSelectionRequest(selection),
       recipeText: selection.PROCESS ? recipeText.trim() : undefined,
     })
+    // Without a process to generate there is no text to keep: the selection has done its job.
+    if (started && !selection.PROCESS) draft.clear()
   }
 
   const complete = isCompleteExperience(selection)
@@ -204,6 +222,7 @@ function TaskSelectionStep({ recipeId, willReplaceMain, busy, error, onCreate, o
               ⚠ This recipe already has a MAIN process. Creating a new one will replace its content (existing subprocesses are kept). You can Undo it afterwards.
             </div>
           )}
+          {draft.restored && recipeText.trim() && <DraftRestoredNote onDiscard={draft.clear} />}
           <textarea
             value={recipeText}
             onChange={(event) => setRecipeText(event.target.value)}

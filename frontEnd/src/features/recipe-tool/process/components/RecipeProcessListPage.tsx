@@ -4,6 +4,9 @@ import { ProcessApi, RecipeDetailApi } from '../../../../api'
 import type { Process } from '../../../../types/process'
 import { useNotifications } from '../../../../shared/components/notifications/NotificationProvider'
 import RecipeProcessSummaryCard from './RecipeProcessSummaryCard'
+import { draftKeys } from '../../../../shared/drafts/draftStore'
+import { useDraft } from '../../../../shared/drafts/useDraft'
+import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
 
 type RecipeProcessListPageProps = {
   recipeId: number
@@ -29,9 +32,12 @@ export default function RecipeProcessListPage({ recipeId, currentUserId, onOpenP
   const [loadError, setLoadError] = useState<string | null>(null)
   const [creatingMain, setCreatingMain] = useState(false)
 
-  const [showCreateForm, setShowCreateForm] = useState(false)
-  const [newName, setNewName] = useState('')
-  const [newDescription, setNewDescription] = useState('')
+  // Same draft as the Recipe Editor sidebar's form: kept until the subprocess is created.
+  const draft = useDraft(draftKeys.newSubprocess(recipeId), { name: '', description: '' })
+  const { name: newName, description: newDescription } = draft.value
+  const setNewName = (value: string) => draft.setValue((current) => ({ ...current, name: value }))
+  const setNewDescription = (value: string) => draft.setValue((current) => ({ ...current, description: value }))
+  const [showCreateForm, setShowCreateForm] = useState(() => draft.restored)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
@@ -82,8 +88,7 @@ export default function RecipeProcessListPage({ recipeId, currentUserId, onOpenP
         name: newName.trim(),
         description: newDescription.trim() || undefined,
       })
-      setNewName('')
-      setNewDescription('')
+      draft.clear()
       setShowCreateForm(false)
       notifySuccess('Subprocess created')
       loadProcesses()
@@ -162,6 +167,7 @@ export default function RecipeProcessListPage({ recipeId, currentUserId, onOpenP
 
         {isOwner && showCreateForm && (
           <div className="mb-4 flex flex-col gap-2 rounded-xl border p-3" style={{ border: '1px solid var(--flow-border)', background: 'var(--flow-surface)' }}>
+            {draft.restored && (newName.trim() || newDescription.trim()) && <DraftRestoredNote onDiscard={draft.clear} />}
             <input
               className="flow-properties-input"
               value={newName}

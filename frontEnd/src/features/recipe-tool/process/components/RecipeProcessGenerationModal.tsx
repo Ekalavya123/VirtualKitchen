@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { ProcessGenerationMode } from '../../../../types/recipe'
 import '../styles/RecipeProcessCanvas.css'
+import { useDraft } from '../../../../shared/drafts/useDraft'
+import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
 
 /** A finished AI edit waiting for the user's review — either a list of changes or a question back. */
 export type PendingProcessEdit = {
@@ -36,6 +38,11 @@ type RecipeProcessGenerationModalProps = {
    */
   allowCreate?: boolean
   onRequestCreate?: () => void
+  /**
+   * Where the typed instruction is kept as a draft, so closing the dialog or navigating away doesn't
+   * lose it; the host clears it once the change was applied.
+   */
+  draftKey?: string | null
 }
 
 const CREATE_PLACEHOLDER = `Describe your recipe here...
@@ -74,10 +81,10 @@ const secondaryButton = {
  */
 export default function RecipeProcessGenerationModal({
   onClose, onGenerate, onEdit, isGenerating, runningMode, progress, jobError, willReplaceMain,
-  editTargetName, selectedStepLabel, pendingEdit, onApplyEdit, onDiscardEdit, allowCreate = true, onRequestCreate,
+  editTargetName, selectedStepLabel, pendingEdit, onApplyEdit, onDiscardEdit, allowCreate = true, onRequestCreate, draftKey = null,
 }: RecipeProcessGenerationModalProps) {
   const [chosenMode, setChosenMode] = useState<ProcessGenerationMode>(editTargetName ? 'EDIT' : 'CREATE')
-  const [text, setText] = useState('')
+  const { value: text, setValue: setText, clear: clearText, restored } = useDraft(draftKey, '')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
   const mode: ProcessGenerationMode = !allowCreate || pendingEdit
@@ -165,6 +172,7 @@ export default function RecipeProcessGenerationModal({
                 </div>
               )}
 
+              {restored && text.trim() && !isGenerating && <DraftRestoredNote onDiscard={clearText} />}
               <textarea
                 value={text}
                 onChange={(event) => setText(event.target.value)}

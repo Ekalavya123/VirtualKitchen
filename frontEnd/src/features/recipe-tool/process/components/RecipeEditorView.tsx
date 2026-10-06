@@ -15,6 +15,7 @@ import { normalizeRecipeStepNodeData } from '../model/recipeStepData'
 import { generationJobKey, isTrackedJobActive, isWorkflowOpen, workflowJobKey } from '../../context/jobTracker'
 import { useJobTracker, useTrackedJob } from '../../context/useJobTracker'
 import RecipeAiCreationModal from '../../workflow/components/RecipeAiCreationModal'
+import { clearDraft, draftKeys } from '../../../../shared/drafts/draftStore'
 import { workflowBadge, workflowChipLabel, workflowHeadline } from '../../workflow/model/workflowView'
 
 const GENERATION_STAGE_LABELS: Record<string, string> = {
@@ -254,6 +255,8 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
       .then(() => { if (forWorkflow) jobTracker.refresh(workflowJobKey(recipeId)) })
       .catch((error) => console.error('Unable to mark the generated recipe as applied:', error))
     if (forWorkflow) {
+      // The recipe text did its job: the process exists now (in the editor, autosaved, undoable).
+      clearDraft(draftKeys.aiRecipeCreation(recipeId))
       notifySuccess('Recipe process ready. Review and edit it, then approve to continue. Use Undo to go back to your previous version.')
     } else {
       notifySuccess('AI recipe process ready — it\'s saved automatically. Use Undo to go back to your previous version.')
@@ -301,13 +304,14 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
       setSelectedProcessId(processId)
       setHighlightedNodeIds(new Set(applied.changedNodeIds))
       setShowGenerationModal(false)
+      clearDraft(draftKeys.aiEdit(recipeId))
       notifySuccess(`${edit.summary} Use Undo to revert it.`)
     } catch (error) {
       notifyError(error instanceof ProcessEditConflictError ? error.message : 'Unable to apply this change.')
       if (!(error instanceof ProcessEditConflictError)) console.error('Unable to apply the AI edit:', error)
     }
     finishPendingEdit(jobId)
-  }, [session, pendingEdit, finishPendingEdit, notifySuccess, notifyError])
+  }, [session, pendingEdit, finishPendingEdit, notifySuccess, notifyError, recipeId])
 
   const handleDiscardEdit = useCallback(() => {
     if (pendingEdit) finishPendingEdit(pendingEdit.jobId)
@@ -395,6 +399,7 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
       generationProgress={generationProgress}
       aiStatus={aiStatus && { badge: aiStatus.badge, title: `AI Recipe Creation — ${aiStatus.title}` }}
       onOpenEdit={isOwner && editableTarget ? () => setShowGenerationModal(true) : undefined}
+      newSubprocessDraftKey={draftKeys.newSubprocess(recipeId)}
     />
   )
 
@@ -418,6 +423,7 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
       onApplyEdit={handleApplyEdit}
       onDiscardEdit={handleDiscardEdit}
       allowCreate={false}
+      draftKey={draftKeys.aiEdit(recipeId)}
       onRequestCreate={() => {
         setShowGenerationModal(false)
         setShowAiCreation(true)

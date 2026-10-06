@@ -17,6 +17,7 @@ import { isQuantifiableUnit, type UnitId } from '../catalog/unitCatalog'
 import type { StepActionId } from '../catalog/actionCatalog'
 import type { ActionOnIngredient } from '../process/model/recipeStepData'
 import { PreparationStyleSelect, UnitSelect } from './StepFieldInputs'
+import { useDraft } from '../../../shared/drafts/useDraft'
 
 // Built once: the full global catalog, grouped by category, searchable by aliases — never
 // restricted to what the Kitchen inventory currently holds.
@@ -36,6 +37,28 @@ type IngredientSelectorProps = {
   /** The step's current action — decides which of quantity/unit/preparation style apply at all (catalog action schema). */
   action: StepActionId | ''
   onAdd: (ingredient: ActionOnIngredient) => void
+  /** Where the half-filled row is kept until the ingredient is added (see shared/drafts); null keeps nothing. */
+  draftKey?: string | null
+}
+
+type IngredientDraft = {
+  ingredientIdValue: string
+  customIngredientName: string
+  quantity: string
+  unit: UnitId
+  notes: string
+  preparationStyleId: string
+  customPreparationStyle: string
+}
+
+const EMPTY_INGREDIENT_DRAFT: IngredientDraft = {
+  ingredientIdValue: '',
+  customIngredientName: '',
+  quantity: '1',
+  unit: 'piece',
+  notes: '',
+  preparationStyleId: '',
+  customPreparationStyle: '',
 }
 
 /**
@@ -43,16 +66,21 @@ type IngredientSelectorProps = {
  * catalog (catalog/ingredientCatalog.ts, the same list the AI generator uses) or name a custom
  * ingredient, then set this step's own quantity/unit/preparation for it.
  */
-export default function IngredientSelector({ excludeIngredientIds, action, onAdd }: IngredientSelectorProps) {
+export default function IngredientSelector({ excludeIngredientIds, action, onAdd, draftKey = null }: IngredientSelectorProps) {
   const quantityRelevant = isStepFieldEnabled(action, 'quantity')
 
-  const [ingredientIdValue, setIngredientIdValue] = useState('')
-  const [customIngredientName, setCustomIngredientName] = useState('')
-  const [quantity, setQuantity] = useState('1')
-  const [unit, setUnit] = useState<UnitId>('piece')
-  const [notes, setNotes] = useState('')
-  const [preparationStyleId, setPreparationStyleId] = useState('')
-  const [customPreparationStyle, setCustomPreparationStyle] = useState('')
+  // What's typed here is kept as a draft until the ingredient is added, so selecting another step
+  // or leaving the recipe and coming back doesn't lose it.
+  const draft = useDraft<IngredientDraft>(draftKey, EMPTY_INGREDIENT_DRAFT)
+  const { ingredientIdValue, customIngredientName, quantity, unit, notes, preparationStyleId, customPreparationStyle } = draft.value
+  const field = <K extends keyof IngredientDraft>(key: K) => (value: IngredientDraft[K]) =>
+    draft.setValue((current) => ({ ...current, [key]: value }))
+  const setCustomIngredientName = field('customIngredientName')
+  const setQuantity = field('quantity')
+  const setUnit = field('unit')
+  const setNotes = field('notes')
+  const setPreparationStyleId = field('preparationStyleId')
+  const setCustomPreparationStyle = field('customPreparationStyle')
   const [error, setError] = useState<string | null>(null)
 
   const options = ALL_INGREDIENT_OPTIONS.filter((option) => option.value === CUSTOM_INGREDIENT_ID || !excludeIngredientIds.includes(option.value))
@@ -64,21 +92,18 @@ export default function IngredientSelector({ excludeIngredientIds, action, onAdd
   // here, at the moment an ingredient is actually picked, rather than as each field's useState
   // initial value: this form doesn't remount when the step's action changes.
   const handleSelectIngredient = (value: string) => {
-    setIngredientIdValue(value)
-    setUnit(getIngredientDefaultUnit(value))
     const allowed = getAllowedPreparationStyles(action, value)
-    setPreparationStyleId(allowed.includes(DEFAULT_PREPARATION_STYLE_ID) ? DEFAULT_PREPARATION_STYLE_ID : '')
-    setCustomPreparationStyle('')
+    draft.setValue((current) => ({
+      ...current,
+      ingredientIdValue: value,
+      unit: getIngredientDefaultUnit(value),
+      preparationStyleId: allowed.includes(DEFAULT_PREPARATION_STYLE_ID) ? DEFAULT_PREPARATION_STYLE_ID : '',
+      customPreparationStyle: '',
+    }))
   }
 
   const reset = () => {
-    setIngredientIdValue('')
-    setCustomIngredientName('')
-    setQuantity('1')
-    setUnit('piece')
-    setNotes('')
-    setPreparationStyleId('')
-    setCustomPreparationStyle('')
+    draft.clear()
     setError(null)
   }
 

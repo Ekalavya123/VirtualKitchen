@@ -4,6 +4,9 @@ import '../process/styles/RecipePropertiesPanel.css'
 import { RecipeDetailApi } from '../../../api'
 import type { NutritionInfo } from '../../../types/recipe'
 import { useNotifications } from '../../../shared/components/notifications/NotificationProvider'
+import { draftKeys } from '../../../shared/drafts/draftStore'
+import { useDraft } from '../../../shared/drafts/useDraft'
+import DraftRestoredNote from '../../../shared/drafts/DraftRestoredNote'
 
 type NutritionEditorProps = {
   recipeId: number
@@ -59,14 +62,21 @@ const toNutritionPayload = (form: NutritionFormState): NutritionInfo => ({
  */
 export default function NutritionEditor({ recipeId, nutrition, onSaved, onCancel }: NutritionEditorProps) {
   const { notifySuccess, notifyError } = useNotifications()
-  const [form, setForm] = useState<NutritionFormState>(() => toFormState(nutrition))
-  const [dirty, setDirty] = useState(false)
+  // Unsaved edits are kept as a draft until they're saved (or the user cancels), so leaving the
+  // panel or the page doesn't lose them. No draft = the saved values, untouched.
+  const draft = useDraft<NutritionFormState | null>(draftKeys.nutrition(recipeId), null)
+  const form = draft.value ?? toFormState(nutrition)
+  const dirty = draft.value != null
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
   const handleChange = (key: keyof NutritionFormState, value: string) => {
-    setForm((current) => ({ ...current, [key]: value }))
-    setDirty(true)
+    draft.setValue((current) => ({ ...(current ?? toFormState(nutrition)), [key]: value }))
+  }
+
+  const handleCancel = () => {
+    draft.clear()
+    onCancel()
   }
 
   const handleSave = async () => {
@@ -74,6 +84,7 @@ export default function NutritionEditor({ recipeId, nutrition, onSaved, onCancel
     setSaveError(null)
     try {
       const updated = await RecipeDetailApi.updateNutrition(recipeId, toNutritionPayload(form))
+      draft.clear()
       onSaved(updated.nutrition ?? null)
       notifySuccess('Nutrition saved')
     } catch (error) {
@@ -87,6 +98,7 @@ export default function NutritionEditor({ recipeId, nutrition, onSaved, onCancel
 
   return (
     <div className="flex flex-col gap-3">
+      {draft.restored && <DraftRestoredNote label="Restored your unsaved nutrition changes." onDiscard={draft.clear} />}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {FIELDS.map(({ key, label, unit }) => (
           <div key={key} className="flow-properties-field">
@@ -119,7 +131,7 @@ export default function NutritionEditor({ recipeId, nutrition, onSaved, onCancel
         </button>
         <button
           type="button"
-          onClick={onCancel}
+          onClick={handleCancel}
           disabled={saving}
           style={{
             padding: '7px 16px', borderRadius: 8, border: '1px solid var(--flow-border)',
