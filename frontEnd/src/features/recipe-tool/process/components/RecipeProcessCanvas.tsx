@@ -38,6 +38,9 @@ import {
 } from './recipeProcessCanvas.helpers'
 import { normalizeConditionNodeData } from '../model/recipeConditionData'
 import { type FlowViewport } from '../model/canvasGraph'
+import { ROW_LAYOUT, arrangeRows, findLoopEdges, getHandleSides, planRows, type RowPlan } from '../model/processLayout'
+import { findFreePosition } from '../adapters/recipeProcessEditGraph'
+import { getProcessReadingOrder } from '../../presentation/model/recipePresentation'
 import { buildStepOutputGraph, getStepOutputLabel } from '../model/recipeStepOutputs'
 import {
   buildProcessUpdateRequest,
@@ -97,6 +100,26 @@ type RecipeProcessCanvasProps = {
   /** Nodes to briefly highlight (e.g. the ones an AI edit just changed); display only, never saved. */
   highlightedNodeIds?: ReadonlySet<string>
 }
+
+// Default sizes of a new node (see createRecipeStepNode/createConditionNode).
+const NEW_STEP_SIZE = { width: 280, height: 160 }
+const NEW_CONDITION_SIZE = { width: 190, height: 190 }
+/** Free space kept around a newly added node, so it never lands touching another one. */
+const NEW_NODE_CLEARANCE = 24
+
+/** Below this zoom, node text gets hard to read — the initial view never zooms out further than this. */
+const READABLE_MIN_ZOOM = 0.6
+/** Loop edges run this far out from their ends, clear of the cards they connect. */
+const LOOP_EDGE_OFFSET = 32
+/** Frames Auto Arrange waits at most for resized cards to be re-measured before placing them anyway. */
+const ARRANGE_MAX_WAIT_FRAMES = 20
+
+/** A node's rendered size: what React Flow measured, falling back to its stored size. */
+const nodeSize = (node: Node) => ({
+  width: node.measured?.width ?? node.width ?? NEW_STEP_SIZE.width,
+  height: node.measured?.height ?? node.height ?? NEW_STEP_SIZE.height,
+})
+const nodeBox = (node: Node) => ({ x: node.position.x, y: node.position.y, ...nodeSize(node) })
 
 /** JSON of exactly what a save would send for this graph — equal strings mean nothing worth saving changed. */
 const graphPayloadJson = (flowNodes: Node[], flowEdges: Edge[]) => {
@@ -278,6 +301,36 @@ function RecipeProcessCanvasContent({
   useEffect(() => { nodesRef.current = nodes }, [nodes])
   useEffect(() => { edgesRef.current = edges }, [edges])
 
+  /**
+   * Frames the graph for reading, like a page: its width fits the canvas (never zoomed in past 100%,
+   * never out past a readable zoom) and its *start* is at the top — a long recipe continues a scroll
+   * away instead of shrinking to fit. An arranged graph fills the width exactly at 100%.
+   */
+  const showInitialView = useCallback((duration: number) => {
+    const instance = reactFlowInstance.current
+    const wrapper = reactFlowWrapperRef.current
+    const current = nodesRef.current
+    if (!instance || !wrapper || current.length === 0) return
+    const { padding } = ROW_LAYOUT
+    const bounds = instance.getNodesBounds(current)
+    const roomWidth = wrapper.clientWidth - 2 * padding
+    const zoom = Math.max(READABLE_MIN_ZOOM, Math.min(1, roomWidth / bounds.width))
+    const x = bounds.width * zoom <= roomWidth
+      ? wrapper.clientWidth / 2 - (bounds.x + bounds.width / 2) * zoom
+      : padding - bounds.x * zoom
+    void instance.setViewport({ x, y: padding - bounds.y * zoom, zoom }, { duration })
+  }, [])
+
+  const [flowReady, setFlowReady] = useState(false)
+  // The initial view is applied once the nodes it should frame are rendered: on open when the
+  // process has no saved viewport, and after Auto Arrange. A saved viewport is always respected as-is.
+  const pendingInitialViewRef = useRef<{ duration: number } | null>(initialFlowData.viewport ? null : { duration: 0 })
+  // A freshly AI-generated process is arranged to this screen's width once, as soon as it's shown:
+  // opened while still unsaved (a temporary negative id, see recipeProcessGenerationConverter.ts), or
+  // re-seeded with wholly new content (the AI regenerating an existing MAIN — see the re-seed below).
+  // A saved process is never re-arranged on open.
+  const pendingAutoArrangeRef = useRef(processId < 0 && initialFlowData.nodes.length > 0)
+
   // The canvas itself must never be resized away to nothing — every panel resizer caps its own
   // width against how much room the *other* panel + this floor are currently taking up, on top of
   // its own static max.
@@ -298,6 +351,23 @@ function RecipeProcessCanvasContent({
       ? { ...node, className: [node.className, 'flow-node-ai-changed'].filter(Boolean).join(' ') }
       : node))
     : nodes), [nodes, highlightedNodeIds])
+
+  // Loop edges ("not done yet → repeat") are drawn dashed and routed out away from the cards, so they
+  // read as loops rather than as the way forward. Display only, like the highlight above.
+  const loopEdgeIds = useMemo(() => findLoopEdges(nodes, edges), [nodes, edges])
+  const displayedEdges = useMemo(() => (loopEdgeIds.size === 0
+    ? edges
+    : edges.map((edge) => (loopEdgeIds.has(edge.id)
+      ? { ...edge, pathOptions: { offset: LOOP_EDGE_OFFSET }, style: { ...edge.style, strokeDasharray: '6 4' } }
+      : edge))), [edges, loopEdgeIds])
+
+  // Which side each node's handles sit on, from where its neighbours are (model/processLayout.ts):
+  // along a row the flow runs left to right, and from a row's end down to the next row's start.
+  // Follows manual dragging too; never stored.
+  const handleSides = useMemo(
+    () => getHandleSides(nodes.map((node) => ({ id: node.id, ...nodeBox(node) })), edges, loopEdgeIds),
+    [nodes, edges, loopEdgeIds],
+  )
 
   // Auto-collapse the properties panel when nothing is selected, expand it when a node is selected,
   // so the rail only takes up space while it has something to show.
@@ -338,6 +408,12 @@ function RecipeProcessCanvasContent({
     const flowData = processToFlowData(latest)
     const nextNodes = flowData.nodes.map(normalizeFlowNode)
     const nextEdges = normalizeFlowEdges(flowData.edges)
+    // Wholly new content with no viewport of its own (an AI generation replacing this process):
+    // arrange it to this screen once it's rendered, which also frames it.
+    const currentIds = new Set(nodesRef.current.map((node) => node.id))
+    if (!flowData.viewport && nextNodes.length > 0 && !nextNodes.some((node) => currentIds.has(node.id))) {
+      pendingAutoArrangeRef.current = true
+    }
     syncedGraphJsonRef.current = graphPayloadJson(nextNodes, nextEdges)
     setNodes((current) => {
       const selected = new Set(current.filter((node) => node.selected).map((node) => node.id))
@@ -418,19 +494,124 @@ function RecipeProcessCanvasContent({
     pushToSession(nodesRef.current, edgesRef.current)
   }, [session, processId, pushToSession])
 
+  /**
+   * Where a new node goes: centered one layer below the selected node (or the lowest node when
+   * nothing is selected) — where the next step of the flow would be — moved further down past any
+   * node already there, so it never lands on top of, or touching, another one.
+   */
+  const newNodePosition = useCallback((size: { width: number; height: number }) => {
+    const current = nodesRef.current
+    const anchor = current.find((node) => node.id === selectedNodeId)
+      ?? current.reduce<Node | undefined>((lowest, node) => {
+        if (!lowest) return node
+        const bottom = nodeBox(node)
+        const lowestBottom = nodeBox(lowest)
+        return bottom.y + bottom.height > lowestBottom.y + lowestBottom.height ? node : lowest
+      }, undefined)
+    if (!anchor) return { x: 420, y: 140 }
+    const box = nodeBox(anchor)
+    const preferred = { x: Math.round(box.x + box.width / 2 - size.width / 2), y: Math.round(box.y + box.height + ROW_LAYOUT.rowGap) }
+    const free = findFreePosition(
+      current,
+      { x: preferred.x - NEW_NODE_CLEARANCE, y: preferred.y - NEW_NODE_CLEARANCE },
+      { width: size.width + 2 * NEW_NODE_CLEARANCE, height: size.height + 2 * NEW_NODE_CLEARANCE },
+    )
+    return { x: free.x + NEW_NODE_CLEARANCE, y: free.y + NEW_NODE_CLEARANCE }
+  }, [selectedNodeId])
+
   const addNode = useCallback((nodeType: RecipeNodeType) => {
     pushHistorySnapshot()
     const id = crypto.randomUUID()
-    const position = { x: 420 + (nodes.length % 4) * 40, y: 140 + nodes.length * 50 }
-    const newNode =
-      nodeType === RECIPE_NODE_TYPES.condition
-        ? createConditionNode(id, position)
-        : createRecipeStepNode(id, position)
+    const isCondition = nodeType === RECIPE_NODE_TYPES.condition
+    const position = newNodePosition(isCondition ? NEW_CONDITION_SIZE : NEW_STEP_SIZE)
+    const newNode = isCondition ? createConditionNode(id, position) : createRecipeStepNode(id, position)
 
     setNodes((nds) => [...nds, newNode])
     setSelectedNodeId(id)
     setSelectedEdgeId(null)
-  }, [nodes.length, setNodes, pushHistorySnapshot])
+  }, [newNodePosition, setNodes, pushHistorySnapshot])
+
+  /**
+   * Auto Arrange: re-lays the process out in rows that fill the canvas width (model/processLayout.ts),
+   * in reading order, resizing every card to its cell. Two phases, because a card's height depends on
+   * its width: (1) cards take the cell width and their natural height; (2) once the browser has
+   * re-measured them, rows are placed, each as tall as its tallest card. Node data and edges are never
+   * touched. Recorded as one undo step (`recordUndo`), so Undo restores the previous layout and sizes;
+   * an AI generation's own arrange is left out of history, folded into the generation's step.
+   */
+  const pendingArrangeRef = useRef<{ plan: RowPlan; order: string[] } | null>(null)
+
+  /** Phase 2 — checked once per frame until the resized cards have been re-measured (or it's waited long enough). */
+  const finishArrange = useCallback((pending: { plan: RowPlan; order: string[] }) => {
+    const attempt = (frame: number) => {
+      const instance = reactFlowInstance.current
+      if (pendingArrangeRef.current !== pending || !instance) return
+      const remeasured = nodesRef.current
+        .filter(isRecipeStepNode)
+        .every((node) => Math.abs((instance.getInternalNode(node.id)?.measured?.width ?? 0) - pending.plan.cellWidth) <= 1)
+      if (!remeasured && frame < ARRANGE_MAX_WAIT_FRAMES) requestAnimationFrame(() => attempt(frame + 1))
+      else placeRows(instance)
+    }
+    const placeRows = (instance: ReactFlowInstance<Node, Edge>) => {
+      pendingArrangeRef.current = null
+      const current = nodesRef.current
+      const measuredOf = (node: Node) => instance.getInternalNode(node.id)?.measured
+
+      const byId = new Map(current.map((node) => [node.id, node]))
+      const ordered = [...pending.order, ...current.map((node) => node.id).filter((id) => !pending.order.includes(id))]
+        .map((id) => byId.get(id))
+        .filter((node): node is Node => node != null)
+        .map((node) => ({
+          id: node.id,
+          kind: isRecipeConditionNode(node) ? 'CONDITION' : 'STEP',
+          height: measuredOf(node)?.height ?? nodeSize(node).height,
+        }))
+      const layout = arrangeRows(ordered, pending.plan)
+      pendingInitialViewRef.current = { duration: 300 }
+      setNodes((nds) => nds.map((node) => {
+        const placed = layout.get(node.id)
+        if (!placed) return node
+        return { ...node, position: { x: placed.x, y: placed.y }, width: placed.width, height: placed.height }
+      }))
+    }
+    attempt(0)
+  }, [setNodes])
+
+  const startArrange = useCallback((recordUndo: boolean) => {
+    const wrapper = reactFlowWrapperRef.current
+    const current = nodesRef.current
+    if (!wrapper || current.length === 0) return
+    const plan = planRows(wrapper.clientWidth - 2 * ROW_LAYOUT.padding)
+    const { nodes: processNodes, edges: processEdges } = buildProcessUpdateRequest('', undefined, createFlowDataPayload(current, edgesRef.current))
+    const order = getProcessReadingOrder({ ...process, nodes: processNodes ?? [], edges: processEdges ?? [] }).map((node) => node.id)
+    if (recordUndo) pushHistorySnapshot()
+    const pending = { plan, order }
+    pendingArrangeRef.current = pending
+    // Phase 1: the cell width, and no fixed height (nor a leftover fixed `style` size) so each card
+    // takes its natural content height at that width.
+    setNodes((nds) => nds.map((node) => (isRecipeStepNode(node)
+      ? { ...node, width: plan.cellWidth, height: undefined, style: { ...node.style, width: undefined, height: undefined } }
+      : node)))
+    requestAnimationFrame(() => finishArrange(pending))
+  }, [process, setNodes, pushHistorySnapshot, finishArrange])
+
+  const autoArrange = useCallback(() => startArrange(true), [startArrange])
+
+  // Runs whatever is waiting for the canvas to be ready and the latest nodes to be rendered: an
+  // AI-generated process's one-time arrange (which frames the view itself), else the initial view.
+  useEffect(() => {
+    if (!flowReady) return
+    if (pendingAutoArrangeRef.current) {
+      pendingAutoArrangeRef.current = false
+      pendingInitialViewRef.current = null
+      startArrange(false)
+      return
+    }
+    const pending = pendingInitialViewRef.current
+    if (!pending) return
+    pendingInitialViewRef.current = null
+    showInitialView(pending.duration)
+  }, [nodes, flowReady, startArrange, showInitialView])
 
   const deleteNode = useCallback((id: string) => {
     pushHistorySnapshot()
@@ -581,8 +762,8 @@ function RecipeProcessCanvasContent({
     setZoomPercent(Math.round(viewport.zoom * 100))
   }, [])
 
-  // Suppressed exactly once: when this process had no saved viewport, `fitView` (below, on the
-  // ReactFlow element) runs automatically on mount and fires one onMoveEnd of its own — that
+  // Suppressed exactly once: when this process had no saved viewport, the initial view (see
+  // showInitialView above) is applied on mount and fires one onMoveEnd of its own — that
   // shouldn't itself mark a freshly-opened, otherwise-untouched process dirty. Every onMoveEnd after
   // that (drag, scroll-zoom, pinch, or the topbar's Zoom/Fit View buttons) is a real view change and
   // is pushed into the session so it survives a process switch and is included in the next Save —
@@ -829,6 +1010,8 @@ function RecipeProcessCanvasContent({
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
         onFitView={handleFitView}
+        onAutoArrange={autoArrange}
+        canAutoArrange={nodes.length > 0}
         onVisualize={openSlideshow}
         onExport={handleExport}
         onGenerateVisuals={() => void generateVisuals()}
@@ -906,10 +1089,10 @@ function RecipeProcessCanvasContent({
                   the brief) — provided via context rather than extra node props, since React Flow's
                   custom node components only receive their own node's data. Ingredient names come
                   from the static catalog module directly, no context needed for those. */}
-              <RecipeProcessGraphProvider value={{ availableSubprocesses, stepOrder, stepOutputGraph, onNodeResizeStart: handleNodeResizeStart, onNodeResizeEnd: handleNodeResizeEnd }}>
+              <RecipeProcessGraphProvider value={{ availableSubprocesses, stepOrder, stepOutputGraph, onNodeResizeStart: handleNodeResizeStart, onNodeResizeEnd: handleNodeResizeEnd, handleSides }}>
                 <ReactFlow
                   nodes={displayedNodes}
-                  edges={edges}
+                  edges={displayedEdges}
                   onNodesChange={handleNodesChange}
                   onEdgesChange={handleEdgesChange}
                   onConnect={onConnect}
@@ -935,14 +1118,18 @@ function RecipeProcessCanvasContent({
                   // independently of and inconsistently with our selectedNodeId/selectedEdgeId state.
                   deleteKeyCode={null}
                   nodeTypes={recipeNodeComponents}
-                  onInit={(instance) => { reactFlowInstance.current = instance }}
+                  onInit={(instance) => {
+                    reactFlowInstance.current = instance
+                    setFlowReady(true)
+                  }}
                   onMove={handleViewportMove}
                   onMoveEnd={handleViewportMoveEnd}
                   // Only takes effect at this component's own mount — fine here, since this whole
                   // component remounts fresh per process (see the outer RecipeProcessCanvas's `key`).
+                  // Without one, showInitialView frames the graph instead.
                   defaultViewport={initialFlowData.viewport ?? undefined}
-                  fitView={!initialFlowData.viewport}
-                  fitViewOptions={{ padding: 0.12 }}
+                  // Low enough to overview a long recipe by hand; the initial view stays readable.
+                  minZoom={0.2}
                   panOnScroll
                   panOnScrollMode={PanOnScrollMode.Free}
                   zoomOnScroll={false}

@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react'
 import { Handle, Position, NodeResizeControl, useNodeId, useUpdateNodeInternals, useReactFlow } from '@xyflow/react'
 import '../../styles/recipe-tool.css'
 import { normalizeConditionNodeData, type ConditionNodeData } from '../model/recipeConditionData'
-import { useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'
+import { useNodeHandleSides, useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'
 
 type ConditionNodeProps = {
   selected: boolean
@@ -14,6 +14,8 @@ type ConditionNodeProps = {
 }
 
 const DIAMOND_RADIUS = 8
+
+const SIDE_POSITION = { top: Position.Top, bottom: Position.Bottom, left: Position.Left, right: Position.Right } as const
 
 const toNumber = (value: unknown, fallback: number) => {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -31,6 +33,8 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
   // Undefined (no-op) outside a RecipeProcessGraphProvider — only RecipeProcessCanvas's resize-undo
   // tracking cares.
   const { onNodeResizeStart, onNodeResizeEnd } = useRecipeProcessGraphContext()
+  // Which tip each handle sits on — derived on the canvas from where the neighbours are.
+  const handleSides = useNodeHandleSides(nodeId)
   const normalized = normalizeConditionNodeData(data)
   const condition = normalized.condition
   const width = toNumber(nodeWidth, toNumber(nodeStyle?.width, 190))
@@ -42,6 +46,13 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
   // diamond's tips — on the node's center lines — whatever the box's shape mid-resize.
   const tipDistance = diamondSize * Math.SQRT1_2 - DIAMOND_RADIUS * (Math.SQRT2 - 1)
   const centeredHandle = { transform: 'translate(-50%, -50%)', right: 'auto', bottom: 'auto' } as const
+  const tipStyle = (side: keyof typeof SIDE_POSITION) => ({
+    ...centeredHandle,
+    ...(side === 'top' && { top: height / 2 - tipDistance, left: '50%' }),
+    ...(side === 'bottom' && { top: height / 2 + tipDistance, left: '50%' }),
+    ...(side === 'left' && { top: '50%', left: width / 2 - tipDistance }),
+    ...(side === 'right' && { top: '50%', left: width / 2 + tipDistance }),
+  })
 
   const titleRef = useRef<HTMLDivElement | null>(null)
   const notesRef = useRef<HTMLDivElement | null>(null)
@@ -72,7 +83,7 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
 
   useLayoutEffect(() => {
     syncNodeLayout()
-  }, [syncNodeLayout, width, height, normalized.title, condition.notes, isExpanded])
+  }, [syncNodeLayout, width, height, normalized.title, condition.notes, isExpanded, handleSides.target, handleSides.source, handleSides.no])
 
   useEffect(() => {
     const titleElement = titleRef.current
@@ -227,60 +238,54 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
         )}
       </div>
 
-      {/* Handles — Top (incoming), Right (Yes), Left (No), each on a diamond tip */}
+      {/* Handles — incoming, Yes and No, each on a diamond tip. Which tip follows the flow around the
+          node (top/right/left by default); the ids, and so every stored edge, never change. */}
       <Handle
         id="condition-target"
         type="target"
-        position={Position.Top}
+        position={SIDE_POSITION[handleSides.target]}
         style={{
           width: 10, height: 10,
           background: '#d97706',
           border: '2px solid white',
           boxShadow: '0 0 0 1.5px #d97706',
-          ...centeredHandle,
-          top: height / 2 - tipDistance,
-          left: '50%',
+          ...tipStyle(handleSides.target),
         }}
       />
 
-      {/* YES — right tip */}
       <Handle
         id="condition-yes"
         type="source"
-        position={Position.Right}
+        position={SIDE_POSITION[handleSides.source]}
         style={{
           width: 10, height: 10,
           background: '#16a34a',
           border: '2px solid white',
           boxShadow: '0 0 0 1.5px #16a34a',
-          ...centeredHandle,
-          top: '50%',
-          left: width / 2 + tipDistance,
+          ...tipStyle(handleSides.source),
         }}
       />
 
-      {/* NO — left tip */}
       <Handle
         id="condition-no"
         type="source"
-        position={Position.Left}
+        position={SIDE_POSITION[handleSides.no]}
         style={{
           width: 10, height: 10,
           background: '#dc2626',
           border: '2px solid white',
           boxShadow: '0 0 0 1.5px #dc2626',
-          ...centeredHandle,
-          top: '50%',
-          left: width / 2 - tipDistance,
+          ...tipStyle(handleSides.no),
         }}
       />
 
       <div
         style={{
+          // Below the box's right corner rather than its center, so an edge leaving the bottom tip
+          // never runs through it.
           position: 'absolute',
           bottom: -20,
-          left: '50%',
-          transform: 'translateX(-50%)',
+          right: 0,
           fontSize: 9,
           fontWeight: 700,
           color: condition.expectedResult === 'success' ? '#166534' : '#9f1239',

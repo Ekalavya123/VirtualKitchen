@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react'
 import type { Process } from '../../../../types/process'
 import { EMPTY_STEP_OUTPUT_GRAPH, type StepOutputGraph } from '../model/recipeStepOutputs'
+import { DEFAULT_HANDLE_SIDES, type HandleSides } from '../model/processLayout'
 
 /**
  * Read-only lookup data a STEP node needs to display its Action On
@@ -33,6 +34,12 @@ export type RecipeProcessGraphContextValue = {
    */
   onNodeResizeStart?: (nodeId: string) => void
   onNodeResizeEnd?: (nodeId: string) => void
+  /**
+   * Which side each node's handles sit on, derived from where its neighbours are on the canvas
+   * (model/processLayout.ts's getHandleSides) — never stored. A node without an entry uses
+   * DEFAULT_HANDLE_SIDES (see useNodeHandleSides).
+   */
+  handleSides?: ReadonlyMap<string, HandleSides>
 }
 
 const RecipeProcessGraphContext = createContext<RecipeProcessGraphContextValue>({
@@ -44,3 +51,9 @@ const RecipeProcessGraphContext = createContext<RecipeProcessGraphContextValue>(
 export const RecipeProcessGraphProvider = RecipeProcessGraphContext.Provider
 
 export const useRecipeProcessGraphContext = () => useContext(RecipeProcessGraphContext)
+
+/** This node's handle sides (DEFAULT_HANDLE_SIDES when the canvas hasn't derived any). */
+export const useNodeHandleSides = (nodeId: string | null): HandleSides => {
+  const { handleSides } = useContext(RecipeProcessGraphContext)
+  return (nodeId != null ? handleSides?.get(nodeId) : undefined) ?? DEFAULT_HANDLE_SIDES
+}

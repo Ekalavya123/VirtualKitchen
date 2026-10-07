@@ -10,6 +10,7 @@
 import { RECIPE_NODE_TYPES } from '../model/recipeNodeTypes'
 import { normalizeConditionNodeData, type ConditionNodeData } from '../model/recipeConditionData'
 import { normalizeRecipeStepNodeData, type RecipeStepNodeData } from '../model/recipeStepData'
+import { ROW_LAYOUT, arrangeRows, planRows } from '../model/processLayout'
 import { parseDurationLabel } from '../../catalog/stepFieldCatalog'
 import type { Process, ProcessEdge, ProcessNode } from '../../../../types/process'
 import type { GeneratedRecipeProcess, GeneratedRecipeStep, RecipeProcessGenerationResult } from '../../../../types/recipe'
@@ -17,10 +18,30 @@ import type { GeneratedRecipeProcess, GeneratedRecipeStep, RecipeProcessGenerati
 const STEP_SIZE = { width: 280, height: 160 }
 const CONDITION_SIZE = { width: 190, height: 190 }
 
-const HORIZONTAL_GAP = 380
-const VERTICAL_GAP = 260
-const ORIGIN_X = 120
-const ORIGIN_Y = 80
+const ORIGIN = { x: 120, y: 80 }
+/**
+ * Canvas width the generated rows are planned for — a typical editor canvas (3 cards per row). The
+ * canvas re-arranges a freshly generated process to the real screen width once it is shown (see
+ * RecipeProcessCanvas's Auto Arrange); this only matters for a subprocess not opened yet.
+ */
+const DEFAULT_CANVAS_WIDTH = 1280
+
+/**
+ * Roughly how tall RecipeStepNode will render this step — a freshly generated node hasn't been
+ * measured yet, and its stored height is only a minimum the card grows past with content. Only used
+ * to space the generated layout; the node's own size is left alone.
+ */
+const estimateStepHeight = (data: RecipeStepNodeData): number => {
+  const { step } = data
+  const actionOnCount = step.actionOn.ingredients.length + step.actionOn.processes.length + step.actionOn.steps.length
+  const hasBadges = Boolean(step.temperatureValue || step.flameLevelId || step.durationValue || step.repeatIntervalValue)
+  const height = 24 /* padding */ + 32 /* title row */ + 8
+    + 14 + Math.min(actionOnCount, 3) * 16 + (actionOnCount > 3 ? 16 : 0)
+    + (hasBadges ? 26 : 0)
+    + (step.actionDescription.trim() ? 58 : 0)
+    + (step.expectedOutput.trim() ? 58 : 0)
+  return Math.min(560, Math.max(STEP_SIZE.height, height))
+}
 
 /**
  * Picks fresh, mutually-unique negative ids for the processes this generation is about to create
@@ -138,10 +159,9 @@ export const buildConditionNode = (step: GeneratedRecipeStep, nodeId: string, x:
  * its NO branch back to the step before it (a "repeat until" loop) — the AI doesn't generate branch
  * targets itself (asking for real graph topology is a substantially harder and more error-prone
  * generation task than an ordered step list), so the prompt fixes that convention instead.
+ * Positions and sizes come from the row layout (model/processLayout.ts), in this same step order.
  */
 const buildNodesAndEdges = (steps: GeneratedRecipeStep[], refToProcessId: Map<string, number>): { nodes: ProcessNode[]; edges: ProcessEdge[] } => {
-  const columns = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, steps.length))))
-
   // Node ids are assigned up front so a step can reference an earlier step's output by id.
   const nodeIds = steps.map(() => crypto.randomUUID())
   const stepIdToNodeId = new Map<string, string>()
@@ -149,20 +169,13 @@ const buildNodesAndEdges = (steps: GeneratedRecipeStep[], refToProcessId: Map<st
     if (step.stepId) stepIdToNodeId.set(step.stepId, nodeIds[index])
   })
 
-  const nodes = steps.map((step, index) => {
-    const col = index % columns
-    const row = Math.floor(index / columns)
-    const x = ORIGIN_X + col * HORIZONTAL_GAP
-    const y = ORIGIN_Y + row * VERTICAL_GAP
-
-    return step.nodeType === 'CONDITION'
-      ? buildConditionNode(step, nodeIds[index], x, y)
-      : buildStepNode(step, nodeIds[index], refToProcessId, stepIdToNodeId, x, y)
-  })
+  const unplaced = steps.map((step, index) => (step.nodeType === 'CONDITION'
+    ? buildConditionNode(step, nodeIds[index], 0, 0)
+    : buildStepNode(step, nodeIds[index], refToProcessId, stepIdToNodeId, 0, 0)))
 
   const edges: ProcessEdge[] = []
-  nodes.forEach((source, i) => {
-    const next = nodes[i + 1]
+  unplaced.forEach((source, i) => {
+    const next = unplaced[i + 1]
     if (source.kind !== 'CONDITION') {
       if (next) edges.push({ id: crypto.randomUUID(), source: source.id, target: next.id })
       return
@@ -170,10 +183,26 @@ const buildNodesAndEdges = (steps: GeneratedRecipeStep[], refToProcessId: Map<st
     // YES continues to the next node; NO loops back to the step being checked (the nearest STEP
     // before the condition) so it's repeated until the check passes. The prompt asks for every
     // condition to be phrased that way and placed right after the step it checks.
-    const checkedStep = nodes.slice(0, i).reverse().find((node) => node.kind === 'STEP')
+    const checkedStep = unplaced.slice(0, i).reverse().find((node) => node.kind === 'STEP')
     if (next) edges.push({ id: crypto.randomUUID(), source: source.id, target: next.id, sourceHandle: 'condition-yes', label: 'Yes' })
     const noTarget = checkedStep ?? next
     if (noTarget) edges.push({ id: crypto.randomUUID(), source: source.id, target: noTarget.id, sourceHandle: 'condition-no', label: 'No' })
+  })
+
+  const layout = arrangeRows(
+    unplaced.map((node) => ({
+      id: node.id,
+      kind: node.kind,
+      height: node.kind === 'STEP' ? estimateStepHeight(node.data as unknown as RecipeStepNodeData) : node.height ?? CONDITION_SIZE.height,
+    })),
+    planRows(DEFAULT_CANVAS_WIDTH - 2 * ROW_LAYOUT.padding),
+    ORIGIN,
+  )
+  const nodes = unplaced.map((node) => {
+    const placed = layout.get(node.id)
+    if (!placed) return node
+    const { x, y, width, height } = placed
+    return { ...node, position: { x, y }, width, height, measured: { width, height } }
   })
 
   return { nodes, edges }

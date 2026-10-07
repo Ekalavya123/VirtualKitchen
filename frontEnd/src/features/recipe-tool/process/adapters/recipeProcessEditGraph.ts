@@ -29,10 +29,13 @@ const isCondition = (node: ProcessNode | undefined) => node?.kind === 'CONDITION
 const forwardEdges = (edges: ProcessEdge[], nodeId: string) =>
   edges.filter((edge) => edge.source === nodeId && edge.sourceHandle !== NO_HANDLE)
 
-const positionOf = (node: ProcessNode | undefined, fallback = { x: 120, y: 80 }) =>
+/** Just what placement needs from a node — a persisted ProcessNode and a React Flow node both fit. */
+type PlacedNode = Pick<ProcessNode, 'position' | 'width' | 'height' | 'measured'>
+
+const positionOf = (node: PlacedNode | undefined, fallback = { x: 120, y: 80 }) =>
   node?.position ? { x: node.position.x ?? fallback.x, y: node.position.y ?? fallback.y } : fallback
 
-const sizeOf = (node: Pick<ProcessNode, 'width' | 'height' | 'measured'>) => ({
+const sizeOf = (node: PlacedNode) => ({
   width: node.width ?? node.measured?.width ?? DEFAULT_SIZE.width,
   height: node.height ?? node.measured?.height ?? DEFAULT_SIZE.height,
 })
@@ -45,7 +48,7 @@ const overlaps = (a: { x: number; y: number; width: number; height: number }, b:
  * (nudged down step by step; gives up and returns the last try rather than looping forever).
  */
 export const findFreePosition = (
-  nodes: ProcessNode[], preferred: { x: number; y: number }, size: { width: number; height: number },
+  nodes: ReadonlyArray<PlacedNode>, preferred: { x: number; y: number }, size: { width: number; height: number },
 ): { x: number; y: number } => {
   const boxes = nodes.map((node) => ({ ...positionOf(node, { x: 0, y: 0 }), ...sizeOf(node) }))
   let candidate = { ...preferred }

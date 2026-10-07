@@ -28,6 +28,9 @@ type RecipeProcessTopBarProps = {
   onZoomIn?: () => void
   onZoomOut?: () => void
   onFitView?: () => void
+  /** Re-lays the whole graph out top to bottom (positions only, one undo step); disabled with fewer than two nodes. */
+  onAutoArrange?: () => void
+  canAutoArrange?: boolean
   onVisualize?: () => void
   onExport?: () => void
   /** Starts the AI visualization job for this process's own steps (see RecipeProcessCanvas's generateVisuals). */
@@ -81,6 +84,8 @@ export default function RecipeProcessTopBar({
   onZoomIn,
   onZoomOut,
   onFitView,
+  onAutoArrange,
+  canAutoArrange = false,
   onVisualize,
   onExport,
   onGenerateVisuals,
@@ -182,6 +187,17 @@ export default function RecipeProcessTopBar({
 
       <div className="flex items-center gap-2">
         <AiCreditBadge refreshSignal={jobsFinishedSignal} />
+
+        {onAutoArrange && (
+          <button
+            onClick={onAutoArrange}
+            disabled={!canAutoArrange}
+            style={btnStyle({ opacity: canAutoArrange ? 1 : 0.5, cursor: canAutoArrange ? 'pointer' : 'default' })}
+            title="Auto arrange: lay the flow out top to bottom (Undo restores your layout)"
+          >
+            ⇅ Auto Arrange
+          </button>
+        )}
 
         {onFitView && (
           <button onClick={onFitView} style={btnStyle({ padding: '8px 10px' })} title="Fit view">
