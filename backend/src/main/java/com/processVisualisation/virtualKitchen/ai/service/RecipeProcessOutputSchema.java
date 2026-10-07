@@ -25,10 +25,12 @@ public class RecipeProcessOutputSchema {
 
     public static final String SCHEMA_NAME = "recipe_process";
 
-    private record Field(String name, Map<String, Object> type, boolean required) {}
+    record Field(String name, Map<String, Object> type, boolean required) {}
 
     private final Map<String, Object> jsonSchema;
     private final String promptBlock;
+    private final Map<String, Object> stepSchema;
+    private final Map<String, Object> ingredientSchema;
 
     public RecipeProcessOutputSchema(RecipeStepVocabularyProvider vocabulary) {
         List<String> unitIds = vocabulary.units().stream().map(RecipeStepVocabularyProvider.UnitDefinition::id).toList();
@@ -63,7 +65,9 @@ public class RecipeProcessOutputSchema {
                 new Field("actionDescription", string(), true),
                 new Field("expectedOutput", string(), false)
         );
-        Map<String, Object> node = Map.of("anyOf", List.of(object(stepFields), object(conditionFields)));
+        this.stepSchema = object(stepFields);
+        this.ingredientSchema = object(ingredientFields);
+        Map<String, Object> node = Map.of("anyOf", List.of(stepSchema, object(conditionFields)));
         List<Field> mainProcessFields = List.of(
                 new Field("name", string(), true),
                 new Field("steps", arrayOf(node), true)
@@ -112,11 +116,21 @@ public class RecipeProcessOutputSchema {
         return promptBlock;
     }
 
-    private static String describe(List<Field> fields) {
+    /** The STEP object schema — reused by {@link RecipeProcessEditOutputSchema} for a step added while editing. */
+    Map<String, Object> stepSchema() {
+        return stepSchema;
+    }
+
+    /** The INGREDIENT object schema, reused by {@link RecipeProcessEditOutputSchema}. */
+    Map<String, Object> ingredientSchema() {
+        return ingredientSchema;
+    }
+
+    static String describe(List<Field> fields) {
         return fields.stream().map(field -> field.required() ? field.name() + "!" : field.name()).collect(Collectors.joining(", "));
     }
 
-    private static Map<String, Object> object(List<Field> fields) {
+    static Map<String, Object> object(List<Field> fields) {
         Map<String, Object> properties = new LinkedHashMap<>();
         List<String> required = new ArrayList<>();
         for (Field field : fields) {
@@ -131,19 +145,19 @@ public class RecipeProcessOutputSchema {
         return schema;
     }
 
-    private static Map<String, Object> arrayOf(Map<String, Object> items) {
+    static Map<String, Object> arrayOf(Map<String, Object> items) {
         return Map.of("type", "array", "items", items);
     }
 
-    private static Map<String, Object> string() {
+    static Map<String, Object> string() {
         return Map.of("type", "string");
     }
 
-    private static Map<String, Object> number() {
+    static Map<String, Object> number() {
         return Map.of("type", "number");
     }
 
-    private static Map<String, Object> enumOf(List<String> values) {
+    static Map<String, Object> enumOf(List<String> values) {
         return Map.of("type", "string", "enum", values);
     }
 }

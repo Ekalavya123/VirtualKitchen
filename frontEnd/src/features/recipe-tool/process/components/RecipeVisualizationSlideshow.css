@@ -40,6 +40,8 @@
 .recipe-slideshow-stage {
   display: flex;
   flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
   animation-duration: 320ms;
   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
   animation-fill-mode: both;
@@ -84,32 +86,205 @@
   font-size: 13px;
 }
 
+/* Fixed height so switching between text-only and image presentation never resizes the modal. */
 .recipe-slideshow-body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--flow-text);
-  min-height: 320px;
-  max-height: 50vh;
+  position: relative;
+  /* Gives way first when the modal is short, so the controls below always stay visible. */
+  flex: 0 1 auto;
+  min-height: 200px;
+  height: clamp(260px, 50vh, 420px);
+  overflow: hidden;
+  transition: background-color 400ms ease;
+}
+
+.recipe-slideshow-body-text {
+  background:
+    radial-gradient(120% 90% at 50% 0%, var(--flow-accent-soft), transparent 70%),
+    var(--flow-surface-muted);
+}
+
+.recipe-slideshow-body-image {
+  background: #0b0f17;
 }
 
 .recipe-slideshow-image {
-  max-width: 100%;
-  max-height: 50vh;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+  opacity: 0;
+  transition: opacity 450ms ease;
 }
 
-.recipe-slideshow-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
+.recipe-slideshow-image.is-loaded {
+  opacity: 1;
+}
+
+.recipe-slideshow-media-status {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--flow-border);
+  background: var(--flow-surface);
   color: var(--flow-text-subtle);
+  font-size: 11px;
+  pointer-events: none;
+}
+
+/* --- Animated step instruction ------------------------------------------------------------- */
+
+.recipe-instruction {
+  --instruction-text: var(--flow-text);
+  --instruction-accent: var(--flow-accent);
+  position: absolute;
+  margin: 0;
+  color: var(--instruction-text);
+  font-weight: 600;
+  text-wrap: pretty;
+}
+
+/* No image: the instruction is the slide. */
+.recipe-instruction-full {
+  inset: 0;
+  display: flex;
+  /* "safe": very long text scrolls from its first line instead of being cut off at the top. */
+  align-items: safe center;
+  justify-content: center;
+  padding: 40px clamp(20px, 7%, 56px);
+  text-align: center;
+  font-size: clamp(17px, 2.6vw, 22px);
+  line-height: 1.5;
+  overflow-y: auto;
+  animation: recipe-instruction-full-in 400ms ease both;
+}
+
+/* With an image: a caption over the bottom of the picture, on a soft gradient. */
+.recipe-instruction-overlay {
+  --instruction-text: #f8fafc;
+  --instruction-accent: #fcd34d;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 55%;
+  overflow-y: auto;
+  padding: 44px 20px 16px;
+  background: linear-gradient(to top, rgba(2, 6, 23, 0.82) 0%, rgba(2, 6, 23, 0.6) 55%, rgba(2, 6, 23, 0) 100%);
+  font-size: 15px;
+  line-height: 1.45;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.55);
+  animation: recipe-instruction-overlay-in 450ms ease both;
+}
+
+.recipe-instruction-full.recipe-instruction-long {
+  font-size: clamp(15px, 2vw, 17px);
+}
+
+.recipe-instruction-overlay.recipe-instruction-long {
   font-size: 13px;
 }
 
-.recipe-slideshow-placeholder-icon {
-  font-size: 40px;
+@keyframes recipe-instruction-full-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes recipe-instruction-overlay-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.recipe-instruction-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.recipe-instruction-word {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(0.25em);
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease,
+    color 500ms ease;
+}
+
+.recipe-instruction-word.is-revealed {
+  opacity: 1;
+  transform: none;
+}
+
+/* The word being narrated: a gentle tint that fades back once the next word arrives. */
+.recipe-instruction-word.is-current {
+  color: var(--instruction-accent);
+  transition:
+    opacity 260ms ease,
+    transform 260ms ease,
+    color 120ms ease;
+}
+
+/* Paused: what is still to come stays faintly readable instead of hidden. */
+.recipe-instruction-paused .recipe-instruction-word:not(.is-revealed) {
+  opacity: 0.3;
+  transform: none;
+}
+
+/* Hidden: the narration is about to start; keep the layout, show nothing yet. */
+.recipe-instruction-mode-hidden .recipe-instruction-word {
+  transition: none;
+}
+
+/* No narration to follow: a short reading reveal, each word delayed inline. */
+.recipe-instruction-mode-timed .recipe-instruction-word {
+  animation: recipe-instruction-word-in calc(var(--instruction-word-ms) * 2 + 420ms) ease-out both;
+}
+
+@keyframes recipe-instruction-word-in {
+  0% {
+    opacity: 0;
+    transform: translateY(0.25em);
+    color: var(--instruction-accent);
+  }
+  25% {
+    opacity: 1;
+    transform: none;
+    color: var(--instruction-accent);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+    color: var(--instruction-text);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recipe-instruction,
+  .recipe-instruction-word,
+  .recipe-slideshow-image {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .recipe-instruction-word {
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 .recipe-slideshow-caption {

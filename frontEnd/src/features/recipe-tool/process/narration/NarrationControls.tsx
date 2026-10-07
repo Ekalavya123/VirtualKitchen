@@ -1,5 +1,43 @@
+import { useSyncExternalStore } from 'react'
 import { PLAYBACK_RATES, type NarrationPlayer, type NarrationPlayerState } from './narrationPlayer'
 import './NarrationControls.css'
+
+const formatTime = (seconds: number) => {
+  const whole = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
+}
+
+/**
+ * Position and seek bar for the current step's narration. Reads the progress stream directly, so
+ * only this bar re-renders while audio plays (at most ten times a second, by its rounding).
+ */
+function NarrationSeekBar({ player, seekable }: { player: NarrationPlayer; seekable: boolean }) {
+  const snapshot = useSyncExternalStore(player.subscribeProgress, () => {
+    const { currentTime, duration } = player.getProgress()
+    return `${Math.round(currentTime * 10)}|${Number.isFinite(duration) && duration > 0 ? Math.round(duration * 10) : 0}`
+  })
+  const [position, length] = snapshot.split('|').map((part) => Number(part) / 10)
+  const enabled = seekable && length > 0
+
+  return (
+    <div className="narration-seek-row">
+      <input
+        type="range"
+        className="narration-seek"
+        min={0}
+        max={length || 1}
+        step={0.1}
+        value={Math.min(position, length || 1)}
+        onChange={(event) => player.seek(Number(event.target.value))}
+        disabled={!enabled}
+        aria-label="Narration position"
+      />
+      <span className="narration-seek-time">
+        {formatTime(position)} / {length > 0 ? formatTime(length) : '–:––'}
+      </span>
+    </div>
+  )
+}
 
 type NarrationControlsProps = {
   player: NarrationPlayer
@@ -46,6 +84,9 @@ export default function NarrationControls({ player, state, stepId, unavailable, 
 
   return (
     <div className="narration-controls">
+      {!audioControlsDisabled && (
+        <NarrationSeekBar player={player} seekable={state.phase === 'playing' || state.phase === 'paused'} />
+      )}
       <div className="narration-controls-row">
         <button
           type="button"

@@ -261,6 +261,48 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Catches an AI Recipe Creation request the workflow can't honour (invalid task selection, or an
+     * action its current state doesn't allow).
+     *
+     * @param ex the workflow exception, carrying its own intended HTTP status (400 or 409)
+     * @return an {@link ErrorResponse} with {@code ex}'s message, sent with {@code ex.getStatus()}
+     */
+    @ExceptionHandler(RecipeAiWorkflowException.class)
+    public ResponseEntity<ErrorResponse> handleRecipeAiWorkflow(RecipeAiWorkflowException ex) {
+        if (ex.getStatus().is4xxClientError() && ex.getStatus() != HttpStatus.BAD_REQUEST) {
+            logRejected(ex);
+        } else {
+            logClientError(ex);
+        }
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                ex.getStatus().value(),
+                ex.getStatus().getReasonPhrase(),
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, ex.getStatus());
+    }
+
+    /**
+     * Handles a rejected admin global-asset request (unknown type, invalid id list, ineligible
+     * resource), answering with the exception's own status.
+     *
+     * @param ex the global-asset exception, carrying its own intended HTTP status (400 or 422)
+     * @return an {@link ErrorResponse} with {@code ex}'s message, sent with {@code ex.getStatus()}
+     */
+    @ExceptionHandler(GlobalAssetException.class)
+    public ResponseEntity<ErrorResponse> handleGlobalAsset(GlobalAssetException ex) {
+        logClientError(ex);
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                ex.getStatus().value(),
+                ex.getStatus().getReasonPhrase(),
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, ex.getStatus());
+    }
+
+    /**
      * Catches an authentication/authorization failure raised by the auth
      * flows. Unlike the other handlers, the response status and reason
      * phrase are taken dynamically from {@code ex.getStatus()} rather than a

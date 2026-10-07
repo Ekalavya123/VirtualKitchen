@@ -1,14 +1,93 @@
 import { useEffect, useMemo, useState } from 'react'
 import NarrationControls from '../narration/NarrationControls'
+import type { NarrationPhase } from '../narration/narrationPlayer'
 import { useNarrationPlayer } from '../narration/useNarrationPlayer'
+import AnimatedInstruction, { type InstructionRevealMode, type ProgressSource } from './AnimatedInstruction'
 import './RecipeVisualizationSlideshow.css'
 
 export type SlideshowStep = {
   id: string
   title: string
+  /** The step's own instruction sentence (its action description), shown as the slide's main text. */
+  instruction?: string
+  /** Supporting details (targets, timing, expected result) shown under the title. */
   description?: string
   imageUrl?: string
   stepNumber?: number
+}
+
+/** How the instruction follows the current step's narration phase (see AnimatedInstruction). */
+const revealModeFor = (phase: NarrationPhase): InstructionRevealMode => {
+  switch (phase) {
+    case 'playing':
+    case 'paused':
+      return 'audio'
+    case 'loading':
+      // The narration is about to start; the text then follows it from the first word.
+      return 'hidden'
+    case 'ended':
+    case 'generating':
+    case 'blocked':
+      // Nothing to follow (yet): keep the whole step readable.
+      return 'full'
+    default:
+      // idle / unavailable / failed: no narration to follow, so a short reading reveal.
+      return 'timed'
+  }
+}
+
+type StepStageProps = {
+  step: SlideshowStep
+  /** The narration script from the backend: exactly what the audio says, so it wins over the step's own text. */
+  narrationText?: string | null
+  revealMode: InstructionRevealMode
+  paused: boolean
+  progress: ProgressSource
+  narrationDurationSeconds?: number | null
+}
+
+/**
+ * One step's visual area. The instruction is always shown; the image is an enhancement on top of
+ * it: until the image has actually loaded, the text fills the stage, and once it has, the image
+ * fades in and the text moves to a caption overlay. Image state never touches narration.
+ */
+function StepStage({ step, narrationText, revealMode, paused, progress, narrationDurationSeconds }: StepStageProps) {
+  const imageUrl = step.imageUrl
+  const [image, setImage] = useState<{ url: string; status: 'loaded' | 'error' } | null>(null)
+  const imageStatus = !imageUrl ? 'none' : image?.url === imageUrl ? image.status : 'loading'
+  const showImage = imageStatus === 'loaded'
+  // Until the narration state has loaded (or when a step has none), fall back to the step's own text.
+  const text = narrationText?.trim() || step.instruction?.trim() || step.title.trim() || 'Untitled step'
+
+  return (
+    <div className={`recipe-slideshow-body ${showImage ? 'recipe-slideshow-body-image' : 'recipe-slideshow-body-text'}`}>
+      {imageUrl && imageStatus !== 'error' && (
+        <img
+          key={imageUrl}
+          className={`recipe-slideshow-image${showImage ? ' is-loaded' : ''}`}
+          src={imageUrl}
+          alt={step.title}
+          onLoad={() => setImage({ url: imageUrl, status: 'loaded' })}
+          onError={() => setImage({ url: imageUrl, status: 'error' })}
+        />
+      )}
+      <AnimatedInstruction
+        // A different text (e.g. the narration script arriving) restarts the reveal cleanly.
+        key={text}
+        text={text}
+        mode={revealMode}
+        paused={paused}
+        progress={progress}
+        fallbackDurationSeconds={narrationDurationSeconds}
+        variant={showImage ? 'overlay' : 'full'}
+      />
+      {!showImage && (
+        <span className="recipe-slideshow-media-status">
+          {imageStatus === 'loading' ? 'Image loading…' : imageStatus === 'error' ? 'Image unavailable' : '🖼️ Image not generated yet'}
+        </span>
+      )}
+    </div>
+  )
 }
 
 type RecipeVisualizationSlideshowProps = {
@@ -33,7 +112,10 @@ export default function RecipeVisualizationSlideshow({
   onClose,
 }: RecipeVisualizationSlideshowProps) {
   const playerSteps = useMemo(
-    () => steps.map((step) => ({ id: step.id, text: [step.title, step.description].filter(Boolean).join('. ') })),
+    () => steps.map((step) => ({
+      id: step.id,
+      text: [step.title, step.instruction, step.description].filter(Boolean).join('. '),
+    })),
     [steps],
   )
   const { player, state, unavailable, syncWarning } = useNarrationPlayer({
@@ -92,16 +174,16 @@ export default function RecipeVisualizationSlideshow({
               key={currentStep?.id ?? index}
               className={`recipe-slideshow-stage recipe-slideshow-stage-${view.direction}`}
             >
-              <div className="recipe-slideshow-body">
-                {currentStep?.imageUrl ? (
-                  <img className="recipe-slideshow-image" src={currentStep.imageUrl} alt={currentStep.title} />
-                ) : (
-                  <div className="recipe-slideshow-placeholder">
-                    <span className="recipe-slideshow-placeholder-icon">🖼️</span>
-                    <span>Image not generated yet</span>
-                  </div>
-                )}
-              </div>
+              {currentStep && (
+                <StepStage
+                  step={currentStep}
+                  narrationText={state.narrations[currentStep.id]?.text}
+                  revealMode={revealModeFor(state.phase)}
+                  paused={state.phase === 'paused'}
+                  progress={player}
+                  narrationDurationSeconds={state.narrations[currentStep.id]?.durationSeconds}
+                />
+              )}
 
               <div className="recipe-slideshow-caption">
                 <div className="recipe-slideshow-step-label">

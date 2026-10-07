@@ -15,6 +15,8 @@ public class RecipeProcessGenerationJobResponseDTO {
     private String jobId;
     private String status;
     private String stage;
+    /** "CREATE" or "EDIT": which result shape {@code result} carries once the job completes. */
+    private String mode;
     private int progressPercent;
     private RecipeProcessGenerationResultDTO result;
     private String errorMessage;

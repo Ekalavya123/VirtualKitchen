@@ -24,6 +24,7 @@ import type { User } from '../types/User'
 import type { RecipeProcessBreadcrumbEntry } from '../types/recipe'
 import { AuthenticationApi, KitchenApi } from '../api'
 import { clearStoredToken, isAuthenticated } from '../shared/auth/session'
+import { clearAllDrafts } from '../shared/drafts/draftStore'
 import '../App.css'
 
 interface Kitchen {
@@ -220,6 +221,8 @@ function App() {
   const [inventoryFilter, setInventoryFilter] = useState<'ingredients' | 'equipment'>('ingredients')
 
   useEffect(() => {
+    clearAllDrafts(undefined, { onlyExpired: true })
+
     const restoreSession = async () => {
       if (!isAuthenticated()) {
         setIsRestoringSession(false)
@@ -258,6 +261,8 @@ function App() {
 
   const handleLogout = () => {
     clearStoredToken()
+    // Unsent drafts may hold recipe content; the next person on this browser shouldn't see them.
+    clearAllDrafts()
     setCurrentUser(null)
     setCurrentKitchen(null)
   }

@@ -214,6 +214,9 @@ const orderProcessNodes = (process: Process): OrderedProcess => {
   }
 }
 
+/** A process's nodes in reading order (see orderProcessNodes) — also what AI edits number and describe. */
+export const getProcessReadingOrder = (process: Process): ProcessNode[] => orderProcessNodes(process).nodes
+
 /** Subprocesses a process's steps use, in the order its (ordered) steps first use them. */
 const referencedSubprocessIds = (ordered: ProcessNode[]): number[] => {
   const ids: number[] = []

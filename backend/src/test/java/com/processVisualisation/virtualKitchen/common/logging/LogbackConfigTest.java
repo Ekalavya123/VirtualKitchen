@@ -158,6 +158,9 @@ class LogbackConfigTest {
         environment.setProperty("logging.file.path", logDir.toString());
         environment.setActiveProfiles(profiles);
         loggingSystem = LoggingSystem.get(getClass().getClassLoader());
+        // A Spring test context that ran earlier in this JVM marks logback as already initialized,
+        // which would make initialize() below a silent no-op; start from a clean slate.
+        loggingSystem.cleanUp();
         loggingSystem.beforeInitialize();
         loggingSystem.initialize(new LoggingInitializationContext(environment), "classpath:logback-spring.xml",
                 LogFile.get(environment));

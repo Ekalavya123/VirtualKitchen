@@ -190,6 +190,8 @@ class StepNarrationServiceTest {
         assertEquals("gemini", ready.getProvider());
         assertEquals("en-US", ready.getLanguageCode());
         assertEquals(List.of("Add two tablespoons of oil to the pan."), spoken("geminiTtsProvider"));
+        assertEquals(spoken("geminiTtsProvider").get(0), ready.getText(), "the player shows exactly what was spoken");
+        assertEquals("Add two tablespoons of oil to the pan.", started.getText(), "the script is known before the audio is");
     }
 
     @Test

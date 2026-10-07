@@ -18,9 +18,9 @@ import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationAsse
 import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeProcessAiException;
 import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
+import com.processVisualisation.virtualKitchen.common.utils.ProcessStepOrder;
 import com.processVisualisation.virtualKitchen.common.utils.VisualizationKeyBuilder;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
-import com.processVisualisation.virtualKitchen.recipe.model.ProcessNodeKind;
 import com.processVisualisation.virtualKitchen.recipe.repository.ProcessRepository;
 import com.processVisualisation.virtualKitchen.restclient.client.AIClient;
 import com.processVisualisation.virtualKitchen.restclient.client.ImageGenerationClient;
@@ -97,7 +97,7 @@ public class RecipeProcessVisualizationService {
         Process process = processRepository.findById(processId)
                 .orElseThrow(() -> new RecipeProcessAiException("Process not found: " + processId));
 
-        List<Process.ProcessNode> orderedSteps = orderStepNodes(process);
+        List<Process.ProcessNode> orderedSteps = ProcessStepOrder.orderedSteps(process);
         Map<Long, String> subprocessNameById = resolveSubprocessNames(orderedSteps);
 
         List<StepContext> contexts = new ArrayList<>();
@@ -314,68 +314,6 @@ public class RecipeProcessVisualizationService {
             }
         }
         return content;
-    }
-
-    /**
-     * Orders STEP nodes by following the whole process graph's edges (topological order across ALL
-     * node kinds, not just STEP-to-STEP edges) instead of relying on array position, so previous-step
-     * continuity is accurate: two STEPs separated by a CONDITION
-     * node would otherwise both get indegree 0 and silently fall back to array position.
-     */
-    private List<Process.ProcessNode> orderStepNodes(Process process) {
-        List<Process.ProcessNode> allNodes = process.getNodes() != null ? process.getNodes() : new ArrayList<>();
-
-        Set<String> allIds = allNodes.stream()
-                .map(Process.ProcessNode::getId)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-
-        Map<String, List<String>> adjacency = new HashMap<>();
-        Map<String, Integer> indegree = new HashMap<>();
-        allIds.forEach(id -> indegree.put(id, 0));
-
-        if (process.getEdges() != null) {
-            for (Process.ProcessEdge edge : process.getEdges()) {
-                String source = edge.getSource();
-                String target = edge.getTarget();
-                if (allIds.contains(source) && allIds.contains(target)) {
-                    adjacency.computeIfAbsent(source, k -> new ArrayList<>()).add(target);
-                    indegree.merge(target, 1, Integer::sum);
-                }
-            }
-        }
-
-        Deque<String> queue = new ArrayDeque<>();
-        allIds.forEach(id -> {
-            if (indegree.get(id) == 0) queue.add(id);
-        });
-
-        List<String> orderedIds = new ArrayList<>();
-        Set<String> visited = new HashSet<>();
-        while (!queue.isEmpty()) {
-            String id = queue.poll();
-            if (!visited.add(id)) continue;
-            orderedIds.add(id);
-            for (String next : adjacency.getOrDefault(id, List.of())) {
-                int nextIndegree = indegree.merge(next, -1, Integer::sum);
-                if (nextIndegree <= 0 && !visited.contains(next)) queue.add(next);
-            }
-        }
-
-        for (String id : allIds) {
-            if (!visited.contains(id)) orderedIds.add(id);
-        }
-
-        Map<String, Process.ProcessNode> nodeById = allNodes.stream()
-                .collect(Collectors.toMap(Process.ProcessNode::getId, node -> node, (a, b) -> a));
-
-        List<Process.ProcessNode> ordered = new ArrayList<>();
-        for (String id : orderedIds) {
-            Process.ProcessNode node = nodeById.get(id);
-            if (node != null && node.getKind() == ProcessNodeKind.STEP) {
-                ordered.add(node);
-            }
-        }
-        return ordered;
     }
 
     /** Batch-resolves every subprocess name referenced by any step's Action On, in one query. */

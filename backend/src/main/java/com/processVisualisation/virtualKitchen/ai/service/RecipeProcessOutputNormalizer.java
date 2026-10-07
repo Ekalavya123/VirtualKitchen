@@ -45,18 +45,27 @@ public class RecipeProcessOutputNormalizer {
 
     private GeneratedRecipeStepDTO toStep(RecipeProcessOutput.Node node, int index, Set<String> takenStepIds) {
         if (node == null) return null;
+        // A generated CONDITION never needs an id: nothing can reference its output.
+        if ("CONDITION".equals(node.nodeType())) return toStep(node, null);
+        return toStep(node, node.stepId() != null ? node.stepId() : generateStepId(index, takenStepIds));
+    }
+
+    /** Maps a single node, using {@code stepId} (may be null) as its id — STEP or CONDITION alike. */
+    public GeneratedRecipeStepDTO toStep(RecipeProcessOutput.Node node, String stepId) {
+        if (node == null) return null;
         GeneratedRecipeStepDTO step = new GeneratedRecipeStepDTO();
         step.setNodeType(node.nodeType() == null || node.nodeType().isBlank() ? "STEP" : node.nodeType());
         step.setActionDescription(node.actionDescription());
         step.setExpectedOutput(node.expectedOutput() == null ? "" : node.expectedOutput());
 
         if ("CONDITION".equals(step.getNodeType())) {
+            step.setStepId(stepId);
             step.setTitle(node.title());
             step.setExpectedResult(node.expectedResult() == null || node.expectedResult().isBlank() ? "success" : node.expectedResult());
             return step;
         }
 
-        step.setStepId(node.stepId() != null ? node.stepId() : generateStepId(index, takenStepIds));
+        step.setStepId(stepId);
         step.setAction(node.action());
         step.setCustomActionName(node.customActionName());
         step.setActionOn(new GeneratedActionOnDTO(

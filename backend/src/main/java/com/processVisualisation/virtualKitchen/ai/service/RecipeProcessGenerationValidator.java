@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.IntFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -133,19 +134,41 @@ public class RecipeProcessGenerationValidator {
             errors.add(label + " has too many steps (" + steps.size() + " > " + MAX_STEPS_PER_PROCESS + ")");
         }
 
+        validateStepList(steps, index -> label + ".steps[" + index + "]", declaredRefs, ownRef, errors);
+    }
+
+    /**
+     * Validates one ordered node list on its own, labelling each node by its stepId ("step s3") instead of its
+     * position — so the labels stay stable when nodes are inserted or removed. Used by the AI edit flow to compare
+     * a process before and after a set of edit operations; every node must carry a stepId.
+     *
+     * @param declaredRefs the subprocess refs a step's {@code processes} may name
+     */
+    public List<String> validateSteps(List<GeneratedRecipeStepDTO> steps, Set<String> declaredRefs) {
+        List<String> errors = new ArrayList<>();
+        if (steps.size() > MAX_STEPS_PER_PROCESS) {
+            errors.add("the process has too many steps (" + steps.size() + " > " + MAX_STEPS_PER_PROCESS + ")");
+        }
+        validateStepList(steps, index -> "step " + steps.get(index).getStepId(), declaredRefs, null, errors);
+        return errors;
+    }
+
+    private void validateStepList(
+            List<GeneratedRecipeStepDTO> steps, IntFunction<String> stepLabel, Set<String> declaredRefs, String ownRef, List<String> errors
+    ) {
         // stepId -> position, collected up front so each reference can be checked for "earlier".
         Map<String, Integer> stepIndexById = new HashMap<>();
         for (int i = 0; i < steps.size(); i++) {
             GeneratedRecipeStepDTO step = steps.get(i);
             if (step == null || isBlank(step.getStepId())) continue;
             if (stepIndexById.putIfAbsent(step.getStepId(), i) != null) {
-                errors.add(label + ".steps[" + i + "].stepId is a duplicate within this process: " + step.getStepId());
+                errors.add(stepLabel.apply(i) + ".stepId is a duplicate within this process: " + step.getStepId());
             }
         }
 
         for (int i = 0; i < steps.size(); i++) {
             StepOutputScope scope = new StepOutputScope(steps, stepIndexById, i);
-            validateStep(steps.get(i), label + ".steps[" + i + "]", declaredRefs, ownRef, scope, errors);
+            validateStep(steps.get(i), stepLabel.apply(i), declaredRefs, ownRef, scope, errors);
         }
     }
 

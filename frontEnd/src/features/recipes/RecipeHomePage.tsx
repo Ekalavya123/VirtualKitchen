@@ -4,6 +4,9 @@ import { useNotifications } from '../../shared/components/notifications/Notifica
 import '../recipe-tool/styles/recipe-tool.css'
 import recipeIcon from '../../assets/kitchen/recipeIcon.png'
 import { browserStorage, clearRecovery } from '../recipe-tool/persistence/recoveryStore'
+import { clearRecipeDrafts, draftKeys } from '../../shared/drafts/draftStore'
+import { useDraft } from '../../shared/drafts/useDraft'
+import DraftRestoredNote from '../../shared/drafts/DraftRestoredNote'
 
 type RecipeTab = 'mine' | 'global'
 
@@ -37,6 +40,10 @@ function RecipeCard({
   onAddToMyRecipes,
   onOpenRecipeTool,
 }: RecipeCardProps) {
+  // Falls back to the recipe icon when there is no thumbnail or it fails to load.
+  const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null)
+  const showThumbnail = Boolean(recipe.thumbnailUrl) && recipe.thumbnailUrl !== failedThumbnail
+
   return (
     <article className={`recipe-card group${highlighted ? ' recipe-card-highlighted' : ''}`}>
       <button
@@ -45,9 +52,19 @@ function RecipeCard({
         aria-label={`Open ${recipe.name}`}
       >
         <div className="recipe-card-image">
-          <div className="recipe-card-image-placeholder">
-            <img src={recipeIcon} alt="Recipe" className="recipe-card-logo" />
-          </div>
+          {showThumbnail ? (
+            <img
+              src={recipe.thumbnailUrl!}
+              alt={recipe.name}
+              className="recipe-card-thumbnail"
+              loading="lazy"
+              onError={() => setFailedThumbnail(recipe.thumbnailUrl ?? null)}
+            />
+          ) : (
+            <div className="recipe-card-image-placeholder">
+              <img src={recipeIcon} alt="Recipe" className="recipe-card-logo" />
+            </div>
+          )}
         </div>
 
         <div className="recipe-card-body">
@@ -184,6 +201,9 @@ type CreateRecipeModalProps = {
   onDescriptionChange: (value: string) => void
   onCreate: () => void
   onClose: () => void
+  /** The fields were refilled from an unfinished earlier attempt; `onClearDraft` starts over. */
+  draftRestored: boolean
+  onClearDraft: () => void
 }
 
 function CreateRecipeModal({
@@ -196,6 +216,8 @@ function CreateRecipeModal({
   onDescriptionChange,
   onCreate,
   onClose,
+  draftRestored,
+  onClearDraft,
 }: CreateRecipeModalProps) {
   if (!open) {
     return null
@@ -245,6 +267,9 @@ function CreateRecipeModal({
         </div>
 
         <div className="recipe-modal-body">
+          {draftRestored && (title.trim() || description.trim()) && (
+            <div className="mb-3"><DraftRestoredNote onDiscard={onClearDraft} /></div>
+          )}
           <label className="block">
             <div className="mb-1.5 text-xs font-bold text-[var(--flow-text)]">
               Recipe name
@@ -554,8 +579,12 @@ export default function RecipeHomePage({
 
   const [activeTab, setActiveTab] = useState<RecipeTab>('mine')
 
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
+  // The create-recipe form keeps what was typed until the recipe is created, so closing the dialog
+  // or leaving the page doesn't lose it.
+  const createDraft = useDraft(draftKeys.newRecipe(), { title: '', description: '' })
+  const { title, description } = createDraft.value
+  const setTitle = (value: string) => createDraft.setValue(current => ({ ...current, title: value }))
+  const setDescription = (value: string) => createDraft.setValue(current => ({ ...current, description: value }))
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -649,8 +678,6 @@ export default function RecipeHomePage({
   }, [recipes, globalRecipes, activeTab, search])
 
   const openCreateModal = () => {
-    setTitle('')
-    setDescription('')
     setError(null)
     setCreateModalOpen(true)
   }
@@ -687,8 +714,7 @@ export default function RecipeHomePage({
       }
 
       setCreateModalOpen(false)
-      setTitle('')
-      setDescription('')
+      createDraft.clear()
 
       handleOpenRecipe?.(result.id, recipeTitle)
     } catch (err) {
@@ -707,6 +733,7 @@ export default function RecipeHomePage({
       await RecipeApi.deleteRecipe(recipeId, userId)
       // Unsaved Recipe Tool changes left on this device for a deleted recipe can never be recovered.
       clearRecovery(browserStorage(), recipeId)
+      clearRecipeDrafts(recipeId)
 
       setRecipes(current =>
         current.filter(recipe => recipe.id !== recipeId),
@@ -749,7 +776,8 @@ export default function RecipeHomePage({
       const updated = await RecipeApi.updateVisibility(recipe.id, userId, nextVisibility)
 
       setRecipes(current =>
-        current.map(item => (item.id === recipe.id ? updated : item)),
+        // The visibility endpoint doesn't resolve thumbnails, so keep the one already shown.
+        current.map(item => (item.id === recipe.id ? { ...updated, thumbnailUrl: item.thumbnailUrl } : item)),
       )
       setVisibilityRecipe(null)
       notifySuccess(
@@ -919,6 +947,8 @@ export default function RecipeHomePage({
         onDescriptionChange={setDescription}
         onCreate={() => void handleCreate()}
         onClose={closeCreateModal}
+        draftRestored={createDraft.restored}
+        onClearDraft={createDraft.clear}
       />
 
       {/* View Recipe Modal (Global Recipes) */}

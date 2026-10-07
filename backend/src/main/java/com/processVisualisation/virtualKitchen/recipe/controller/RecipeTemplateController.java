@@ -3,8 +3,10 @@ package com.processVisualisation.virtualKitchen.recipe.controller;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateUpdateDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeThumbnailDTO;
 import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
 import com.processVisualisation.virtualKitchen.recipe.service.IProcessTemplateService;
+import com.processVisualisation.virtualKitchen.recipe.service.RecipeThumbnailService;
 import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +14,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
 /**
  * REST controller for creating, reading, updating, deleting, and sharing recipe/process
@@ -25,6 +29,9 @@ public class RecipeTemplateController {
 
     @Autowired
     private IProcessTemplateService service;
+
+    @Autowired
+    private RecipeThumbnailService thumbnailService;
 
     /**
      * Creates a new recipe template.
@@ -57,7 +64,7 @@ public class RecipeTemplateController {
      */
     @GetMapping("/user/{userId}")
     public ApiResponse<List<RecipeTemplateResponseDTO>> getByUser(@PathVariable Long userId){
-        return build(service.getByUser(userId), "fetched");
+        return build(withThumbnails(service.getByUser(userId)), "fetched");
     }
 
     /**
@@ -69,7 +76,21 @@ public class RecipeTemplateController {
      */
     @GetMapping("/global/{userId}")
     public ApiResponse<List<RecipeTemplateResponseDTO>> getGlobalRecipes(@PathVariable Long userId){
-        return build(service.getGlobalRecipes(userId), "fetched");
+        return build(withThumbnails(service.getGlobalRecipes(userId)), "fetched");
+    }
+
+    /** Fills each listed recipe's thumbnail (latest generated visual, or the default icon) in one batch. */
+    private List<RecipeTemplateResponseDTO> withThumbnails(List<RecipeTemplateResponseDTO> recipes) {
+        Map<Long, RecipeThumbnailDTO> thumbnails = thumbnailService.resolveAll(
+                recipes.stream().map(RecipeTemplateResponseDTO::getId).filter(Objects::nonNull).toList());
+        recipes.forEach(recipe -> {
+            RecipeThumbnailDTO thumbnail = thumbnails.get(recipe.getId());
+            if (thumbnail != null) {
+                recipe.setThumbnailUrl(thumbnail.getThumbnailUrl());
+                recipe.setFallbackIcon(thumbnail.getFallbackIcon());
+            }
+        });
+        return recipes;
     }
 
     /**

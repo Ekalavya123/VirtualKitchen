@@ -34,7 +34,7 @@ const allocateTempIds = (count: number, existingIds: number[]): number[] => {
   return Array.from({ length: count }, (_, index) => start - index)
 }
 
-const buildStepNode = (
+export const buildStepNode = (
   step: GeneratedRecipeStep,
   nodeId: string,
   refToProcessId: Map<string, number>,
@@ -96,7 +96,7 @@ const buildStepNode = (
   }
 }
 
-const buildConditionNode = (step: GeneratedRecipeStep, nodeId: string, x: number, y: number): ProcessNode => {
+export const buildConditionNode = (step: GeneratedRecipeStep, nodeId: string, x: number, y: number): ProcessNode => {
   const notes = [step.actionDescription, step.expectedOutput ? `Expected: ${step.expectedOutput}` : '']
     .filter(Boolean)
     .join(' ')

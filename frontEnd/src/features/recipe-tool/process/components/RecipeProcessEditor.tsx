@@ -13,6 +13,8 @@ interface RecipeProcessEditorProps {
   onBack?: () => void
   /** Passed straight through to RecipeProcessCanvas — see its own doc comment. */
   sidebarHeader?: ReactNode
+  onSelectedNodeChange?: (nodeId: string | null) => void
+  highlightedNodeIds?: ReadonlySet<string>
 }
 
 /**
@@ -29,6 +31,8 @@ export default function RecipeProcessEditor({
   onOpenSubprocess,
   onBack,
   sidebarHeader,
+  onSelectedNodeChange,
+  highlightedNodeIds,
 }: RecipeProcessEditorProps) {
   return (
     <div className="h-full w-full">
@@ -41,6 +45,8 @@ export default function RecipeProcessEditor({
         onOpenSubprocess={onOpenSubprocess}
         onBack={onBack}
         sidebarHeader={sidebarHeader}
+        onSelectedNodeChange={onSelectedNodeChange}
+        highlightedNodeIds={highlightedNodeIds}
       />
     </div>
   )

@@ -92,6 +92,10 @@ type RecipeProcessCanvasProps = {
    * that route simply has no left column at all (the canvas takes the full width instead).
    */
   sidebarHeader?: ReactNode
+  /** Reports the selected node (null when none) — the AI edit dialog resolves "this step" with it. */
+  onSelectedNodeChange?: (nodeId: string | null) => void
+  /** Nodes to briefly highlight (e.g. the ones an AI edit just changed); display only, never saved. */
+  highlightedNodeIds?: ReadonlySet<string>
 }
 
 /** JSON of exactly what a save would send for this graph — equal strings mean nothing worth saving changed. */
@@ -203,6 +207,8 @@ function RecipeProcessCanvasContent({
   onOpenSubprocess,
   onBack,
   sidebarHeader,
+  onSelectedNodeChange,
+  highlightedNodeIds,
   sidebarCollapsed,
   setSidebarCollapsed,
   sidebarWidth,
@@ -281,6 +287,17 @@ function RecipeProcessCanvasContent({
     const dynamicMax = containerWidth - otherPanelWidth - gaps - MIN_CANVAS_WIDTH
     return Math.min(staticMax, dynamicMax)
   }, [])
+
+  useEffect(() => {
+    onSelectedNodeChange?.(selectedNodeId)
+  }, [selectedNodeId, onSelectedNodeChange])
+
+  // Highlighting is applied only to what React Flow renders, so it never reaches the session or a save.
+  const displayedNodes = useMemo(() => (highlightedNodeIds && highlightedNodeIds.size > 0
+    ? nodes.map((node) => (highlightedNodeIds.has(node.id)
+      ? { ...node, className: [node.className, 'flow-node-ai-changed'].filter(Boolean).join(' ') }
+      : node))
+    : nodes), [nodes, highlightedNodeIds])
 
   // Auto-collapse the properties panel when nothing is selected, expand it when a node is selected,
   // so the rail only takes up space while it has something to show.
@@ -619,8 +636,8 @@ function RecipeProcessCanvasContent({
       const subprocessNames = step.actionOn.processes
         .map((entry) => availableSubprocesses.find((candidate) => candidate.id === entry.processId)?.name)
         .filter((name): name is string => Boolean(name))
+      // The action description is the slide's instruction text; the rest are supporting details.
       const descriptionParts = [
-        step.actionDescription,
         ingredientNames.length > 0 ? `On: ${ingredientNames.join(', ')}` : '',
         subprocessNames.length > 0 ? `Using: ${subprocessNames.join(', ')}` : '',
         getRecipeStepDurationLabel(step),
@@ -631,6 +648,7 @@ function RecipeProcessCanvasContent({
       return {
         id: node.id,
         title: normalized.title,
+        instruction: step.actionDescription?.trim() || undefined,
         description: descriptionParts.join(' · ') || undefined,
         imageUrl: normalized.visualization?.imageUrl,
         stepNumber: index + 1,
@@ -890,7 +908,7 @@ function RecipeProcessCanvasContent({
                   from the static catalog module directly, no context needed for those. */}
               <RecipeProcessGraphProvider value={{ availableSubprocesses, stepOrder, stepOutputGraph, onNodeResizeStart: handleNodeResizeStart, onNodeResizeEnd: handleNodeResizeEnd }}>
                 <ReactFlow
-                  nodes={nodes}
+                  nodes={displayedNodes}
                   edges={edges}
                   onNodesChange={handleNodesChange}
                   onEdgesChange={handleEdgesChange}

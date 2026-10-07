@@ -28,6 +28,12 @@ public class Equipment {
 
     private String description;
 
+    /**
+     * The equipment's global image, reused everywhere it appears rather than generated per
+     * recipe. Populated by the admin global-asset image generation.
+     */
+    private String imageUrl;
+
     @CreatedDate
     private LocalDateTime createdAt;
 

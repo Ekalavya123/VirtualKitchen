@@ -5,6 +5,8 @@
  * NutritionInfoDTO, RecipeProcessGeneration*DTO, Generated*DTO, VisualizationJobResponseDTO).
  */
 
+import type { RecipeAiWorkflowResponse } from './recipeAiWorkflow'
+
 /** Mirrors the backend's UnitType enum (also duplicated locally in orderApi.ts as OrderUnitType — there is no single shared source for it yet). */
 export type UnitType = 'KG' | 'GRAM' | 'LITER' | 'ML' | 'COUNT'
 
@@ -66,19 +68,85 @@ export interface GeneratedRecipeProcess {
   steps: GeneratedRecipeStep[]
 }
 
+export type ProcessGenerationMode = 'CREATE' | 'EDIT'
+
+/**
+ * One validated AI edit operation (recipe/dto/ProcessEditOperationDTO.java), applied in list order by
+ * features/recipe-tool/process/adapters/recipeProcessEditApplier.ts. Node references are real node ids, the
+ * `ref` of a node an earlier operation added, or 'START'.
+ */
+export type ProcessEditOperationType =
+  | 'ADD_STEP' | 'ADD_CONDITION' | 'UPDATE_STEP' | 'UPDATE_CONDITION'
+  | 'ADD_INGREDIENT' | 'UPDATE_INGREDIENT' | 'REMOVE_INGREDIENT' | 'REPLACE_INGREDIENT'
+  | 'DELETE_NODE' | 'MOVE_NODE'
+
+export interface ProcessEditOperation {
+  op: ProcessEditOperationType
+  target?: string | null
+  after?: string | null
+  /** Temporary reference of the node an ADD_* operation creates. */
+  ref?: string | null
+  /** ADD_*: the full new node. UPDATE_*: only the fields that change (actionOn.steps/processes replace whole lists). */
+  step?: Partial<GeneratedRecipeStep> | null
+  /** UPDATE_STEP: fields to reset ('temperature' resets value and unit). */
+  clear?: string[] | null
+  ingredient?: GeneratedActionOnIngredient | null
+  ingredientId?: string | null
+}
+
+export interface RecipeProcessEditResult {
+  targetProcessId: number
+  summary: string
+  /** Set (with no operations) when the AI needs more information instead of changing anything. */
+  clarification?: string | null
+  operations: ProcessEditOperation[]
+}
+
 export interface RecipeProcessGenerationResult {
+  /** Null on CREATE results and on results stored before modes existed. */
+  mode?: ProcessGenerationMode | null
+  /** CREATE only. */
   mainProcess: GeneratedRecipeProcess
   subprocesses: GeneratedRecipeProcess[]
+  /** EDIT only. */
+  edit?: RecipeProcessEditResult | null
   modelUsed?: string
   modelTier?: string
   usedFallback?: boolean
   fallbackReason?: string | null
 }
 
+/** One existing node of the process an EDIT request changes (recipe/dto/EditTargetNodeDTO.java). */
+export interface EditTargetNode {
+  nodeId: string
+  /** The number the editor shows on a STEP. */
+  stepNumber?: number | null
+  /** Semantic content; actionOn.steps holds node ids and actionOn.processes holds process ids as strings. */
+  content: GeneratedRecipeStep
+  nextNodeIds?: string[]
+  yesNodeId?: string | null
+  noNodeId?: string | null
+}
+
+export interface EditTargetProcess {
+  processId: number
+  name: string
+  /** In reading order. */
+  nodes: EditTargetNode[]
+  subprocesses: { processId: number; name: string }[]
+}
+
 /** POST /api/v1/recipes/{recipeId}/processes/generate/jobs body. */
 export interface RecipeProcessGenerationRequest {
+  /** The recipe (CREATE) or the change instruction (EDIT). */
   recipeText: string
   clientRequestId?: string
+  /** CREATE when omitted. */
+  mode?: ProcessGenerationMode
+  /** EDIT only. */
+  targetProcess?: EditTargetProcess
+  /** EDIT only: the node selected in the editor. */
+  selectedNodeId?: string | null
 }
 
 export type RecipeProcessGenerationJobStatus = 'QUEUED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'
@@ -87,6 +155,8 @@ export interface RecipeProcessGenerationJobResponse {
   jobId: string
   status: RecipeProcessGenerationJobStatus
   stage: string
+  /** Which kind of job this is (older backends omit it: CREATE). */
+  mode?: ProcessGenerationMode
   progressPercent: number
   result?: RecipeProcessGenerationResult | null
   errorMessage?: string | null
@@ -132,6 +202,8 @@ export interface RecipeActiveJobsResponse {
   /** The running generation, else a completed one whose result was never applied, else null. */
   generation: RecipeProcessGenerationJobResponse | null
   visualizations: RecipeProcessVisualizationJobResponse[]
+  /** The open AI Recipe Creation workflow, else a recently finished one not yet dismissed (older backends: absent). */
+  workflow?: RecipeAiWorkflowResponse | null
 }
 
 export interface RecipeIngredient {

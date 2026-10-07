@@ -51,89 +51,12 @@ public class RecipeProcessGenerationPromptBuilder {
             FIELD_REPEAT_INTERVAL, "repeatInterval"
     );
 
-    private final String vocabularyBlock;
-
     /**
-     * Everything that is identical for every request (instructions, schema, rules, vocabulary). It is sent as
-     * the system prompt and never varies, so providers with prefix caching (Ollama's KV cache, Gemini/OpenAI
-     * implicit caching) only have to process it once — each request then only adds the recipe itself.
+     * How to fill in a single STEP's fields. Shared with {@link RecipeProcessEditPromptBuilder} (via
+     * {@link #stepAuthoringRulesAndVocabulary()}) so a step the model adds while editing follows exactly the same rules
+     * as one it generates.
      */
-    private final String systemPrompt;
-
-    public RecipeProcessGenerationPromptBuilder(
-            RecipeStepVocabularyProvider recipeStepVocabularyProvider, RecipeProcessOutputSchema outputSchema
-    ) {
-        this.vocabularyBlock = buildVocabularyBlock(recipeStepVocabularyProvider);
-        this.systemPrompt = """
-                Convert recipe text into a semantic recipe process structure.
-
-                Return ONLY valid JSON.
-                Do not return markdown, explanations, comments, or code fences.
-                Do not include node ids, edge ids, positions, width, height, handles, or any other
-                React Flow or UI presentation field. Only semantic recipe/process data.
-
-                """ + buildSchemaAndRulesBlock(outputSchema);
-    }
-
-    public String buildSystemPrompt() {
-        return systemPrompt;
-    }
-
-    public String buildInitialPrompt(String recipeText) {
-        return "RECIPE:\n"
-                + recipeText
-                + "\n\nReturn the JSON process structure only.";
-    }
-
-    public String buildRetryPrompt(String recipeText, String previousOutput, List<String> validationErrors) {
-        return "RECIPE:\n"
-                + recipeText
-                + "\n\nYOUR PREVIOUS OUTPUT:\n"
-                + (previousOutput == null || previousOutput.isBlank() ? "(empty)" : previousOutput)
-                + "\n\nVALIDATION ERRORS IN THAT OUTPUT:\n"
-                + String.join("; ", validationErrors)
-                + "\n\nFix only these errors and return the complete corrected JSON only.";
-    }
-
-    private String buildSchemaAndRulesBlock(RecipeProcessOutputSchema outputSchema) {
-        return outputSchema.promptBlock() + """
-
-                PROCESS MODEL
-                - A recipe has exactly one MAIN process and zero or more SUBPROCESSes.
-                - Each process (MAIN or a subprocess) is a flat, ordered list of STEP/CONDITION nodes — never nested.
-                - Do not create a subprocess inside another subprocess. Only MAIN and top-level subprocesses exist.
-                - Create a subprocess only for a meaningful intermediate preparation that stands on its own
-                  (e.g. "Marinate Chicken", "Prepare Sauce"). Do not decompose the recipe into many tiny subprocesses.
-                - Omit "subprocesses" when the recipe has no meaningful separate preparation stage.
-                - A subprocess is referenced from a STEP's own "processes" list — NEVER as its own node. There is
-                  no node type for "run this subprocess"; the step whose action uses the subprocess's result
-                  references it there instead.
-                - "ref" is a short, unique, lowercase snake_case slug (e.g. "marinate_chicken") used only to let a
-                  STEP's "processes" point at that subprocess within this same response. It is not a
-                  database id and the MAIN process itself has no ref (nothing can reference MAIN).
-
-                STEPS ARE ORDERED
-                - Each process's "steps" array is already in execution order — the application connects
-                  consecutive steps automatically. Do not include edges, connections, or ordering fields.
-                - Create a separate step for each meaningful cooking action; split multiple actions in one
-                  sentence into separate steps; do not split one atomic action into multiple steps.
-
-                NODE TYPES
-                - STEP: a concrete cooking action.
-                - CONDITION: a decision/check/repetition (if, otherwise, until, unless, check, verify, repeat until).
-                  Do not create a condition for an ordinary cooking instruction that isn't actually a check.
-
-                CONDITION BRANCHES
-                - The application wires every CONDITION the same way: "Yes" continues to the NEXT node in
-                  "steps"; "No" goes back to the STEP immediately BEFORE the condition, which is repeated until
-                  the check passes. You do not output branches — only phrase and place the condition so this is right.
-                - Place a CONDITION immediately AFTER the STEP whose result it checks, never as the first node of
-                  a process, and never directly after another CONDITION.
-                - Phrase "title" as a yes/no question whose "Yes" means the step is done and cooking moves on, and
-                  whose "No" means that previous step must continue/repeat (e.g. after "Fry the onions":
-                  "Are the onions golden brown?" — not "Are the onions still pale?").
-                - Since "Yes" is always the hoped-for answer, omit expectedResult (it defaults to success).
-
+    private static final String STEP_AUTHORING_RULES = """
                 CHOOSING THE ACTION
                 - action must be an id from ACTIONS below. Use the most specific action that fits
                   (e.g. "saute", "simmer", "deep-fry" rather than "cook"; "mince" rather than "cut").
@@ -197,7 +120,98 @@ public class RecipeProcessGenerationPromptBuilder {
                 - repeatInterval is how often the action repeats during the step (e.g. "stir every 2 minutes" ->
                   action "stir", repeatInterval "2 minutes").
 
+                """;
+
+    private final String vocabularyBlock;
+
+    /**
+     * Everything that is identical for every request (instructions, schema, rules, vocabulary). It is sent as
+     * the system prompt and never varies, so providers with prefix caching (Ollama's KV cache, Gemini/OpenAI
+     * implicit caching) only have to process it once — each request then only adds the recipe itself.
+     */
+    private final String systemPrompt;
+
+    public RecipeProcessGenerationPromptBuilder(
+            RecipeStepVocabularyProvider recipeStepVocabularyProvider, RecipeProcessOutputSchema outputSchema
+    ) {
+        this.vocabularyBlock = buildVocabularyBlock(recipeStepVocabularyProvider);
+        this.systemPrompt = """
+                Convert recipe text into a semantic recipe process structure.
+
+                Return ONLY valid JSON.
+                Do not return markdown, explanations, comments, or code fences.
+                Do not include node ids, edge ids, positions, width, height, handles, or any other
+                React Flow or UI presentation field. Only semantic recipe/process data.
+
+                """ + buildSchemaAndRulesBlock(outputSchema);
+    }
+
+    public String buildSystemPrompt() {
+        return systemPrompt;
+    }
+
+    /** The STEP field rules followed by the VOCABULARY section — the part of the system prompt the edit flow reuses. */
+    String stepAuthoringRulesAndVocabulary() {
+        return STEP_AUTHORING_RULES + vocabularyBlock;
+    }
+
+    public String buildInitialPrompt(String recipeText) {
+        return "RECIPE:\n"
+                + recipeText
+                + "\n\nReturn the JSON process structure only.";
+    }
+
+    public String buildRetryPrompt(String recipeText, String previousOutput, List<String> validationErrors) {
+        return "RECIPE:\n"
+                + recipeText
+                + "\n\nYOUR PREVIOUS OUTPUT:\n"
+                + (previousOutput == null || previousOutput.isBlank() ? "(empty)" : previousOutput)
+                + "\n\nVALIDATION ERRORS IN THAT OUTPUT:\n"
+                + String.join("; ", validationErrors)
+                + "\n\nFix only these errors and return the complete corrected JSON only.";
+    }
+
+    private String buildSchemaAndRulesBlock(RecipeProcessOutputSchema outputSchema) {
+        return outputSchema.promptBlock() + """
+
+                PROCESS MODEL
+                - A recipe has exactly one MAIN process and zero or more SUBPROCESSes.
+                - Each process (MAIN or a subprocess) is a flat, ordered list of STEP/CONDITION nodes — never nested.
+                - Do not create a subprocess inside another subprocess. Only MAIN and top-level subprocesses exist.
+                - Create a subprocess only for a meaningful intermediate preparation that stands on its own
+                  (e.g. "Marinate Chicken", "Prepare Sauce"). Do not decompose the recipe into many tiny subprocesses.
+                - Omit "subprocesses" when the recipe has no meaningful separate preparation stage.
+                - A subprocess is referenced from a STEP's own "processes" list — NEVER as its own node. There is
+                  no node type for "run this subprocess"; the step whose action uses the subprocess's result
+                  references it there instead.
+                - "ref" is a short, unique, lowercase snake_case slug (e.g. "marinate_chicken") used only to let a
+                  STEP's "processes" point at that subprocess within this same response. It is not a
+                  database id and the MAIN process itself has no ref (nothing can reference MAIN).
+
+                STEPS ARE ORDERED
+                - Each process's "steps" array is already in execution order — the application connects
+                  consecutive steps automatically. Do not include edges, connections, or ordering fields.
+                - Create a separate step for each meaningful cooking action; split multiple actions in one
+                  sentence into separate steps; do not split one atomic action into multiple steps.
+
+                NODE TYPES
+                - STEP: a concrete cooking action.
+                - CONDITION: a decision/check/repetition (if, otherwise, until, unless, check, verify, repeat until).
+                  Do not create a condition for an ordinary cooking instruction that isn't actually a check.
+
+                CONDITION BRANCHES
+                - The application wires every CONDITION the same way: "Yes" continues to the NEXT node in
+                  "steps"; "No" goes back to the STEP immediately BEFORE the condition, which is repeated until
+                  the check passes. You do not output branches — only phrase and place the condition so this is right.
+                - Place a CONDITION immediately AFTER the STEP whose result it checks, never as the first node of
+                  a process, and never directly after another CONDITION.
+                - Phrase "title" as a yes/no question whose "Yes" means the step is done and cooking moves on, and
+                  whose "No" means that previous step must continue/repeat (e.g. after "Fry the onions":
+                  "Are the onions golden brown?" — not "Are the onions still pale?").
+                - Since "Yes" is always the hoped-for answer, omit expectedResult (it defaults to success).
+
                 """
+                + STEP_AUTHORING_RULES
                 + vocabularyBlock
                 + """
 

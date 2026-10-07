@@ -1,11 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.processVisualisation.virtualKitchen.ai.dispatch.AiClientResolver;
-import com.processVisualisation.virtualKitchen.ai.dto.AIResponseRecordDTO;
 import com.processVisualisation.virtualKitchen.ai.model.RecipeProcessGenerationStage;
 import com.processVisualisation.virtualKitchen.ai.queue.AiRequestOutcome;
 import com.processVisualisation.virtualKitchen.ai.queue.AiRequestQueueService;
@@ -14,6 +9,7 @@ import com.processVisualisation.virtualKitchen.ai.routing.FallbackReason;
 import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionOutcome;
 import com.processVisualisation.virtualKitchen.common.exception.RecipeProcessAiException;
 import com.processVisualisation.virtualKitchen.recipe.dto.GeneratedRecipeProcessDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessGenerationMode;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeProcessGenerationResultDTO;
 import com.processVisualisation.virtualKitchen.recipe.validation.ProcessValidationResult;
 import com.processVisualisation.virtualKitchen.restclient.client.AIClient;
@@ -24,9 +20,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -47,19 +41,16 @@ public class RecipeProcessGenerationService {
     private final AiClientResolver clientResolver;
     private final RecipeProcessGenerationPromptBuilder promptBuilder;
     private final RecipeProcessGenerationValidator validator;
-    private final IAIResponseService aiResponseService;
+    private final AiJsonResponseSupport responseSupport;
     private final RecipeProcessOutputSchema outputSchema;
     private final RecipeProcessOutputNormalizer outputNormalizer;
-    /** Lenient on unknown keys: a harmless extra field must not cost a full regeneration retry. */
-    private final ObjectMapper objectMapper = new ObjectMapper()
-            .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
     public RecipeProcessGenerationService(
             AiRequestQueueService queueService,
             AiClientResolver clientResolver,
             RecipeProcessGenerationPromptBuilder promptBuilder,
             RecipeProcessGenerationValidator validator,
-            IAIResponseService aiResponseService,
+            AiJsonResponseSupport responseSupport,
             RecipeProcessOutputSchema outputSchema,
             RecipeProcessOutputNormalizer outputNormalizer
     ) {
@@ -67,7 +58,7 @@ public class RecipeProcessGenerationService {
         this.clientResolver = clientResolver;
         this.promptBuilder = promptBuilder;
         this.validator = validator;
-        this.aiResponseService = aiResponseService;
+        this.responseSupport = responseSupport;
         this.outputSchema = outputSchema;
         this.outputNormalizer = outputNormalizer;
     }
@@ -97,6 +88,7 @@ public class RecipeProcessGenerationService {
         );
 
         RecipeProcessGenerationResultDTO result = outcome.value();
+        result.setMode(ProcessGenerationMode.CREATE);
         ModelSelectionOutcome selection = outcome.selection();
         result.setModelUsed(selection.model().getKey());
         result.setModelTier(selection.model().getTier().name());
@@ -157,18 +149,18 @@ public class RecipeProcessGenerationService {
 
         if (!StringUtils.hasText(content)) {
             List<String> errors = List.of("AI response content is empty");
-            persistAIResponse(userPrompt, response, false, durationMs, errors);
+            responseSupport.persistAIResponse("process-generation", userPrompt, response, false, durationMs, errors);
             return AttemptResult.invalid(content, errors);
         }
 
         try {
-            RecipeProcessOutput output = objectMapper.treeToValue(parseJson(content), RecipeProcessOutput.class);
+            RecipeProcessOutput output = responseSupport.readValue(content, RecipeProcessOutput.class);
             GeneratedRecipeProcessDTO mainProcess = outputNormalizer.toProcess(output.mainProcess());
             List<GeneratedRecipeProcessDTO> subprocesses = outputNormalizer.toSubprocesses(output.subprocesses());
 
             ProcessValidationResult validationResult = validator.validate(mainProcess, subprocesses);
             if (!validationResult.isValid()) {
-                persistAIResponse(userPrompt, response, false, durationMs, validationResult.getErrors());
+                responseSupport.persistAIResponse("process-generation", userPrompt, response, false, durationMs, validationResult.getErrors());
                 return AttemptResult.invalid(content, validationResult.getErrors());
             }
 
@@ -176,11 +168,11 @@ public class RecipeProcessGenerationService {
                     .mainProcess(mainProcess)
                     .subprocesses(subprocesses)
                     .build();
-            persistAIResponse(userPrompt, response, true, durationMs, List.of());
+            responseSupport.persistAIResponse("process-generation", userPrompt, response, true, durationMs, List.of());
             return AttemptResult.valid(content, generated);
         } catch (Exception ex) {
             List<String> errors = List.of("Invalid JSON format: " + ex.getMessage());
-            persistAIResponse(userPrompt, response, false, durationMs, errors);
+            responseSupport.persistAIResponse("process-generation", userPrompt, response, false, durationMs, errors);
             return AttemptResult.invalid(content, errors);
         }
     }
@@ -196,55 +188,6 @@ public class RecipeProcessGenerationService {
                 attempt, willRetry, RecipeProcessGenerationPromptBuilder.PROMPT_VERSION, errors.size());
         // The messages can quote fragments of the model output, so they stay at DEBUG.
         logger.debug("event=process_validation_errors attempt={} errors={}", attempt, errors);
-    }
-
-    private void persistAIResponse(String userPrompt, AIResponse response, boolean success, long durationMs, List<String> errors) {
-        try {
-            AIResponseRecordDTO record = new AIResponseRecordDTO();
-            record.setContext("process-generation");
-            record.setInput(userPrompt);
-            record.setSuccess(success);
-
-            Map<String, Object> respData = new LinkedHashMap<>();
-            respData.put("content", response == null ? null : response.getContent());
-            respData.put("model", response == null ? null : response.getModel());
-            respData.put("promptTokens", response == null ? null : response.getPromptTokens());
-            respData.put("completionTokens", response == null ? null : response.getCompletionTokens());
-            respData.put("totalTokens", response == null ? null : response.getTotalTokens());
-            respData.put("cachedTokens", response == null ? null : response.getCachedTokens());
-            respData.put("thoughtsTokens", response == null ? null : response.getThoughtsTokens());
-            respData.put("finishReason", response == null ? null : response.getFinishReason());
-            respData.put("rawResponse", response == null ? null : response.getRawResponse());
-            respData.put("durationMs", durationMs);
-            if (errors != null && !errors.isEmpty()) respData.put("errors", errors);
-
-            record.setResponseData(respData);
-            aiResponseService.save(record);
-        } catch (Exception ex) {
-            // Best-effort analytics record; the generation itself is unaffected.
-            logger.warn("event=ai_response_persist_failed context=process-generation errorType={}",
-                    ex.getClass().getSimpleName(), ex);
-        }
-    }
-
-    private JsonNode parseJson(String content) throws JsonProcessingException {
-        try {
-            return objectMapper.readTree(content);
-        } catch (JsonProcessingException firstEx) {
-            return objectMapper.readTree(stripCodeFences(content));
-        }
-    }
-
-    private String stripCodeFences(String content) {
-        String trimmed = content.trim();
-        if (trimmed.startsWith("```")) {
-            int firstNewLine = trimmed.indexOf('\n');
-            int lastFence = trimmed.lastIndexOf("```");
-            if (firstNewLine >= 0 && lastFence > firstNewLine) {
-                return trimmed.substring(firstNewLine + 1, lastFence).trim();
-            }
-        }
-        return content;
     }
 
     private record AttemptResult(boolean valid, String rawContent, RecipeProcessGenerationResultDTO result, List<String> errors) {

@@ -2,6 +2,8 @@ import { useState } from 'react'
 import '../../styles/recipe-tool.css'
 import type { Process } from '../../../../types/process'
 import { isPendingProcessId } from '../../context/RecipeSessionContext'
+import { useDraft } from '../../../../shared/drafts/useDraft'
+import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
 
 type RecipeProcessSidebarProps = {
   processes: Process[]
@@ -11,10 +13,16 @@ type RecipeProcessSidebarProps = {
   onCreateMainProcess: () => void
   creatingMainProcess: boolean
   onCreateSubprocess: (name: string, description: string) => Promise<void>
-  /** Opens the "Generate with AI" modal — omitted (button hidden) for a non-owner. */
+  /** Opens AI Recipe Creation — omitted (button hidden) for a non-owner. */
   onOpenGenerate?: () => void
   /** Set while an AI generation runs for this recipe — the AI button then shows its progress and reopens the modal. */
   generationProgress?: { percent: number; stageLabel: string } | null
+  /** AI Recipe Creation's state while it needs showing (running, waiting for approval, needs attention). */
+  aiStatus?: { badge: string; title: string } | null
+  /** Opens "Edit with AI" for the open process — omitted (button hidden) when there is nothing to edit. */
+  onOpenEdit?: () => void
+  /** Where the new-subprocess form keeps its draft (see shared/drafts). */
+  newSubprocessDraftKey?: string
 }
 
 /**
@@ -36,10 +44,17 @@ export default function RecipeProcessSidebar({
   onCreateSubprocess,
   onOpenGenerate,
   generationProgress,
+  aiStatus,
+  onOpenEdit,
+  newSubprocessDraftKey,
 }: RecipeProcessSidebarProps) {
-  const [showCreateForm, setShowCreateForm] = useState(false)
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
+  // The new-subprocess form keeps what was typed until the subprocess is created (closing the form
+  // or leaving the recipe doesn't lose it); a form with an unfinished draft opens again by itself.
+  const draft = useDraft(newSubprocessDraftKey ?? null, { name: '', description: '' })
+  const { name, description } = draft.value
+  const setName = (value: string) => draft.setValue((current) => ({ ...current, name: value }))
+  const setDescription = (value: string) => draft.setValue((current) => ({ ...current, description: value }))
+  const [showCreateForm, setShowCreateForm] = useState(() => draft.restored)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
@@ -55,8 +70,7 @@ export default function RecipeProcessSidebar({
     setCreateError(null)
     try {
       await onCreateSubprocess(name.trim(), description.trim())
-      setName('')
-      setDescription('')
+      draft.clear()
       setShowCreateForm(false)
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : 'Unable to create this subprocess')
@@ -117,10 +131,20 @@ export default function RecipeProcessSidebar({
               <button
                 type="button"
                 onClick={onOpenGenerate}
-                title={generationProgress ? `Generating with AI — ${generationProgress.stageLabel}` : 'Generate with AI'}
+                title={aiStatus?.title ?? (generationProgress ? `Generating with AI — ${generationProgress.stageLabel}` : 'AI Recipe Creation')}
                 style={{ padding: '4px 9px', borderRadius: 7, border: '1px solid var(--flow-magic-border)', background: 'var(--flow-magic-soft)', color: 'var(--flow-magic)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
               >
-                {generationProgress ? `✨ ${generationProgress.percent}%` : '✨ AI'}
+                {aiStatus?.badge ?? (generationProgress ? `✨ ${generationProgress.percent}%` : '✨ AI')}
+              </button>
+            )}
+            {onOpenEdit && (
+              <button
+                type="button"
+                onClick={onOpenEdit}
+                title="Edit the open process with AI"
+                style={{ padding: '4px 9px', borderRadius: 7, border: '1px solid var(--flow-magic-border)', background: 'var(--flow-surface)', color: 'var(--flow-magic)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+              >
+                ✏️ Edit
               </button>
             )}
             <button
@@ -136,6 +160,7 @@ export default function RecipeProcessSidebar({
 
       {isOwner && showCreateForm && (
         <div className="flex flex-shrink-0 flex-col gap-2 border-b border-[var(--flow-border)] p-3">
+          {draft.restored && (name.trim() || description.trim()) && <DraftRestoredNote onDiscard={draft.clear} />}
           <input
             className="flow-properties-input"
             value={name}

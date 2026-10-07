@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { NutritionInfo } from '../../../../types/recipe'
 import NutritionEditor from '../../components/NutritionEditor'
+import { draftKeys, readDraft } from '../../../../shared/drafts/draftStore'
 
 type RecipeNutritionPanelProps = {
   recipeId: number
@@ -34,7 +35,8 @@ const formatNumber = (value: number) => (Number.isInteger(value) ? String(value)
  * never zeros or placeholders for missing ones. The owner edits it in place.
  */
 export default function RecipeNutritionPanel({ recipeId, nutrition, isOwner, onSaved }: RecipeNutritionPanelProps) {
-  const [editing, setEditing] = useState(false)
+  // Unsaved nutrition edits from an earlier visit reopen the editor, so they're seen, not forgotten.
+  const [editing, setEditing] = useState(() => isOwner && readDraft(draftKeys.nutrition(recipeId)) != null)
 
   const present = NUTRIENTS.filter(({ key }) => nutrition?.[key] != null)
   const macros = MACROS

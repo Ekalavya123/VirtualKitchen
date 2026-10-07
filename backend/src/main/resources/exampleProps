@@ -159,3 +159,12 @@ ai.narration.storage.supabase.path-prefix=narrations
 # --- Logging ---
 # HTTP requests at least this slow are also written to application.log (all requests go to logs/access.log).
 app.logging.slow-request-ms=${SLOW_REQUEST_MS:3000}
+
+# --- AI Recipe Creation (RecipeAiWorkflow) ---
+# Relative weight of each task in the overall progress percentage (normalised over the selected tasks).
+app.ai-workflow.weights.process=2
+app.ai-workflow.weights.visuals=5
+app.ai-workflow.weights.narration=3
+# Step range assumed by the credit estimate before the recipe process has been generated.
+app.ai-workflow.estimate.min-steps=6
+app.ai-workflow.estimate.max-steps=20
