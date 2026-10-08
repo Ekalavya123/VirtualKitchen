@@ -16,7 +16,14 @@ export const createWorkflowTaskSelection = (selectAll = true): WorkflowTaskSelec
   NARRATION: selectAll,
 })
 
-export const isCompleteExperience = (selection: WorkflowTaskSelection) =>
+/** A selection with exactly `tasks` ticked — how the editor's AI menu opens AI Recipe Creation pre-set. */
+export const workflowTaskSelectionFrom = (tasks: readonly RecipeAiTaskType[]): WorkflowTaskSelection => ({
+  PROCESS: tasks.includes('PROCESS'),
+  VISUALS: tasks.includes('VISUALS'),
+  NARRATION: tasks.includes('NARRATION'),
+})
+
+export const isCompleteExperience =(selection: WorkflowTaskSelection) =>
   WORKFLOW_TASK_ORDER.every((task) => selection[task])
 
 export const toggleWorkflowTask = (selection: WorkflowTaskSelection, task: RecipeAiTaskType): WorkflowTaskSelection => ({

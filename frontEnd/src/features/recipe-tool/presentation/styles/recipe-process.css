@@ -410,6 +410,72 @@
 
 /* ---------- step timeline ---------- */
 
+.rp-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* Stage overview: one chip per stage, jumping to (and opening) it. */
+.rp-stage-overview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--flow-radius-lg);
+  background: var(--flow-surface-muted);
+  border: 1px solid var(--flow-border);
+}
+
+.rp-stage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--flow-border);
+  background: var(--flow-surface);
+  color: var(--flow-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.rp-stage-chip:hover,
+.rp-stage-chip:focus-visible {
+  border-color: var(--rp-accent);
+  outline: none;
+}
+
+.rp-stage-chip-number {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--rp-accent-soft);
+  color: var(--rp-accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.rp-stage-chip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rp-stage-chip-count {
+  flex-shrink: 0;
+  color: var(--flow-text-muted);
+  font-weight: 600;
+}
+
 .rp-part {
   display: flex;
   flex-direction: column;
@@ -417,14 +483,30 @@
   scroll-margin-top: 16px;
 }
 
-.rp-part + .rp-part {
-  margin-top: 20px;
+.rp-part-heading {
+  margin: 0;
 }
 
+/* The stage header is its own collapse toggle. */
 .rp-part-header {
   display: flex;
   align-items: center;
   gap: 14px;
+  width: 100%;
+  padding: 6px 0 10px;
+  border: none;
+  border-bottom: 1px solid var(--flow-border);
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rp-part-header:focus-visible {
+  outline: 2px solid var(--rp-accent);
+  outline-offset: 4px;
+  border-radius: 6px;
 }
 
 .rp-part-label {
@@ -440,18 +522,43 @@
   text-transform: uppercase;
 }
 
+.rp-part-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
 .rp-part-title {
-  margin: 0;
   font-family: var(--rp-serif);
   font-size: 21px;
   font-weight: 700;
   color: var(--flow-text);
 }
 
-.rp-part-rule {
-  flex: 1;
-  height: 1px;
-  background: var(--flow-border);
+.rp-part-summary {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--flow-text-muted);
+}
+
+.rp-part-count {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--flow-text-muted);
+}
+
+.rp-part-chevron {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--flow-text-muted);
+  transition: transform 0.2s ease;
+}
+
+.rp-part.is-collapsed .rp-part-chevron {
+  transform: rotate(-90deg);
 }
 
 .rp-timeline {
@@ -531,14 +638,15 @@
   box-shadow: 0 0 0 3px var(--rp-accent-border), var(--rp-card-shadow-hover);
 }
 
+/* The instruction leads; an image sits beside it as a modest thumbnail, never the other way round. */
 .rp-step-card.has-image {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  grid-template-columns: minmax(0, 1fr) clamp(160px, 26%, 240px);
 }
 
 .rp-step-media {
   position: relative;
-  min-height: 220px;
+  min-height: 160px;
   overflow: hidden;
   background: var(--flow-surface-muted);
 }
@@ -556,46 +664,69 @@
 .rp-step-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 22px 24px;
+  gap: 12px;
+  padding: 20px 24px;
   min-width: 0;
 }
 
+/* The step's short heading ("Marinate chicken"); its sentence below says the whole thing. */
 .rp-step-heading {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.rp-step-icon {
-  flex-shrink: 0;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 26px;
-  background: var(--rp-accent-soft);
-  border: 1px solid var(--rp-accent-border);
-}
-
-.rp-step-title {
   margin: 0;
-  font-size: 20px;
-  line-height: 1.25;
+  display: flex;
+  align-items: center;
+  font-size: 19px;
+  line-height: 1.3;
   font-weight: 800;
   letter-spacing: -0.01em;
   color: var(--flow-text);
   overflow-wrap: anywhere;
 }
 
-.rp-step-description {
+.rp-step-instruction {
   margin: 0;
-  font-size: 15.5px;
+  max-width: 68ch;
+  font-size: 16px;
   line-height: 1.65;
+  font-weight: 500;
   color: var(--flow-text);
-  opacity: 0.88;
+  overflow-wrap: anywhere;
+}
+
+.rp-step-inline-icon {
+  margin-right: 8px;
+}
+
+/* Amounts stand out inside the sentence, so they can be found at a glance. */
+.rp-amount {
+  color: var(--rp-accent-strong);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+/* An earlier result ("the marinated chicken") links back to where it was made. */
+.rp-product-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline dotted var(--rp-accent);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.rp-product-link:hover,
+.rp-product-link:focus-visible {
+  color: var(--rp-accent-strong);
+  outline: none;
+}
+
+.rp-step-explanation {
+  margin: 0;
+  max-width: 68ch;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--flow-text-muted);
 }
 
 .rp-chip-row {
@@ -705,6 +836,17 @@ button.rp-continuation {
 
 button.rp-continuation:hover {
   text-decoration: underline;
+}
+
+.rp-continuation-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
 }
 
 /* ---------- checks ---------- */
@@ -955,6 +1097,7 @@ button.rp-continuation:hover {
     aspect-ratio: 16 / 9;
   }
 
+  /* Narrow: the image follows the instruction, full width. */
   .rp-step-card.has-image {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1001,15 +1144,35 @@ button.rp-continuation:hover {
     padding: 16px;
   }
 
-  .rp-step-icon {
-    width: 44px;
-    height: 44px;
-    font-size: 22px;
-    border-radius: 13px;
+  .rp-step-heading {
+    font-size: 17px;
   }
 
-  .rp-step-title,
+  .rp-step-instruction {
+    font-size: 15.5px;
+  }
+
   .rp-check-question {
+    font-size: 18px;
+  }
+
+  /* Stages: one swipeable row of chips; the header keeps title and count, the summary wraps below. */
+  .rp-stage-overview {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .rp-stage-chip {
+    flex-shrink: 0;
+  }
+
+  .rp-part-header {
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .rp-part-title {
     font-size: 18px;
   }
 

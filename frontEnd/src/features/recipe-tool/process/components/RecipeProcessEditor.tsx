@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import RecipeProcessCanvas from './RecipeProcessCanvas'
+import type { RecipeAiActions } from './AiActionsMenu'
 import '../../styles/recipe-tool.css'
 import type { RecipeProcessBreadcrumbEntry } from '../../../../types/recipe'
 
@@ -11,7 +12,9 @@ interface RecipeProcessEditorProps {
   onNavigateToAncestor: (index: number) => void
   onOpenSubprocess: (subprocessId: number, currentProcessName: string) => void
   onBack?: () => void
-  /** Passed straight through to RecipeProcessCanvas — see its own doc comment. */
+  /** Passed straight through to RecipeProcessCanvas — see its own doc comments. */
+  recipeName?: string
+  aiActions?: RecipeAiActions
   sidebarHeader?: ReactNode
   onSelectedNodeChange?: (nodeId: string | null) => void
   highlightedNodeIds?: ReadonlySet<string>
@@ -30,6 +33,8 @@ export default function RecipeProcessEditor({
   onNavigateToAncestor,
   onOpenSubprocess,
   onBack,
+  recipeName,
+  aiActions,
   sidebarHeader,
   onSelectedNodeChange,
   highlightedNodeIds,
@@ -44,6 +49,8 @@ export default function RecipeProcessEditor({
         onNavigateToAncestor={onNavigateToAncestor}
         onOpenSubprocess={onOpenSubprocess}
         onBack={onBack}
+        recipeName={recipeName}
+        aiActions={aiActions}
         sidebarHeader={sidebarHeader}
         onSelectedNodeChange={onSelectedNodeChange}
         highlightedNodeIds={highlightedNodeIds}

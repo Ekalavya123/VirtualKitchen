@@ -8,6 +8,7 @@ import {
   toggleWorkflowTask,
   toTaskSelectionRequest,
   workflowSelectionProblem,
+  workflowTaskSelectionFrom,
 } from '../src/features/recipe-tool/workflow/model/workflowSelection.ts'
 
 describe('AI Recipe Creation task selection', () => {
@@ -34,6 +35,13 @@ describe('AI Recipe Creation task selection', () => {
     assert.deepEqual(selectedWorkflowTasks(only('NARRATION')), ['NARRATION'])
     assert.deepEqual(selectedWorkflowTasks(only('NARRATION', 'PROCESS')), ['PROCESS', 'NARRATION'], 'always in dependency order')
     assert.deepEqual(selectedWorkflowTasks(only('VISUALS', 'PROCESS')), ['PROCESS', 'VISUALS'])
+  })
+
+  it('builds a selection of exactly the given tasks (the editor AI menu presets)', () => {
+    assert.deepEqual(selectedWorkflowTasks(workflowTaskSelectionFrom(['NARRATION'])), ['NARRATION'])
+    assert.deepEqual(selectedWorkflowTasks(workflowTaskSelectionFrom(['PROCESS'])), ['PROCESS'])
+    assert.equal(isCompleteExperience(workflowTaskSelectionFrom(['NARRATION', 'PROCESS', 'VISUALS'])), true)
+    assert.deepEqual(selectedWorkflowTasks(workflowTaskSelectionFrom([])), [])
   })
 
   it('treats complete recipe experience as select-all / clear-all, never as an extra task', () => {

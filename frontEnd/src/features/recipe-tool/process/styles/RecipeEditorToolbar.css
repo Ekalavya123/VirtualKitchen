@@ -1,0 +1,575 @@
+/* Recipe Process Editor chrome: the top bar (RecipeProcessTopBar), its breadcrumb and node
+   selector, the shared popover menus (ToolbarMenu: "+ Add", "✨ AI") and the process sidebar's
+   footer. Display values that collapse at narrow widths are left to Tailwind's container-query
+   utilities on the elements themselves (`hidden @4xl:flex`), so nothing here sets `display` on them. */
+
+/* --- top bar ------------------------------------------------------------------------------- */
+
+.recipe-topbar {
+  flex-shrink: 0;
+  height: 3.5rem;
+  border-bottom: 1px solid var(--flow-border);
+  background: var(--flow-surface);
+}
+
+.recipe-topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 100%;
+  padding: 0 12px 0 14px;
+  min-width: 0;
+}
+
+.recipe-topbar-context {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.recipe-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.recipe-topbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.recipe-topbar-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--flow-border);
+  flex-shrink: 0;
+}
+
+/* Quiet by default: only Save is filled. */
+.recipe-topbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--flow-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.recipe-topbar-button:hover:not(:disabled) {
+  background: var(--flow-surface-muted);
+  border-color: var(--flow-border);
+  color: var(--flow-text);
+}
+
+.recipe-topbar-button:focus-visible,
+.recipe-toolbar-menu-item:focus-visible,
+.recipe-breadcrumb-crumb:focus-visible,
+.recipe-node-selector select:focus-visible,
+.recipe-topbar-zoom button:focus-visible,
+.recipe-sidebar-add:focus-visible {
+  outline: 2px solid var(--flow-accent);
+  outline-offset: 1px;
+}
+
+.recipe-topbar-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.recipe-topbar-button.is-danger {
+  color: var(--flow-danger);
+}
+
+.recipe-topbar-button.is-danger:hover:not(:disabled) {
+  background: var(--flow-danger-soft);
+  border-color: var(--flow-danger-border);
+  color: var(--flow-danger);
+}
+
+.recipe-topbar-button.is-ai {
+  border-color: var(--flow-magic-border);
+  background: var(--flow-magic-soft);
+  color: var(--flow-magic);
+}
+
+.recipe-topbar-button.is-ai:hover:not(:disabled) {
+  border-color: var(--flow-magic);
+  background: var(--flow-magic-soft);
+  color: var(--flow-magic);
+}
+
+.recipe-topbar-button.is-ai.is-busy {
+  animation: recipe-topbar-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes recipe-topbar-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 0 3px var(--flow-magic-border); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recipe-topbar-button.is-ai.is-busy { animation: none; }
+}
+
+.recipe-topbar-ai-credits {
+  padding-left: 6px;
+  border-left: 1px solid var(--flow-magic-border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--flow-text-muted);
+}
+
+.recipe-topbar-ai-credits.is-low {
+  color: var(--flow-warning);
+}
+
+.recipe-topbar-caret {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.recipe-topbar-button.is-primary {
+  padding: 0 14px;
+  border-color: var(--flow-accent);
+  background: var(--flow-accent);
+  color: white;
+}
+
+.recipe-topbar-button.is-primary:hover:not(:disabled) {
+  border-color: var(--flow-accent-strong);
+  background: var(--flow-accent-strong);
+  color: white;
+}
+
+.recipe-topbar-button.is-primary:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.recipe-topbar-zoom {
+  align-items: center;
+  height: 32px;
+  padding: 0 2px;
+  border-radius: 8px;
+  border: 1px solid var(--flow-border);
+}
+
+.recipe-topbar-zoom button {
+  height: 26px;
+  padding: 0 7px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--flow-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.recipe-topbar-zoom button:hover {
+  background: var(--flow-surface-muted);
+  color: var(--flow-text);
+}
+
+.recipe-topbar-zoom span {
+  min-width: 38px;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--flow-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.recipe-topbar-status {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.recipe-topbar-save {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* The save status lives in a fixed-width slot, so switching between Unsaved changes / Saving… /
+   Saved never moves the rest of the bar. Longer messages are cut with an ellipsis (the chip's
+   tooltip has the full text; !important because the chip carries its own inline max-width). Only a
+   conflict, which needs its two buttons, grows beyond the slot. */
+.recipe-topbar-save-status {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  width: 8rem;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.recipe-topbar-save-status.is-conflict {
+  width: auto;
+  overflow: visible;
+}
+
+.recipe-topbar-save-status > [role='status'] {
+  display: block;
+  max-width: 100% !important;
+}
+
+@container (max-width: 56rem) {
+  .recipe-topbar-save-status { width: 6.5rem; }
+}
+
+/* "Save" and "Saving…" share one width, for the same reason. */
+.recipe-topbar-save .recipe-topbar-button.is-primary {
+  justify-content: center;
+  min-width: 4.75rem;
+}
+
+/* --- breadcrumb + node selector ------------------------------------------------------------ */
+
+.recipe-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12.5px;
+}
+
+.recipe-breadcrumb-segment {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.recipe-breadcrumb-separator {
+  color: var(--flow-text-subtle);
+  font-weight: 500;
+  flex-shrink: 0;
+  padding: 0 1px;
+}
+
+.recipe-breadcrumb-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 200px;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--flow-text-muted);
+  font-size: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.recipe-breadcrumb-crumb:hover {
+  background: var(--flow-surface-muted);
+  color: var(--flow-text);
+}
+
+.recipe-breadcrumb-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.recipe-breadcrumb-current {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 280px;
+  padding: 4px 2px;
+  color: var(--flow-text);
+  font-weight: 700;
+}
+
+.recipe-breadcrumb-type {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border: 1px solid var(--flow-accent-soft-border);
+  background: var(--flow-accent-soft);
+  color: var(--flow-accent-strong);
+}
+
+.recipe-breadcrumb-type.is-main {
+  border-color: var(--flow-success-border);
+  background: var(--flow-success-soft);
+  color: var(--flow-success-strong);
+}
+
+/* When space runs short the process name keeps its room longest: the recipe crumb and the node
+   selector give way first. */
+.recipe-breadcrumb-crumb.is-recipe { flex-shrink: 4; }
+.recipe-breadcrumb-segment.is-ancestor { flex-shrink: 3; }
+.recipe-breadcrumb-current { flex-shrink: 1; min-width: 5rem; }
+
+/* Below ~1150px the recipe crumb shows just its icon (the recipe's name is in the Recipe Tool's
+   navbar right above, and the crumb's tooltip); narrower still, ancestors step aside too — they
+   stay one click away in the sidebar. */
+@container (max-width: 72rem) {
+  .recipe-breadcrumb-crumb.is-recipe .recipe-breadcrumb-text { display: none; }
+}
+
+@container (max-width: 56rem) {
+  .recipe-breadcrumb-segment.is-ancestor { display: none; }
+  .recipe-breadcrumb-current { max-width: 160px; }
+}
+
+.recipe-node-selector {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 7rem;
+  flex-shrink: 2;
+}
+
+/* Reads as the trail's last segment (a context switch), not a form field. */
+.recipe-node-selector select {
+  appearance: none;
+  min-width: 0;
+  max-width: 230px;
+  height: 28px;
+  padding: 0 22px 0 8px;
+  border: 1px dashed var(--flow-border-strong);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--flow-text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.recipe-node-selector select.has-value {
+  border-style: solid;
+  border-color: var(--flow-accent-soft-border);
+  background: var(--flow-accent-soft);
+  color: var(--flow-accent-strong);
+}
+
+.recipe-node-selector select:hover:not(:disabled) {
+  border-color: var(--flow-accent);
+}
+
+.recipe-node-selector select:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.recipe-node-selector .recipe-topbar-caret {
+  position: absolute;
+  right: 8px;
+  pointer-events: none;
+  color: var(--flow-text-muted);
+}
+
+@container (max-width: 56rem) {
+  .recipe-node-selector select { max-width: 150px; }
+}
+
+/* --- popover menus (ToolbarMenu) ----------------------------------------------------------- */
+
+.recipe-toolbar-menu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--flow-border);
+  border-radius: 12px;
+  background: var(--flow-surface);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.16);
+  font-family: var(--flow-font);
+}
+
+.recipe-toolbar-menu-heading {
+  padding: 6px 8px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--flow-text-subtle);
+}
+
+.recipe-toolbar-menu-divider {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--flow-border);
+}
+
+.recipe-toolbar-menu-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--flow-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.recipe-toolbar-menu-item:hover:not(:disabled),
+.recipe-toolbar-menu-item:focus-visible {
+  background: var(--flow-accent-soft);
+}
+
+.recipe-toolbar-menu-item:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.recipe-toolbar-menu-icon {
+  width: 18px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--flow-text-muted);
+}
+
+.recipe-toolbar-menu-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.recipe-toolbar-menu-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.recipe-toolbar-menu-description {
+  font-size: 11px;
+  color: var(--flow-text-muted);
+}
+
+.recipe-toolbar-menu-trailing {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--flow-magic);
+}
+
+.recipe-toolbar-menu-status {
+  margin: 4px 8px 2px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.recipe-toolbar-menu-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 2px;
+  font-size: 11.5px;
+  color: var(--flow-text-muted);
+}
+
+.recipe-toolbar-menu-footer strong {
+  color: var(--flow-text);
+  font-weight: 700;
+}
+
+.recipe-toolbar-menu-footer.is-low strong {
+  color: var(--flow-warning);
+}
+
+/* --- process sidebar ---------------------------------------------------------------------- */
+
+.recipe-sidebar-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 34px;
+  border: 1px dashed var(--flow-accent-soft-border);
+  border-radius: 9px;
+  background: var(--flow-accent-soft);
+  color: var(--flow-accent-strong);
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.recipe-sidebar-add:hover {
+  border-style: solid;
+  border-color: var(--flow-accent);
+}
+
+.recipe-sidebar-rail-add {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto;
+  border: 1px dashed var(--flow-accent-soft-border);
+  border-radius: 8px;
+  background: var(--flow-accent-soft);
+  color: var(--flow-accent-strong);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* "+" on the sidebar's Subprocesses heading: a quick way to the new-subprocess form. */
+.recipe-sidebar-section-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--flow-border);
+  border-radius: 6px;
+  background: var(--flow-surface);
+  color: var(--flow-accent-strong);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.recipe-sidebar-section-add:hover {
+  border-color: var(--flow-accent);
+  background: var(--flow-accent-soft);
+}
+
+.recipe-sidebar-section-add:focus-visible {
+  outline: 2px solid var(--flow-accent);
+  outline-offset: 1px;
+}

@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import '../../styles/recipe-tool.css'
+import '../styles/RecipeEditorToolbar.css'
 import type { Process } from '../../../../types/process'
 import { isPendingProcessId } from '../../context/RecipeSessionContext'
 import { useDraft } from '../../../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
+import AddNodeMenu from './AddNodeMenu'
+import { useProcessSidebarActions } from '../context/ProcessSidebarActionsContext'
 
 type RecipeProcessSidebarProps = {
   processes: Process[]
@@ -13,26 +16,19 @@ type RecipeProcessSidebarProps = {
   onCreateMainProcess: () => void
   creatingMainProcess: boolean
   onCreateSubprocess: (name: string, description: string) => Promise<void>
-  /** Opens AI Recipe Creation — omitted (button hidden) for a non-owner. */
-  onOpenGenerate?: () => void
-  /** Set while an AI generation runs for this recipe — the AI button then shows its progress and reopens the modal. */
-  generationProgress?: { percent: number; stageLabel: string } | null
-  /** AI Recipe Creation's state while it needs showing (running, waiting for approval, needs attention). */
-  aiStatus?: { badge: string; title: string } | null
-  /** Opens "Edit with AI" for the open process — omitted (button hidden) when there is nothing to edit. */
-  onOpenEdit?: () => void
   /** Where the new-subprocess form keeps its draft (see shared/drafts). */
   newSubprocessDraftKey?: string
 }
 
+const sectionLabel = 'px-1 text-[0.68rem] font-bold uppercase tracking-wide'
+
 /**
- * Compact process list for the Recipe Tool's embedded "Recipe Editor" tab
- * (distinct from the standalone
- * RecipeProcessListPage, which is a full page). Selecting a process here just
- * updates local state in RecipeEditorView — it never navigates to a
- * different route, per the brief ("keep the user inside the Recipe Tool").
- * Subprocess creation reuses the existing ProcessApi (via the parent's
- * `onCreateSubprocess`), matching Phase 5's own creation flow.
+ * "Recipe Processes": the Recipe Editor's process navigator (MAIN pinned above SUBPROCESSes) with
+ * the editor's one "+ Add" menu (Step / Condition / Subprocess) at the top, and a "+" on the
+ * Subprocesses heading that opens the same new-subprocess form. Distinct from the
+ * standalone RecipeProcessListPage, which is a full page. Selecting a process here just updates
+ * local state in RecipeEditorView — it never navigates to a different route ("keep the user inside
+ * the Recipe Tool"). Subprocess creation reuses the existing ProcessApi (via `onCreateSubprocess`).
  */
 export default function RecipeProcessSidebar({
   processes,
@@ -42,12 +38,10 @@ export default function RecipeProcessSidebar({
   onCreateMainProcess,
   creatingMainProcess,
   onCreateSubprocess,
-  onOpenGenerate,
-  generationProgress,
-  aiStatus,
-  onOpenEdit,
   newSubprocessDraftKey,
 }: RecipeProcessSidebarProps) {
+  // Adding a step/condition and collapsing come from the canvas hosting this sidebar (none without one).
+  const { onAddStep, onAddCondition, onCollapse } = useProcessSidebarActions() ?? {}
   // The new-subprocess form keeps what was typed until the subprocess is created (closing the form
   // or leaving the recipe doesn't lose it); a form with an unfinished draft opens again by itself.
   const draft = useDraft(newSubprocessDraftKey ?? null, { name: '', description: '' })
@@ -57,6 +51,7 @@ export default function RecipeProcessSidebar({
   const [showCreateForm, setShowCreateForm] = useState(() => draft.restored)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const nameInputRef = useRef<HTMLInputElement | null>(null)
 
   const mainProcess = processes.find((process) => process.type === 'MAIN') ?? null
   const subprocesses = processes.filter((process) => process.type === 'SUBPROCESS')
@@ -79,6 +74,12 @@ export default function RecipeProcessSidebar({
     }
   }
 
+  // Opening the form from "+ Add → Subprocess" puts the cursor straight in its name field, once rendered.
+  const openCreateForm = () => {
+    setShowCreateForm(true)
+    requestAnimationFrame(() => nameInputRef.current?.focus())
+  }
+
   const renderCard = (process: Process) => {
     const selected = process.id === selectedProcessId
     const stepCount = process.nodes.filter((node) => node.kind === 'STEP').length
@@ -87,6 +88,7 @@ export default function RecipeProcessSidebar({
         key={process.id}
         type="button"
         onClick={() => onSelect(process.id)}
+        aria-current={selected ? 'true' : undefined}
         style={{
           width: '100%',
           textAlign: 'left',
@@ -123,48 +125,47 @@ export default function RecipeProcessSidebar({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex flex-shrink-0 items-center justify-between border-b border-[var(--flow-border)] px-3 py-3">
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--flow-text)' }}>Processes ({processes.length})</div>
-        {isOwner && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            {onOpenGenerate && (
-              <button
-                type="button"
-                onClick={onOpenGenerate}
-                title={aiStatus?.title ?? (generationProgress ? `Generating with AI — ${generationProgress.stageLabel}` : 'AI Recipe Creation')}
-                style={{ padding: '4px 9px', borderRadius: 7, border: '1px solid var(--flow-magic-border)', background: 'var(--flow-magic-soft)', color: 'var(--flow-magic)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-              >
-                {aiStatus?.badge ?? (generationProgress ? `✨ ${generationProgress.percent}%` : '✨ AI')}
-              </button>
-            )}
-            {onOpenEdit && (
-              <button
-                type="button"
-                onClick={onOpenEdit}
-                title="Edit the open process with AI"
-                style={{ padding: '4px 9px', borderRadius: 7, border: '1px solid var(--flow-magic-border)', background: 'var(--flow-surface)', color: 'var(--flow-magic)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-              >
-                ✏️ Edit
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setShowCreateForm((value) => !value)}
-              style={{ padding: '4px 9px', borderRadius: 7, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
-            >
-              {showCreateForm ? 'Cancel' : '+ Subprocess'}
-            </button>
-          </div>
+      <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b border-[var(--flow-border)] py-2.5 pr-2 pl-3.5">
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--flow-text)' }}>Recipe Processes</div>
+        {onCollapse && (
+          <button
+            type="button"
+            onClick={onCollapse}
+            aria-label="Collapse sidebar"
+            title="Collapse sidebar"
+            className="recipe-topbar-button"
+            style={{ height: 28, padding: '0 8px' }}
+          >
+            «
+          </button>
         )}
       </div>
 
+      {(onAddStep || onAddCondition || isOwner) && (
+        <div className="flex-shrink-0 border-b border-[var(--flow-border)] p-2.5">
+          <AddNodeMenu
+            onAddStep={onAddStep}
+            onAddCondition={onAddCondition}
+            onAddSubprocess={isOwner ? openCreateForm : undefined}
+            buttonClassName="recipe-sidebar-add"
+            placement="bottom-start"
+          />
+        </div>
+      )}
+
       {isOwner && showCreateForm && (
-        <div className="flex flex-shrink-0 flex-col gap-2 border-b border-[var(--flow-border)] p-3">
+        <div className="flex flex-shrink-0 flex-col gap-2 border-b border-[var(--flow-border)] p-3" role="group" aria-label="New subprocess">
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--flow-text)' }}>New subprocess</div>
           {draft.restored && (name.trim() || description.trim()) && <DraftRestoredNote onDiscard={draft.clear} />}
           <input
+            ref={nameInputRef}
             className="flow-properties-input"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void handleCreate()
+              if (e.key === 'Escape') setShowCreateForm(false)
+            }}
             placeholder="Subprocess name"
           />
           <textarea
@@ -175,19 +176,28 @@ export default function RecipeProcessSidebar({
             placeholder="Description (optional)"
           />
           {createError && <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>{createError}</div>}
-          <button
-            type="button"
-            onClick={() => void handleCreate()}
-            disabled={creating}
-            style={{ alignSelf: 'flex-start', padding: '6px 12px', borderRadius: 7, border: '1px solid var(--flow-accent)', background: 'var(--flow-accent)', color: 'white', fontSize: 11.5, fontWeight: 700, cursor: creating ? 'wait' : 'pointer' }}
-          >
-            {creating ? 'Creating…' : 'Create Subprocess'}
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="button"
+              onClick={() => void handleCreate()}
+              disabled={creating}
+              style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--flow-accent)', background: 'var(--flow-accent)', color: 'white', fontSize: 11.5, fontWeight: 700, cursor: creating ? 'wait' : 'pointer' }}
+            >
+              {creating ? 'Creating…' : 'Create Subprocess'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCreateForm(false)}
+              style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text-muted)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2.5">
-        <div className="px-1 text-[0.68rem] font-bold uppercase tracking-wide" style={{ color: 'var(--flow-text-subtle)' }}>Main Process</div>
+        <div className={sectionLabel} style={{ color: 'var(--flow-text-subtle)' }}>Main Process</div>
         {mainProcess ? (
           renderCard(mainProcess)
         ) : (
@@ -206,8 +216,21 @@ export default function RecipeProcessSidebar({
           </div>
         )}
 
-        <div className="mt-2 px-1 text-[0.68rem] font-bold uppercase tracking-wide" style={{ color: 'var(--flow-text-subtle)' }}>
-          Subprocesses ({subprocesses.length})
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <div className={sectionLabel} style={{ color: 'var(--flow-text-subtle)' }}>
+            Subprocesses{subprocesses.length > 0 ? ` (${subprocesses.length})` : ''}
+          </div>
+          {isOwner && (
+            <button
+              type="button"
+              onClick={openCreateForm}
+              aria-label="Add subprocess"
+              title="Add subprocess"
+              className="recipe-sidebar-section-add"
+            >
+              +
+            </button>
+          )}
         </div>
         {subprocesses.length === 0 ? (
           <div style={{ fontSize: 11.5, color: 'var(--flow-text-subtle)', padding: '0 4px' }}>No subprocesses yet.</div>
@@ -215,6 +238,7 @@ export default function RecipeProcessSidebar({
           subprocesses.map(renderCard)
         )}
       </div>
+
     </div>
   )
 }

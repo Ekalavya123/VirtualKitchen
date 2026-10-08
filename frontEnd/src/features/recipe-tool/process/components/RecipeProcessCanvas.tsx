@@ -68,7 +68,10 @@ import { isTrackedJobActive, visualsJobKey } from '../../context/jobTracker'
 import { useJobTracker, useTrackedJob } from '../../context/useJobTracker'
 import RecipeConditionPanel from './RecipeConditionPanel'
 import RecipeStepPanel from './RecipeStepPanel'
-import RecipeProcessTopBar from './RecipeProcessTopBar'
+import RecipeProcessTopBar, { type NodeSelectorOption } from './RecipeProcessTopBar'
+import AddNodeMenu from './AddNodeMenu'
+import type { RecipeAiActions } from './AiActionsMenu'
+import { ProcessSidebarActionsProvider, type ProcessSidebarActions } from '../context/ProcessSidebarActionsContext'
 import RecipeVisualizationSlideshow, { type SlideshowStep } from './RecipeVisualizationSlideshow'
 import '../../styles/recipe-tool.css'
 import '../styles/RecipeProcessSidebar.css'
@@ -87,12 +90,16 @@ type RecipeProcessCanvasProps = {
   /** Called when the user chooses to open a subprocess referenced from a STEP's Action On (see RecipeStepPanel's "Open" button) — a Process graph never contains a node for this, so there's no double-click-to-open path anymore. */
   onOpenSubprocess: (subprocessId: number, currentProcessName: string) => void
   onBack?: () => void
+  /** The recipe's name for the top bar's breadcrumb — omitted where it isn't known (standalone route). */
+  recipeName?: string
+  /** Recipe-level AI actions for the top bar's AI menu (see RecipeEditorView) — omitted on the standalone route. */
+  aiActions?: RecipeAiActions
   /**
-   * The Recipe Tool's process list (see RecipeEditorView), rendered as this component's whole
-   * left column when present — filling it entirely, not split with anything else, now that node
-   * add/navigation live in RecipeProcessTopBar and the old Tool Options panel has nothing left to show.
-   * Omitted for the standalone `/process/:processId` route, where there's no sibling process list;
-   * that route simply has no left column at all (the canvas takes the full width instead).
+   * The Recipe Tool's process list (see RecipeEditorView), rendered as this component's whole left
+   * column when present; it gets the canvas's add-node actions (its "+ Add" menu) and collapsing
+   * through ProcessSidebarActionsContext. Omitted for the standalone `/process/:processId` route,
+   * where there's no sibling process list; that route has no left column at all (the canvas takes
+   * the full width, and "+ Add" moves into the top bar instead).
    */
   sidebarHeader?: ReactNode
   /** Reports the selected node (null when none) — the AI edit dialog resolves "this step" with it. */
@@ -229,6 +236,8 @@ function RecipeProcessCanvasContent({
   onNavigateToAncestor,
   onOpenSubprocess,
   onBack,
+  recipeName,
+  aiActions,
   sidebarHeader,
   onSelectedNodeChange,
   highlightedNodeIds,
@@ -802,11 +811,16 @@ function RecipeProcessCanvasContent({
     void navigator.clipboard.writeText(exportJson)
   }, [exportJson])
 
-  // Walkthrough of this process's steps, in flow order. Falls back to a text-only "story mode"
-  // slide (the slideshow component already renders a placeholder) until a step has actually been
+  // Walkthrough of this process's steps, in reading order — the same order the Recipe Process page
+  // shows them in (not the order nodes were added). Falls back to a text-only "story mode" slide
+  // (the slideshow component already renders a placeholder) until a step has actually been
   // visualized — see generateVisuals below, which is what populates `visualization.imageUrl`.
   const buildSlideshowSteps = useCallback((): SlideshowStep[] => {
+    const { nodes: processNodes, edges: processEdges } = buildProcessUpdateRequest('', undefined, createFlowDataPayload(nodes, edges))
+    const readingOrder = new Map(getProcessReadingOrder({ ...process, nodes: processNodes ?? [], edges: processEdges ?? [] })
+      .map((node, index) => [node.id, index]))
     const stepNodes = nodes.filter(isRecipeStepNode)
+      .sort((a, b) => (readingOrder.get(a.id) ?? 0) - (readingOrder.get(b.id) ?? 0))
     return stepNodes.map((node, index) => {
       const normalized = normalizeRecipeStepNodeData(node.data)
       const { step } = normalized
@@ -835,7 +849,7 @@ function RecipeProcessCanvasContent({
         stepNumber: index + 1,
       }
     })
-  }, [nodes, availableSubprocesses, stepOutputGraph])
+  }, [nodes, edges, process, availableSubprocesses, stepOutputGraph])
 
   const applyStepVisualization = useCallback((stepResult: RecipeProcessVisualizationStepResult) => {
     if (!stepResult.success || stepResult.visualizationAssetId == null) return
@@ -963,19 +977,34 @@ function RecipeProcessCanvasContent({
 
   const selectedNode = nodes.find((node) => String(node.id) === String(selectedNodeId)) ?? null
 
-  // STEP nodes only, in the same array order the rest of this component already numbers/lists
-  // them in (buildSlideshowSteps) — CONDITION nodes are deliberately excluded, both from the step
-  // badge numbering (via RecipeProcessGraphContext's stepOrder) and from this top-bar selector.
+  // STEP nodes in the same array order the rest of this component already numbers/lists them in
+  // (buildSlideshowSteps) — CONDITION nodes are never numbered as steps (RecipeProcessGraphContext's
+  // stepOrder); the top bar's node selector lists them after the steps, under their own heading.
   const stepNodes = nodes.filter(isRecipeStepNode)
   const stepOrder = stepNodes.map((node) => node.id)
-  const stepOptions = stepNodes.map((node, index) => ({
-    id: node.id,
-    label: `${index + 1}. ${normalizeRecipeStepNodeData(node.data).title || 'Untitled step'}`,
-  }))
-  const currentStepId = selectedNode && isRecipeStepNode(selectedNode) ? selectedNode.id : undefined
+  const nodeOptions: NodeSelectorOption[] = [
+    ...stepNodes.map((node, index) => ({
+      id: node.id,
+      kind: 'STEP' as const,
+      label: `Step ${index + 1} · ${normalizeRecipeStepNodeData(node.data).title || 'Untitled step'}`,
+    })),
+    ...nodes.filter(isRecipeConditionNode).map((node) => ({
+      id: node.id,
+      kind: 'CONDITION' as const,
+      label: `Condition · ${normalizeConditionNodeData(node.data).title || 'Untitled condition'}`,
+    })),
+  ]
+
+  const addStep = useCallback(() => addNode(RECIPE_NODE_TYPES.step), [addNode])
+  const addCondition = useCallback(() => addNode(RECIPE_NODE_TYPES.condition), [addNode])
+  const sidebarActions = useMemo<ProcessSidebarActions>(() => ({
+    onAddStep: addStep,
+    onAddCondition: addCondition,
+    onCollapse: () => setSidebarCollapsed(true),
+  }), [addStep, addCondition, setSidebarCollapsed])
 
   /**
-   * Selects a STEP node from the top bar's step selector and opens the properties panel on it —
+   * Selects a node from the top bar's node selector and opens the properties panel on it —
    * deliberately does NOT move the viewport (no pan/zoom/fitView): the user's current view of the
    * canvas is left exactly as it was, only the selection changes. Must still flip each node's own
    * `selected` flag via `setNodes` — React Flow tracks selection on the node objects themselves,
@@ -983,15 +1012,16 @@ function RecipeProcessCanvasContent({
    * out of sync, so the very next `onSelectionChange` (React Flow's own, e.g. from an unrelated
    * re-render) could silently revert the selector back to nothing.
    */
-  const handleSelectStep = useCallback((stepId: string) => {
-    setSelectedNodeId(stepId)
+  const handleSelectNode = useCallback((nodeId: string) => {
+    setSelectedNodeId(nodeId)
     setSelectedEdgeId(null)
-    setNodes((nds) => nds.map((node) => (node.selected === (node.id === stepId) ? node : { ...node, selected: node.id === stepId })))
+    setNodes((nds) => nds.map((node) => (node.selected === (node.id === nodeId) ? node : { ...node, selected: node.id === nodeId })))
   }, [setNodes])
 
   return (
     <div className="flow-canvas-container flex h-full w-full flex-col">
       <RecipeProcessTopBar
+        recipeName={recipeName}
         name={process.name}
         processType={process.type}
         breadcrumbAncestors={breadcrumbAncestors}
@@ -1012,17 +1042,19 @@ function RecipeProcessCanvasContent({
         onFitView={handleFitView}
         onAutoArrange={autoArrange}
         canAutoArrange={nodes.length > 0}
-        onVisualize={openSlideshow}
+        onPreview={openSlideshow}
         onExport={handleExport}
         onGenerateVisuals={() => void generateVisuals()}
         isGeneratingVisuals={generatingVisuals}
         visualsProgressLabel={visualsProgressLabel}
         generateVisualsStatus={generateVisualsStatus}
-        onAddStep={() => addNode(RECIPE_NODE_TYPES.step)}
-        onAddCondition={() => addNode(RECIPE_NODE_TYPES.condition)}
-        steps={stepOptions}
-        currentStepId={currentStepId}
-        onSelectStep={handleSelectStep}
+        aiActions={aiActions}
+        // With a process sidebar, adding lives in its "+ Add" menu (and its collapsed rail's "+").
+        onAddStep={sidebarHeader ? undefined : addStep}
+        onAddCondition={sidebarHeader ? undefined : addCondition}
+        nodeOptions={nodeOptions}
+        currentNodeId={selectedNode?.id ?? null}
+        onSelectNode={handleSelectNode}
       />
 
       <div className="flow-canvas-body" ref={bodyRef}>
@@ -1033,16 +1065,25 @@ function RecipeProcessCanvasContent({
             style={{ width: sidebarCollapsed ? 48 : sidebarWidth, minWidth: sidebarCollapsed ? 48 : 200 }}
           >
             {sidebarCollapsed ? (
-              <div className="sidebar-collapse-tab" role="button" aria-label="Open sidebar" onClick={() => setSidebarCollapsed(false)}>
-                ☰
-              </div>
-            ) : (
               <>
-                <div className="sidebar-collapse-button" role="button" title="Collapse sidebar" onClick={() => setSidebarCollapsed(true)} style={{ alignSelf: 'flex-end' }}>◀</div>
-                <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                  {sidebarHeader}
-                </div>
+                <button type="button" className="sidebar-collapse-tab" aria-label="Expand Recipe Processes sidebar" title="Expand Recipe Processes" onClick={() => setSidebarCollapsed(false)} style={{ border: 'none' }}>
+                  ☰
+                </button>
+                <AddNodeMenu
+                  onAddStep={addStep}
+                  onAddCondition={addCondition}
+                  label="+"
+                  buttonClassName="recipe-sidebar-rail-add"
+                  placement="right-start"
+                />
               </>
+            ) : (
+              // The sidebar collapses itself from its own header (onCollapse).
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <ProcessSidebarActionsProvider value={sidebarActions}>
+                  {sidebarHeader}
+                </ProcessSidebarActionsProvider>
+              </div>
             )}
           </div>
         )}

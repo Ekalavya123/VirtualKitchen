@@ -127,7 +127,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
 
         {editorMounted && (
           <div className="min-h-0 flex-1" style={{ display: view === 'editor' ? 'flex' : 'none', flexDirection: 'column' }}>
-            <RecipeEditorView recipeId={recipeId} isOwner={isOwner} onMainProcessChanged={handleMainProcessChanged} />
+            <RecipeEditorView recipeId={recipeId} recipeName={recipe.name} isOwner={isOwner} onMainProcessChanged={handleMainProcessChanged} />
           </div>
         )}
 
