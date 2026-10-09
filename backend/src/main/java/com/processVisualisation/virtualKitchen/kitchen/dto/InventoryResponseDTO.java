@@ -22,6 +22,8 @@ public class InventoryResponseDTO {
     private ItemType itemType;
     private Long itemId;
     private String itemName;
+    /** The catalog ingredient/equipment image, or null until one is generated. */
+    private String imageUrl;
     private double quantity;
     private UnitType unit;
     private LocalDateTime lastUpdated;

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { InventoryApi, type InventoryItem } from '../../api'
+import CatalogItemImage from './CatalogItemImage'
 import './InventoryView.css'
 
 interface InventoryViewProps {
@@ -118,9 +119,11 @@ function InventoryCard({
   return (
     <article className="inventory-card">
       <div className="inventory-card-image">
-        <span aria-hidden="true">
-          {isIngredient ? '🥘' : '⚙️'}
-        </span>
+        <CatalogItemImage
+          src={item.imageUrl}
+          alt={item.itemName || ''}
+          fallbackIcon={isIngredient ? '🥘' : '⚙️'}
+        />
       </div>
 
       <div className="inventory-card-body">

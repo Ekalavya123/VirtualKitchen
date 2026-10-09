@@ -16,6 +16,8 @@ export interface InventoryItem {
   quantity?: number
   unit?: string
   lastUpdated?: string
+  /** Catalog image of the ingredient/equipment; null until one is generated. */
+  imageUrl?: string | null
 }
 
 export interface ShopItem {
@@ -25,6 +27,8 @@ export interface ShopItem {
   description?: string
   basePrice?: number
   defaultUnit?: string
+  /** Generated catalog image; null until an admin generates one. */
+  imageUrl?: string | null
 }
 
 export const InventoryApi = {

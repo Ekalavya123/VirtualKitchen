@@ -5,6 +5,7 @@ import {
   type OrderUnitType,
   ShopApi,
 } from '../../api'
+import CatalogItemImage from './CatalogItemImage'
 import './InventoryShopView.css'
 
 interface ShopItem {
@@ -14,6 +15,7 @@ interface ShopItem {
   description?: string
   basePrice: number
   defaultUnit?: OrderUnitType
+  imageUrl?: string | null
 }
 
 interface CartItem {
@@ -185,8 +187,12 @@ function ShopCard({
 }) {
   return (
     <article className="shop-card">
-      <div className="shop-card-icon" aria-hidden="true">
-        {item.itemType === 'INGREDIENT' ? '🥘' : '⚙️'}
+      <div className="shop-card-icon">
+        <CatalogItemImage
+          src={item.imageUrl}
+          alt={item.name}
+          fallbackIcon={item.itemType === 'INGREDIENT' ? '🥘' : '⚙️'}
+        />
       </div>
 
       <div className="shop-card-type">
@@ -588,6 +594,7 @@ export default function InventoryShopView({
                 defaultUnit: toOrderUnit(
                   item.defaultUnit,
                 ),
+                imageUrl: item.imageUrl,
               }))
             : []
 
@@ -602,6 +609,7 @@ export default function InventoryShopView({
                   'Professional kitchen equipment',
                 basePrice: item.basePrice ?? 50,
                 defaultUnit: 'COUNT',
+                imageUrl: item.imageUrl,
               }))
             : []
 

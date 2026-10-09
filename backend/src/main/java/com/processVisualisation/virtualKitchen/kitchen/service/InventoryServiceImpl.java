@@ -113,11 +113,11 @@ public class InventoryServiceImpl implements IInventoryService {
 
     /**
      * Fetches all inventory items allocated to the given kitchen, enriching
-     * each result with the item's display name looked up from the
-     * ingredient or equipment repository based on its item type.
+     * each result with the item's display name and catalog image URL looked
+     * up from the ingredient or equipment repository based on its item type.
      *
      * @param kitchenId id of the kitchen
-     * @return the kitchen's inventory items, with item names populated
+     * @return the kitchen's inventory items, with item names and image URLs populated
      */
     @Override
     public List<InventoryResponseDTO> getByKitchen(Long kitchenId){
@@ -126,11 +126,17 @@ public class InventoryServiceImpl implements IInventoryService {
                 .map(inv -> {
                     InventoryResponseDTO dto = mapper.toDTO(inv);
 
-                    // Enrich with item name similar to KitchenInventoryService
+                    // Enrich with item name and catalog image similar to KitchenInventoryService
                     if (inv.getItemType() == ItemType.INGREDIENT) {
-                        ingredientRepository.findById(inv.getItemId()).ifPresent(ing -> dto.setItemName(ing.getName()));
+                        ingredientRepository.findById(inv.getItemId()).ifPresent(ing -> {
+                            dto.setItemName(ing.getName());
+                            dto.setImageUrl(ing.getImageUrl());
+                        });
                     } else if (inv.getItemType() == ItemType.EQUIPMENT) {
-                        equipmentRepository.findById(inv.getItemId()).ifPresent(eq -> dto.setItemName(eq.getName()));
+                        equipmentRepository.findById(inv.getItemId()).ifPresent(eq -> {
+                            dto.setItemName(eq.getName());
+                            dto.setImageUrl(eq.getImageUrl());
+                        });
                     }
 
                     return dto;
