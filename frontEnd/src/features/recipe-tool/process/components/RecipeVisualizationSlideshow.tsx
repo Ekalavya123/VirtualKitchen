@@ -14,6 +14,12 @@ export type SlideshowStep = {
   description?: string
   imageUrl?: string
   stepNumber?: number
+  /** The caption's eyebrow, e.g. "Marinate chicken · Step 2 of 18" — defaults to "Step N of M". */
+  label?: string
+  /** A check's answers: each jumps to the step (or check) with `targetId`. */
+  choices?: { key: string; label: string; detail: string; targetId: string }[]
+  /** Never narrated (e.g. a check) — only used for a recipe-wide walkthrough. */
+  silent?: boolean
 }
 
 /** How the instruction follows the current step's narration phase (see AnimatedInstruction). */
@@ -93,14 +99,20 @@ function StepStage({ step, narrationText, revealMode, paused, progress, narratio
 type RecipeVisualizationSlideshowProps = {
   steps: SlideshowStep[]
   recipeId: number
-  processId: number
+  /**
+   * The process being previewed, or null for a recipe-wide walkthrough (Cook mode), whose step ids
+   * are recipe-wide ids (see recipeStepId) spanning several processes.
+   */
+  processId: number | null
   /** Settles once the editor's pending edits are saved; narration waits for it (see useNarrationPlayer). */
   narrationReady?: Promise<boolean> | null
+  /** Header title — defaults to "🎬 Recipe Visualization". */
+  heading?: string
   onClose: () => void
 }
 
 /**
- * Step-by-step walkthrough of a process. In play mode each step is narrated aloud and the next
+ * Step-by-step walkthrough of a process — or, as Cook mode, of a whole recipe. In play mode each step is narrated aloud and the next
  * step follows when its narration ends (steps without narration stay up for a reading-time dwell).
  * All playback rules live in NarrationPlayer; this component only renders its state.
  */
@@ -109,6 +121,7 @@ export default function RecipeVisualizationSlideshow({
   recipeId,
   processId,
   narrationReady,
+  heading = '🎬 Recipe Visualization',
   onClose,
 }: RecipeVisualizationSlideshowProps) {
   const playerSteps = useMemo(
@@ -118,10 +131,12 @@ export default function RecipeVisualizationSlideshow({
     })),
     [steps],
   )
+  const silentStepIds = useMemo(() => steps.filter((step) => step.silent).map((step) => step.id), [steps])
   const { player, state, unavailable, syncWarning } = useNarrationPlayer({
     recipeId,
     processId,
     steps: playerSteps,
+    silentStepIds,
     ready: narrationReady,
   })
 
@@ -160,7 +175,7 @@ export default function RecipeVisualizationSlideshow({
     <div className="flow-canvas-export-modal-overlay" onClick={onClose}>
       <div className="recipe-slideshow-modal" onClick={(event) => event.stopPropagation()}>
         <div className="recipe-slideshow-header">
-          <div className="recipe-slideshow-title">🎬 Recipe Visualization</div>
+          <div className="recipe-slideshow-title">{heading}</div>
           <button type="button" className="recipe-slideshow-close-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
@@ -187,11 +202,32 @@ export default function RecipeVisualizationSlideshow({
 
               <div className="recipe-slideshow-caption">
                 <div className="recipe-slideshow-step-label">
-                  Step {currentStep?.stepNumber ?? index + 1} of {steps.length}
+                  {currentStep?.label ?? `Step ${currentStep?.stepNumber ?? index + 1} of ${steps.length}`}
                 </div>
-                <div className="recipe-slideshow-step-title">{currentStep?.title || 'Untitled step'}</div>
+                {/* With a custom label the title is optional (Cook mode leaves it out when the instruction says it all). */}
+                {(currentStep?.title || currentStep?.label == null) && (
+                  <div className="recipe-slideshow-step-title">{currentStep?.title || 'Untitled step'}</div>
+                )}
                 {currentStep?.description && (
                   <div className="recipe-slideshow-step-description">{currentStep.description}</div>
+                )}
+                {currentStep?.choices && currentStep.choices.length > 0 && (
+                  <div className="recipe-slideshow-choices">
+                    {currentStep.choices.map((choice) => (
+                      <button
+                        key={choice.key}
+                        type="button"
+                        className="recipe-slideshow-choice"
+                        onClick={() => {
+                          const target = steps.findIndex((step) => step.id === choice.targetId)
+                          if (target >= 0) player.goTo(target)
+                        }}
+                      >
+                        <strong>{choice.label}</strong>
+                        <span>{choice.detail}</span>
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

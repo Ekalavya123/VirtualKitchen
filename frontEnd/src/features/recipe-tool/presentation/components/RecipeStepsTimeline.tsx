@@ -1,43 +1,122 @@
-import type {
-  CheckOutcome,
-  RecipeBranchTag,
-  RecipeTimelineCheck,
-  RecipeTimelineSection,
-  RecipeTimelineStep,
-  StepContinuation,
+import { useMemo, useState } from 'react'
+import {
+  describeOutcome,
+  describeRef,
+  type CheckOutcome,
+  type RecipeBranchTag,
+  type RecipeTimelineCheck,
+  type RecipeTimelineSection,
+  type RecipeTimelineStep,
+  type StepContinuation,
+  type InstructionPart,
 } from '../model/recipePresentation'
 import RecipeImage from './RecipeImage'
-import { scrollToAnchor, stepAnchorId } from './scrollToAnchor'
+import { scrollToAnchor } from './scrollToAnchor'
 
 type RecipeStepsTimelineProps = {
   sections: RecipeTimelineSection[]
 }
 
+/** Above this many steps in a multi-stage recipe, only the first stage starts open. */
+const COLLAPSE_ABOVE_STEPS = 12
+
+type Navigate = (anchorId: string) => void
+
+const stepsLabel = (count: number) => `${count} step${count === 1 ? '' : 's'}`
+
 /**
- * The recipe's steps as a numbered vertical timeline. A recipe with subprocesses reads as parts
- * ("Part 1 · Marinate the chicken", …, then the main process), each prepared before the part
- * that uses it; a recipe with a single process reads as one plain list of steps.
+ * The recipe's steps as a numbered vertical timeline. A recipe with subprocesses reads as stages
+ * (each subprocess, prepared before the stage that uses it, then the main process), with an
+ * overview to jump between them; long recipes start with only the first stage open. A recipe with
+ * a single process reads as one plain list of steps, with no stage chrome at all.
  */
 export default function RecipeStepsTimeline({ sections }: RecipeStepsTimelineProps) {
-  const showParts = sections.length > 1
+  const isStaged = sections.length > 1
+  const totalSteps = sections.reduce((count, section) => count + section.stepCount, 0)
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() =>
+    new Set(isStaged && totalSteps > COLLAPSE_ABOVE_STEPS ? sections.slice(1).map((section) => section.key) : []))
+
+  // Which stage each anchor (the stage itself, or any step/check in it) lives in.
+  const sectionOfAnchor = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const section of sections) {
+      map.set(section.anchorId, section.key)
+      for (const item of section.items) map.set(item.anchorId, section.key)
+    }
+    return map
+  }, [sections])
+
+  const toggle = (key: string) => setCollapsed((current) => {
+    const next = new Set(current)
+    if (next.has(key)) next.delete(key)
+    else next.add(key)
+    return next
+  })
+
+  // Links can point into a collapsed stage: open it first, then scroll once it has rendered.
+  const navigate: Navigate = (anchorId) => {
+    const sectionKey = sectionOfAnchor.get(anchorId)
+    if (sectionKey && collapsed.has(sectionKey)) {
+      setCollapsed((current) => {
+        const next = new Set(current)
+        next.delete(sectionKey)
+        return next
+      })
+      window.requestAnimationFrame(() => scrollToAnchor(anchorId))
+      return
+    }
+    scrollToAnchor(anchorId)
+  }
 
   return (
-    <div>
-      {sections.map((section, index) => (
-        <section key={section.key} id={section.anchorId} className="rp-part" aria-label={section.title}>
-          {showParts && (
-            <div className="rp-part-header">
-              <span className="rp-part-label">{section.isMain ? 'Finally' : `Part ${index + 1}`}</span>
-              <h3 className="rp-part-title">{section.title}</h3>
-              <span className="rp-part-rule" aria-hidden />
-            </div>
-          )}
-          <ol className="rp-timeline">
-            {section.items.map((item) =>
-              item.kind === 'step' ? <StepItem key={item.key} step={item} /> : <CheckItem key={item.key} check={item} />)}
-          </ol>
-        </section>
-      ))}
+    <div className="rp-steps">
+      {isStaged && (
+        <nav className="rp-stage-overview" aria-label="Stages">
+          {sections.map((section, index) => (
+            <button key={section.key} type="button" className="rp-stage-chip" onClick={() => navigate(section.anchorId)}>
+              <span className="rp-stage-chip-number" aria-hidden>{index + 1}</span>
+              <span className="rp-stage-chip-title">{section.title}</span>
+              <span className="rp-stage-chip-count">{section.stepCount}</span>
+            </button>
+          ))}
+        </nav>
+      )}
+
+      {sections.map((section, index) => {
+        const isOpen = !isStaged || !collapsed.has(section.key)
+        const listId = `${section.anchorId}-steps`
+        return (
+          <section key={section.key} id={section.anchorId} className={`rp-part${isOpen ? '' : ' is-collapsed'}`} aria-label={section.title}>
+            {isStaged && (
+              <h3 className="rp-part-heading">
+                <button
+                  type="button"
+                  className="rp-part-header"
+                  aria-expanded={isOpen}
+                  aria-controls={listId}
+                  onClick={() => toggle(section.key)}
+                >
+                  <span className="rp-part-label">Stage {index + 1}</span>
+                  <span className="rp-part-text">
+                    <span className="rp-part-title">{section.title}</span>
+                    {section.summary && <span className="rp-part-summary">{section.summary}</span>}
+                  </span>
+                  <span className="rp-part-count">{stepsLabel(section.stepCount)}</span>
+                  <span className="rp-part-chevron" aria-hidden>▾</span>
+                </button>
+              </h3>
+            )}
+            {isOpen && (
+              <ol id={listId} className="rp-timeline">
+                {section.items.map((item) =>
+                  item.kind === 'step'
+                    ? <StepItem key={item.key} step={item} navigate={navigate} />
+                    : <CheckItem key={item.key} check={item} navigate={navigate} />)}
+              </ol>
+            )}
+          </section>
+        )
+      })}
     </div>
   )
 }
@@ -51,93 +130,72 @@ function BranchTag({ branch }: { branch?: RecipeBranchTag }) {
   )
 }
 
-function StepItem({ step }: { step: RecipeTimelineStep }) {
+/** The step's sentence: amounts emphasised, earlier results linking to where they're made. */
+function Instruction({ parts, navigate }: { parts: InstructionPart[]; navigate: Navigate }) {
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.kind === 'amount') return <strong key={index} className="rp-amount">{part.text}</strong>
+        if (part.kind === 'product' && part.anchorId) {
+          const anchorId = part.anchorId
+          return (
+            <button key={index} type="button" className="rp-product-link" onClick={() => navigate(anchorId)} title={part.source ? `From ${part.source}` : undefined}>
+              {part.text}
+            </button>
+          )
+        }
+        return <span key={index}>{part.text}</span>
+      })}
+    </>
+  )
+}
+
+function StepItem({ step, navigate }: { step: RecipeTimelineStep; navigate: Navigate }) {
   const hasImage = Boolean(step.imageUrl)
 
   return (
-    <li id={stepAnchorId(step.number)} className="rp-timeline-item">
-      <span className="rp-step-number" aria-label={`Step ${step.number}`}>{step.number}</span>
+    <li id={step.anchorId} className="rp-timeline-item">
+      <span className="rp-step-number" aria-hidden>{step.number}</span>
 
-      <article className={`rp-card rp-step-card${hasImage ? ' has-image' : ''}`}>
-        {hasImage && (
-          <div className="rp-step-media">
-            <RecipeImage src={step.imageUrl} alt={step.title} fallbackIcon={step.icon} />
-          </div>
-        )}
-
+      <article className={`rp-card rp-step-card${hasImage ? ' has-image' : ''}`} aria-label={`Step ${step.number}`}>
         <div className="rp-step-body">
           <BranchTag branch={step.branch} />
 
-          <div className="rp-step-heading">
-            {!hasImage && <span className="rp-step-icon" aria-hidden>{step.icon}</span>}
-            <h4 className="rp-step-title">{step.title}</h4>
-          </div>
-
-          {step.description && <p className="rp-step-description">{step.description}</p>}
-
-          {step.ingredients.length > 0 && (
-            <div className="rp-chip-row" aria-label="Ingredients for this step">
-              {step.ingredients.map((ingredient) => (
-                <span key={ingredient.key} className="rp-chip">
-                  <span aria-hidden>{ingredient.icon}</span>
-                  {ingredient.name}
-                  {ingredient.amount && <span className="rp-chip-amount">{ingredient.amount}</span>}
-                  {ingredient.preparation && <span className="rp-chip-muted">· {ingredient.preparation}</span>}
-                </span>
-              ))}
-            </div>
+          {step.showName && (
+            <h4 className="rp-step-heading">
+              <span className="rp-step-inline-icon" aria-hidden>{step.icon}</span>
+              {step.name}
+            </h4>
           )}
 
-          {step.uses.length > 0 && (
-            <div className="rp-chip-row" aria-label="Uses">
-              {step.uses.map((use) =>
-                use.anchorId ? (
-                  <button
-                    key={use.key}
-                    type="button"
-                    className="rp-chip rp-chip-link"
-                    onClick={() => scrollToAnchor(use.anchorId as string)}
-                  >
-                    <span aria-hidden>🥣</span>
-                    {use.label}
-                    <span className="rp-chip-muted">· {use.source} ↑</span>
-                  </button>
-                ) : (
-                  <span key={use.key} className="rp-chip">
-                    <span aria-hidden>🥣</span>
-                    {use.label}
-                    <span className="rp-chip-muted">· {use.source}</span>
-                  </span>
-                ))}
-            </div>
-          )}
+          <p className="rp-step-instruction">
+            {!step.showName && <span className="rp-step-inline-icon" aria-hidden>{step.icon}</span>}
+            <Instruction parts={step.instruction} navigate={navigate} />
+          </p>
 
-          {step.details.length > 0 && (
-            <div className="rp-chip-row" aria-label="Cooking details">
-              {step.details.map((detail) => (
-                <span key={detail.kind} className="rp-chip rp-chip-detail" title={detail.hint}>
-                  <span aria-hidden>{detail.icon}</span>
-                  {detail.label}
-                </span>
-              ))}
-            </div>
-          )}
+          {step.explanation && <p className="rp-step-explanation">{step.explanation}</p>}
 
-          {step.expectedOutput && (
+          {step.readyWhen && (
             <div className="rp-look-for">
               <span aria-hidden>👀</span>
-              <span><strong>Look for:</strong> {step.expectedOutput}</span>
+              <span><strong>Ready when:</strong> {step.readyWhen}</span>
             </div>
           )}
 
-          <Continuation continuation={step.continuation} />
+          <Continuation continuation={step.continuation} navigate={navigate} />
         </div>
+
+        {hasImage && (
+          <div className="rp-step-media">
+            <RecipeImage src={step.imageUrl} alt="" fallbackIcon={step.icon} />
+          </div>
+        )}
       </article>
     </li>
   )
 }
 
-function Continuation({ continuation }: { continuation?: StepContinuation }) {
+function Continuation({ continuation, navigate }: { continuation?: StepContinuation; navigate: Navigate }) {
   if (!continuation) return null
 
   if (continuation.kind === 'end') {
@@ -145,15 +203,24 @@ function Continuation({ continuation }: { continuation?: StepContinuation }) {
   }
 
   if (continuation.kind === 'choice') {
-    const numbers = continuation.targetNumbers
-    const list = numbers.length > 1 ? `${numbers.slice(0, -1).join(', ')} and ${numbers[numbers.length - 1]}` : String(numbers[0])
-    return <span className="rp-continuation">→ Next, continue with steps {list}</span>
+    return (
+      <span className="rp-continuation">
+        → Next, continue with
+        {continuation.targets.map((target, index) => (
+          <span key={target.key}>
+            {index > 0 && (index === continuation.targets.length - 1 ? ' and ' : ', ')}
+            <button type="button" className="rp-continuation-link" onClick={() => navigate(target.anchorId)}>
+              {describeRef(target, false)}
+            </button>
+          </span>
+        ))}
+      </span>
+    )
   }
 
   return (
-    <button type="button" className="rp-continuation" onClick={() => scrollToAnchor(stepAnchorId(continuation.targetNumber))}>
-      {continuation.direction === 'back' ? '↻ Then go back to' : '→ Then skip ahead to'} step {continuation.targetNumber}
-      {continuation.targetTitle && ` · ${continuation.targetTitle}`}
+    <button type="button" className="rp-continuation" onClick={() => navigate(continuation.target.anchorId)}>
+      {continuation.direction === 'back' ? '↻ Then go back to' : '→ Then skip ahead to'} {describeRef(continuation.target)}
     </button>
   )
 }
@@ -163,23 +230,17 @@ const outcomeIcon = (outcome: CheckOutcome) => {
   return outcome.tone === 'yes' ? '✓' : '✕'
 }
 
-const outcomeAction = (outcome: CheckOutcome) => {
-  const target = `step ${outcome.targetNumber}${outcome.targetTitle ? ` — ${outcome.targetTitle}` : ''}`
-  if (outcome.direction === 'back') return `Go back to ${target}`
-  if (outcome.direction === 'forward') return `Skip ahead to ${target}`
-  return `Carry on with ${target}`
-}
-
-function CheckItem({ check }: { check: RecipeTimelineCheck }) {
+function CheckItem({ check, navigate }: { check: RecipeTimelineCheck; navigate: Navigate }) {
   return (
-    <li id={stepAnchorId(check.number)} className="rp-timeline-item is-check">
-      <span className="rp-step-number" aria-label={`Step ${check.number}`}>{check.number}</span>
+    <li id={check.anchorId} className="rp-timeline-item is-check">
+      {/* Checks are decisions, not steps: a marker instead of a number, so numbers match the step count. */}
+      <span className="rp-step-number" aria-hidden>?</span>
 
-      <article className="rp-card rp-check-card">
+      <article className="rp-card rp-check-card" aria-label="Check">
         <BranchTag branch={check.branch} />
         <span className="rp-check-eyebrow"><span aria-hidden>🔍</span> Check</span>
         <h4 className="rp-check-question">{check.question}</h4>
-        {check.notes && <p className="rp-check-notes">{check.notes}</p>}
+        {check.notes && <p className="rp-check-notes"><strong>How to check:</strong> {check.notes}</p>}
 
         {check.outcomes.length > 0 && (
           <div className="rp-outcomes">
@@ -188,12 +249,12 @@ function CheckItem({ check }: { check: RecipeTimelineCheck }) {
                 key={outcome.key}
                 type="button"
                 className={`rp-outcome is-${outcome.tone}`}
-                onClick={() => scrollToAnchor(stepAnchorId(outcome.targetNumber))}
+                onClick={() => navigate(outcome.target.anchorId)}
               >
                 <span className="rp-outcome-icon" aria-hidden>{outcomeIcon(outcome)}</span>
                 <span className="rp-outcome-text">
                   <span className="rp-outcome-answer">{outcome.answer}</span>
-                  <span className="rp-outcome-action">{outcomeAction(outcome)}</span>
+                  <span className="rp-outcome-action">{describeOutcome(outcome)}</span>
                 </span>
               </button>
             ))}

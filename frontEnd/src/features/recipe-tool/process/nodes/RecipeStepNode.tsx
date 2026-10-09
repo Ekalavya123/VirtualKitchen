@@ -11,7 +11,7 @@ import {
   normalizeRecipeStepNodeData,
   type RecipeStepNodeData,
 } from '../model/recipeStepData'
-import { useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'
+import { useNodeHandleSides, useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'
 import { getStepOutputLabel, getStepOutputReferenceProblem } from '../model/recipeStepOutputs'
 import { getStepActionById, type ActionCategory, type StepActionId } from '../../catalog/actionCatalog'
 import { getPreparationStyleDisplayName } from '../../catalog/preparationStyleCatalog'
@@ -78,16 +78,27 @@ type RecipeStepNodeProps = {
   data: RecipeStepNodeData
 }
 
+// Resizing is bounded below only — a card must stay readable, but may grow as large as wanted.
 const MIN_WIDTH = 240
 const MIN_HEIGHT = 140
-const MAX_WIDTH = 460
-const MAX_HEIGHT = 560
 
 const BORDER_WIDTH = 1.5
 const ACCENT_BORDER_WIDTH = 5
 // A handle's `left: 50%` is measured inside the borders, and the accent border makes the left one
 // thicker — shift back by half the difference so top/bottom handles sit on the card's true center.
 const HANDLE_CENTER_LEFT = `calc(50% - ${(ACCENT_BORDER_WIDTH - BORDER_WIDTH) / 2}px)`
+
+/**
+ * Where a handle sits for each side it can be on (see processLayout.ts's getHandleSides): centered
+ * on that edge of the card. A left handle is pulled out over the thick accent border so it sits as
+ * close to the card's outer edge as the other sides' handles do.
+ */
+const HANDLE_PLACEMENT: Record<'top' | 'left' | 'right' | 'bottom', { position: Position; style: CSSProperties }> = {
+  top: { position: Position.Top, style: { top: 0, left: HANDLE_CENTER_LEFT, transform: 'translate(-50%, -50%)' } },
+  bottom: { position: Position.Bottom, style: { bottom: 0, left: HANDLE_CENTER_LEFT, transform: 'translate(-50%, 50%)' } },
+  left: { position: Position.Left, style: { top: '50%', left: -(ACCENT_BORDER_WIDTH - BORDER_WIDTH), transform: 'translate(-50%, -50%)' } },
+  right: { position: Position.Right, style: { top: '50%', right: 0, transform: 'translate(50%, -50%)' } },
+}
 
 /** Action On lines shown before collapsing into "+N more" (a compact summary, not the full detail — that stays in the Step Properties panel). */
 const COLLAPSED_ACTION_ON_LIMIT = 3
@@ -100,7 +111,8 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
   const normalized = normalizeRecipeStepNodeData(data)
   const step = normalized.step
   const theme = getCategoryTheme(step.action)
-  const width = Math.min(Math.max(toNumber(nodeWidth, toNumber(nodeStyle?.width, 280)), MIN_WIDTH), MAX_WIDTH)
+  const handleSides = useNodeHandleSides(nodeId)
+  const width = Math.max(toNumber(nodeWidth, toNumber(nodeStyle?.width, 280)), MIN_WIDTH)
   const minHeight = Math.max(toNumber(nodeHeight, toNumber(nodeStyle?.height, 160)), MIN_HEIGHT)
 
   const stepIndex = nodeId ? stepOrder.indexOf(nodeId) : -1
@@ -125,7 +137,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
   // once this render has laid the card out at its new size, or edges keep pointing at the old center.
   useLayoutEffect(() => {
     syncNodeLayout()
-  }, [syncNodeLayout, width, minHeight, expanded, imageUrl])
+  }, [syncNodeLayout, width, minHeight, expanded, imageUrl, handleSides.target, handleSides.source])
 
   const ingredientLines = step.actionOn.ingredients.map((entry, index) => {
     const name = getActionOnIngredientDisplayName(entry)
@@ -203,7 +215,6 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
       style={{
         width,
         minWidth: MIN_WIDTH,
-        maxWidth: MAX_WIDTH,
         minHeight,
         background: 'var(--flow-surface)',
         borderRadius: 14,
@@ -228,8 +239,6 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
           nodeId={nodeId ?? undefined}
           minWidth={MIN_WIDTH}
           minHeight={MIN_HEIGHT}
-          maxWidth={MAX_WIDTH}
-          maxHeight={MAX_HEIGHT}
           onResizeStart={() => { if (nodeId) onNodeResizeStart?.(nodeId) }}
           onResize={() => syncNodeLayout()}
           onResizeEnd={() => {
@@ -250,8 +259,8 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
       )}
       <Handle
         type="target"
-        position={Position.Top}
-        style={{ width: 10, height: 10, background: theme.accent, border: '2px solid white', boxShadow: `0 0 0 1.5px ${theme.accent}`, left: HANDLE_CENTER_LEFT, transform: 'translate(-50%, -50%)', zIndex: 20 }}
+        position={HANDLE_PLACEMENT[handleSides.target].position}
+        style={{ width: 10, height: 10, background: theme.accent, border: '2px solid white', boxShadow: `0 0 0 1.5px ${theme.accent}`, zIndex: 20, ...HANDLE_PLACEMENT[handleSides.target].style }}
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -373,8 +382,8 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
 
       <Handle
         type="source"
-        position={Position.Bottom}
-        style={{ width: 10, height: 10, background: theme.accent, border: '2px solid white', boxShadow: `0 0 0 1.5px ${theme.accent}`, left: HANDLE_CENTER_LEFT, transform: 'translate(-50%, 50%)', zIndex: 20 }}
+        position={HANDLE_PLACEMENT[handleSides.source].position}
+        style={{ width: 10, height: 10, background: theme.accent, border: '2px solid white', boxShadow: `0 0 0 1.5px ${theme.accent}`, zIndex: 20, ...HANDLE_PLACEMENT[handleSides.source].style }}
       />
     </div>
   )

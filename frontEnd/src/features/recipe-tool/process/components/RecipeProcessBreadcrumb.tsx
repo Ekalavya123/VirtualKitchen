@@ -1,68 +1,79 @@
-import type { CSSProperties } from 'react'
+import type { ReactNode } from 'react'
 import '../../styles/recipe-tool.css'
+import type { ProcessType } from '../../../../types/process'
 import type { RecipeProcessBreadcrumbEntry } from '../../../../types/recipe'
 
 type RecipeProcessBreadcrumbProps = {
+  /** The recipe's name for the trail's root — "Recipe" where it isn't known (the standalone process route). */
+  recipeName?: string
   /** Ancestors from the recipe's process list down to (but not including) the process currently open, root-first. */
   ancestors: RecipeProcessBreadcrumbEntry[]
   currentName: string
+  processType?: ProcessType
   onNavigateToList: () => void
   onNavigateToAncestor: (index: number) => void
+  /** The trail's last segment — the node selector. */
+  trailing?: ReactNode
 }
 
-const crumbButtonStyle: CSSProperties = {
-  border: 'none',
-  background: 'transparent',
-  color: 'var(--flow-text-muted)',
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: 'pointer',
-  padding: '2px 4px',
-  borderRadius: 6,
-}
+const Separator = () => <span className="recipe-breadcrumb-separator" aria-hidden>/</span>
 
 /**
- * Lightweight "Recipe -> Main Process -> Cut Vegetables" navigation trail
- * for the Process Editor. Purely a display + click-to-navigate component —
- * the actual trail is owned by App.tsx's RecipeProcessEditorRoute as router state,
- * not by this component or by RecipeProcessCanvas.
+ * "Where am I?" for the Process Editor: Recipe / (parent processes /) Process / Node. Purely a
+ * display + click-to-navigate component — the trail itself is owned by whoever renders the editor
+ * (RecipeEditorView, or App.tsx's RecipeProcessEditorRoute as router state).
  */
-export default function RecipeProcessBreadcrumb({ ancestors, currentName, onNavigateToList, onNavigateToAncestor }: RecipeProcessBreadcrumbProps) {
+export default function RecipeProcessBreadcrumb({
+  recipeName,
+  ancestors,
+  currentName,
+  processType,
+  onNavigateToList,
+  onNavigateToAncestor,
+  trailing,
+}: RecipeProcessBreadcrumbProps) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', minWidth: 0 }}>
-      <button type="button" onClick={onNavigateToList} style={crumbButtonStyle} title="All processes for this recipe">
-        Recipe
+    <nav aria-label="Editing context" className="recipe-breadcrumb">
+      <button
+        type="button"
+        onClick={onNavigateToList}
+        className="recipe-breadcrumb-crumb is-recipe"
+        title={recipeName ? `Recipe: ${recipeName} — go to its main process` : 'All processes for this recipe'}
+      >
+        <span aria-hidden>🍳</span>
+        <span className="recipe-breadcrumb-text">{recipeName || 'Recipe'}</span>
       </button>
 
       {ancestors.map((ancestor, index) => (
-        <span key={ancestor.processId} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ color: 'var(--flow-text-subtle)', fontSize: 12 }}>→</span>
+        <span key={ancestor.processId} className="recipe-breadcrumb-segment is-ancestor">
+          <Separator />
           <button
             type="button"
             onClick={() => onNavigateToAncestor(index)}
-            style={crumbButtonStyle}
+            className="recipe-breadcrumb-crumb"
             title={`Back to ${ancestor.name}`}
           >
-            {ancestor.name}
+            <span className="recipe-breadcrumb-text">{ancestor.name}</span>
           </button>
         </span>
       ))}
 
-      <span style={{ color: 'var(--flow-text-subtle)', fontSize: 12 }}>→</span>
-      <span
-        style={{
-          fontSize: 12,
-          fontWeight: 700,
-          color: 'var(--flow-text)',
-          padding: '2px 4px',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-        title={currentName}
-      >
-        {currentName}
+      <Separator />
+      <span className="recipe-breadcrumb-current" title={`${processType === 'SUBPROCESS' ? 'Subprocess' : 'Process'}: ${currentName}`} aria-current="page">
+        <span className="recipe-breadcrumb-text">{currentName}</span>
+        {processType && (
+          <span className={`recipe-breadcrumb-type is-${processType.toLowerCase()}`}>
+            {processType === 'MAIN' ? 'Main' : 'Sub'}
+          </span>
+        )}
       </span>
-    </div>
+
+      {trailing && (
+        <>
+          <Separator />
+          {trailing}
+        </>
+      )}
+    </nav>
   )
 }

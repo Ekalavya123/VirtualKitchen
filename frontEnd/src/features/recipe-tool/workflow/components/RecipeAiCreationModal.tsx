@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { RecipeAiWorkflowApi } from '../../../../api/recipeAiWorkflowApi'
-import type { RecipeAiWorkflowEstimate, RecipeAiWorkflowResponse } from '../../../../types/recipeAiWorkflow'
+import type { RecipeAiTaskType, RecipeAiWorkflowEstimate, RecipeAiWorkflowResponse } from '../../../../types/recipeAiWorkflow'
 import { isWorkflowOpen } from '../../context/jobTracker'
 import { useRecipeSession } from '../../context/RecipeSessionContext'
 import {
@@ -12,6 +12,7 @@ import {
   toTaskSelectionRequest,
   WORKFLOW_TASK_ORDER,
   workflowSelectionProblem,
+  workflowTaskSelectionFrom,
   type WorkflowTaskSelection,
 } from '../model/workflowSelection'
 import {
@@ -38,6 +39,8 @@ type RecipeAiCreationModalProps = {
   onClose: () => void
   /** True when generating a process will replace the recipe's current MAIN content. */
   willReplaceMain: boolean
+  /** Pre-ticks exactly these tasks (the editor's AI menu items); omitted keeps the user's last selection. */
+  initialTasks?: RecipeAiTaskType[]
 }
 
 const CREATE_PLACEHOLDER = `Describe your recipe here...
@@ -68,7 +71,7 @@ const subtleText = { fontSize: 11.5, color: 'var(--flow-text-subtle)' }
  *
  * Uses the same modal chrome and progress styling as RecipeProcessGenerationModal.
  */
-export default function RecipeAiCreationModal({ recipeId, onClose, willReplaceMain }: RecipeAiCreationModalProps) {
+export default function RecipeAiCreationModal({ recipeId, onClose, willReplaceMain, initialTasks }: RecipeAiCreationModalProps) {
   const ai = useRecipeAiWorkflow(recipeId)
   const { workflow } = ai
   // A finished workflow keeps showing its summary until the user moves on.
@@ -100,6 +103,7 @@ export default function RecipeAiCreationModal({ recipeId, onClose, willReplaceMa
             <TaskSelectionStep
               recipeId={recipeId}
               willReplaceMain={willReplaceMain}
+              initialTasks={initialTasks}
               busy={ai.busy === 'start'}
               error={ai.error}
               onCreate={async (request) => {
@@ -127,9 +131,10 @@ export default function RecipeAiCreationModal({ recipeId, onClose, willReplaceMa
 
 // --- step 1: what should AI create? ------------------------------------------------------------
 
-function TaskSelectionStep({ recipeId, willReplaceMain, busy, error, onCreate, onCancel }: {
+function TaskSelectionStep({ recipeId, willReplaceMain, initialTasks, busy, error, onCreate, onCancel }: {
   recipeId: number
   willReplaceMain: boolean
+  initialTasks?: RecipeAiTaskType[]
   busy: boolean
   error: string | null
   onCreate: (request: { selection: ReturnType<typeof toTaskSelectionRequest>; recipeText?: string }) => Promise<boolean>
@@ -147,6 +152,12 @@ function TaskSelectionStep({ recipeId, willReplaceMain, busy, error, onCreate, o
   const setSelection = (update: (current: WorkflowTaskSelection) => WorkflowTaskSelection) =>
     draft.setValue((current) => ({ ...current, selection: update(current.selection) }))
   const setRecipeText = (text: string) => draft.setValue((current) => ({ ...current, recipeText: text }))
+  // Opened from a specific AI menu item: tick exactly its tasks, once (the recipe text draft is kept).
+  const [presetApplied, setPresetApplied] = useState(false)
+  if (initialTasks && !presetApplied) {
+    setPresetApplied(true)
+    setSelection(() => workflowTaskSelectionFrom(initialTasks))
+  }
   const [estimate, setEstimate] = useState<RecipeAiWorkflowEstimate | null>(null)
   const [estimateError, setEstimateError] = useState(false)
   const [touched, setTouched] = useState(false)

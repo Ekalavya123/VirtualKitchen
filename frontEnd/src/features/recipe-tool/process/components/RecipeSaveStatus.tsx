@@ -17,7 +17,7 @@ const formatAgo = (time: number, now: number) => {
 }
 
 const chip = (color: string, text: string, title?: string) => (
-  <span role="status" title={title} style={{ fontSize: 11, fontWeight: 600, color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 320 }}>
+  <span role="status" title={title ?? text} style={{ fontSize: 11, fontWeight: 600, color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 320 }}>
     {text}
   </span>
 )

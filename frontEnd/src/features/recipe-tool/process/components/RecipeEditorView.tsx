@@ -17,6 +17,8 @@ import { useJobTracker, useTrackedJob } from '../../context/useJobTracker'
 import RecipeAiCreationModal from '../../workflow/components/RecipeAiCreationModal'
 import { clearDraft, draftKeys } from '../../../../shared/drafts/draftStore'
 import { workflowBadge, workflowChipLabel, workflowHeadline } from '../../workflow/model/workflowView'
+import type { RecipeAiTaskType } from '../../../../types/recipeAiWorkflow'
+import type { RecipeAiActions } from './AiActionsMenu'
 
 const GENERATION_STAGE_LABELS: Record<string, string> = {
   QUEUED: 'Queued…',
@@ -39,6 +41,8 @@ const EDIT_HIGHLIGHT_MS = 4000
 
 type RecipeEditorViewProps = {
   recipeId: number
+  /** Shown as the root of the editor's breadcrumb (Recipe / Process / Node). */
+  recipeName?: string
   isOwner: boolean
   /** Bumped whenever the MAIN process is created/changes here, so RecipeToolPage's own recipe state (mainProcessId) stays in sync without a second fetch. */
   onMainProcessChanged: (mainProcessId: number) => void
@@ -56,7 +60,7 @@ type RecipeEditorViewProps = {
  * remounted (no `key`) when the selection changes: switching processes is
  * navigation within one recipe editing session, not opening a new flow.
  */
-export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChanged }: RecipeEditorViewProps) {
+export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMainProcessChanged }: RecipeEditorViewProps) {
   const { notifyError, notifySuccess } = useNotifications()
   const session = useRecipeSession()
   const processes = useMemo(() => session?.getProcesses() ?? [], [session])
@@ -71,6 +75,12 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
   // AI Recipe Creation (process → review/approval → visuals + narration), followed by the same tracker.
   const workflow = useTrackedJob(workflowJobKey(recipeId))?.job ?? null
   const [showAiCreation, setShowAiCreation] = useState(false)
+  // What the AI menu item that opened AI Recipe Creation pre-ticks (undefined: the user's last selection).
+  const [aiCreationTasks, setAiCreationTasks] = useState<RecipeAiTaskType[] | undefined>(undefined)
+  const openAiCreation = useCallback((tasks?: RecipeAiTaskType[]) => {
+    setAiCreationTasks(tasks)
+    setShowAiCreation(true)
+  }, [])
   // A generated process waiting for review opens the approval card by itself — once per workflow,
   // also when the user comes back to a recipe whose workflow is still waiting.
   const awaitingReviewId = workflow?.status === 'WAITING_FOR_APPROVAL' && workflow.selectedTasks.includes('PROCESS') && workflow.generationApplied
@@ -386,6 +396,7 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
     ? { label: workflowChipLabel(workflow), badge: workflowBadge(workflow), title: workflowHeadline(workflow).title }
     : null
 
+  // Inside the canvas, the sidebar also gets the canvas's "+ Add" actions and collapse (ProcessSidebarActionsContext).
   const processListSidebar = (
     <RecipeProcessSidebar
       processes={processes}
@@ -395,16 +406,28 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
       onCreateMainProcess={() => void handleCreateMainProcess()}
       creatingMainProcess={creatingMainProcess}
       onCreateSubprocess={handleCreateSubprocess}
-      onOpenGenerate={isOwner ? () => setShowAiCreation(true) : undefined}
-      generationProgress={generationProgress}
-      aiStatus={aiStatus && { badge: aiStatus.badge, title: `AI Recipe Creation — ${aiStatus.title}` }}
-      onOpenEdit={isOwner && editableTarget ? () => setShowGenerationModal(true) : undefined}
       newSubprocessDraftKey={draftKeys.newSubprocess(recipeId)}
     />
   )
 
+  // Every AI action lives in the top bar's "✨ AI" menu (AiActionsMenu); the canvas adds its own
+  // per-process "Generate Step Visuals". Readers get none of the recipe-level ones, as before.
+  const aiActions: RecipeAiActions | undefined = isOwner
+    ? {
+      onOpenAiCreation: openAiCreation,
+      onOpenAiEdit: editableTarget ? () => setShowGenerationModal(true) : undefined,
+      status: aiStatus && { badge: aiStatus.badge, title: aiStatus.title },
+      generationProgress,
+    }
+    : undefined
+
   const aiCreationModal = showAiCreation && (
-    <RecipeAiCreationModal recipeId={recipeId} onClose={() => setShowAiCreation(false)} willReplaceMain={existingMain != null && existingMain.nodes.length > 0} />
+    <RecipeAiCreationModal
+      recipeId={recipeId}
+      onClose={() => setShowAiCreation(false)}
+      willReplaceMain={existingMain != null && existingMain.nodes.length > 0}
+      initialTasks={aiCreationTasks}
+    />
   )
 
   const generationModal = showGenerationModal && (
@@ -426,7 +449,7 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
       draftKey={draftKeys.aiEdit(recipeId)}
       onRequestCreate={() => {
         setShowGenerationModal(false)
-        setShowAiCreation(true)
+        openAiCreation()
       }}
     />
   )
@@ -446,7 +469,7 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
           {isOwner && (
             <button
               type="button"
-              onClick={() => setShowAiCreation(true)}
+              onClick={() => openAiCreation()}
               style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid var(--flow-accent)', background: 'var(--flow-accent)', color: 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
             >
               {aiStatus ? aiStatus.label : '✨ AI Recipe Creation'}
@@ -470,6 +493,8 @@ export default function RecipeEditorView({ recipeId, isOwner, onMainProcessChang
         onNavigateToList={handleNavigateToList}
         onNavigateToAncestor={handleNavigateToAncestor}
         onOpenSubprocess={handleOpenSubprocess}
+        recipeName={recipeName}
+        aiActions={aiActions}
         sidebarHeader={processListSidebar}
         onSelectedNodeChange={setCanvasSelectedNodeId}
         highlightedNodeIds={highlightedNodeIds}

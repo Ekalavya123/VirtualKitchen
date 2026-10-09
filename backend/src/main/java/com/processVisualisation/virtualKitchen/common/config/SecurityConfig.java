@@ -9,7 +9,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.config.Customizer;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -56,7 +57,8 @@ public class SecurityConfig {
      * {@code /swagger-ui/**}, {@code /v3/api-docs/**} and {@code /api/**},
      * inserts {@link #jwtAuthenticationFilter} before
      * {@link UsernamePasswordAuthenticationFilter} so the authenticated user
-     * is resolved from the JWT first, and enables HTTP Basic authentication.
+     * is resolved from the JWT first, and answers unauthenticated requests
+     * with a bare 401 (no HTTP Basic challenge).
      *
      * @param http the {@link HttpSecurity} builder to configure
      * @return the configured {@link SecurityFilterChain}
@@ -87,8 +89,10 @@ public class SecurityConfig {
                 // 4. Resolve the authenticated user (if any) from the JWT before Spring's default auth filter runs
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
 
-                // 5. Enable Basic Auth (This makes the popup login work)
-                .httpBasic(Customizer.withDefaults());
+                // 5. Answer unauthenticated requests with a plain 401. Not HTTP Basic: its
+                // WWW-Authenticate challenge pops a browser login (e.g. from Swagger) that no
+                // real account can pass, since users authenticate only via JWT.
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
 
         return http.build();
     }

@@ -6,12 +6,21 @@ type AiCreditBadgeProps = {
   refreshSignal?: number
 }
 
+export type AiCreditSummary = {
+  credit: UserAiCredit
+  /** At or below 10% of the monthly allocation — AI then falls back to a standard model. */
+  isLow: boolean
+  /** Tooltip text describing the balance. */
+  description: string
+}
+
 /**
- * Self-contained "⚡ credits remaining" badge for the flow editor top bar. Fetches the current
- * user's AI credit balance on mount and whenever `refreshSignal` changes, and renders nothing if
- * the request fails (e.g. unauthenticated) rather than showing a broken/error state in the toolbar.
+ * The current user's AI credit balance, fetched on mount and whenever `refreshSignal` changes.
+ * Null until loaded, and also if the request fails (e.g. unauthenticated) — callers then simply
+ * show nothing rather than a broken/error state.
  */
-export default function AiCreditBadge({ refreshSignal }: AiCreditBadgeProps) {
+// eslint-disable-next-line react-refresh/only-export-components -- the badge and its data hook belong together
+export function useAiCredit(refreshSignal?: number): AiCreditSummary | null {
   const [credit, setCredit] = useState<UserAiCredit | null>(null)
   const [failed, setFailed] = useState(false)
 
@@ -35,8 +44,19 @@ export default function AiCreditBadge({ refreshSignal }: AiCreditBadgeProps) {
   }, [refreshSignal])
 
   if (failed || !credit) return null
-
   const isLow = credit.availableBalance <= Math.max(1, Math.round(credit.monthlyAllocation * 0.1))
+  return {
+    credit,
+    isLow,
+    description: `${credit.availableBalance} of ${credit.monthlyAllocation} AI credits remaining this cycle${isLow ? ' — running low, AI features will automatically fall back to a standard model' : ''}`,
+  }
+}
+
+/** Self-contained "⚡ credits remaining" badge (see useAiCredit). */
+export default function AiCreditBadge({ refreshSignal }: AiCreditBadgeProps) {
+  const summary = useAiCredit(refreshSignal)
+  if (!summary) return null
+  const { credit, isLow, description } = summary
 
   return (
     <div
@@ -53,7 +73,7 @@ export default function AiCreditBadge({ refreshSignal }: AiCreditBadgeProps) {
         fontWeight: 700,
         whiteSpace: 'nowrap',
       }}
-      title={`${credit.availableBalance} of ${credit.monthlyAllocation} AI credits remaining this cycle${isLow ? ' — running low, AI features will automatically fall back to a standard model' : ''}`}
+      title={description}
     >
       ⚡ {credit.availableBalance}/{credit.monthlyAllocation}
     </div>

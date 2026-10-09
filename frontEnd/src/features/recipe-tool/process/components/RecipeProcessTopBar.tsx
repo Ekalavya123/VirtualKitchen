@@ -1,14 +1,19 @@
-import type { CSSProperties } from 'react'
 import '../../styles/recipe-tool.css'
+import '../styles/RecipeEditorToolbar.css'
 import type { ProcessType } from '../../../../types/process'
 import type { RecipeProcessBreadcrumbEntry } from '../../../../types/recipe'
 import RecipeProcessBreadcrumb from './RecipeProcessBreadcrumb'
-import AiCreditBadge from '../../../../shared/components/AiCreditBadge'
-import { useJobsFinishedSignal } from '../../context/useJobTracker'
 import type { SaveState } from '../../persistence/saveCoordinator'
 import RecipeSaveStatus from './RecipeSaveStatus'
+import AiActionsMenu, { type RecipeAiActions } from './AiActionsMenu'
+import AddNodeMenu from './AddNodeMenu'
+
+/** One entry of the node selector: a STEP ("Step 2 · Chop") or a CONDITION. */
+export type NodeSelectorOption = { id: string; label: string; kind: 'STEP' | 'CONDITION' }
 
 type RecipeProcessTopBarProps = {
+  /** The recipe's name, shown as the breadcrumb's root — omitted where it isn't known (standalone process route). */
+  recipeName?: string
   name: string
   processType: ProcessType
   breadcrumbAncestors: RecipeProcessBreadcrumbEntry[]
@@ -28,41 +33,46 @@ type RecipeProcessTopBarProps = {
   onZoomIn?: () => void
   onZoomOut?: () => void
   onFitView?: () => void
-  onVisualize?: () => void
+  /** Re-lays the whole graph out (positions only, one undo step); disabled without nodes. */
+  onAutoArrange?: () => void
+  canAutoArrange?: boolean
+  /** Opens the slideshow player (visuals + narration) of this process. */
+  onPreview?: () => void
   onExport?: () => void
   /** Starts the AI visualization job for this process's own steps (see RecipeProcessCanvas's generateVisuals). */
   onGenerateVisuals?: () => void
   isGeneratingVisuals?: boolean
-  /** Button label while generating, e.g. "Generating… 2/5" — falls back to "Generating…". */
+  /** Progress while generating, e.g. "Generating… 2/5". */
   visualsProgressLabel?: string
   generateVisualsStatus?: { type: 'success' | 'error' | 'info'; text: string } | null
-  /** Adds a new STEP/CONDITION node to the canvas — relocated here from the sidebar's old "Quick Add". */
+  /** Recipe-level AI actions (AI Recipe Creation, Edit with AI) — omitted where the editor has none (standalone route). */
+  aiActions?: RecipeAiActions
+  /**
+   * Adding nodes normally lives in the process sidebar's "+ Add" menu; these are passed only where
+   * there's no sidebar to show it (the standalone process route), and then appear here instead.
+   */
   onAddStep?: () => void
   onAddCondition?: () => void
-  /** STEP nodes of the current process, in canvas order — for the step selector below (relocated from the sidebar's old node list; conditions are never included). */
-  steps?: { id: string; label: string }[]
-  /** The currently selected node's id, but only when it's a STEP — clears the selector when a CONDITION or nothing is selected. */
-  currentStepId?: string | null
-  /** Selects and brings a STEP node into view on the canvas — kept separate from process navigation (breadcrumb/onNavigateToList/onNavigateToAncestor above), which moves between processes, not steps within one. */
-  onSelectStep?: (stepId: string) => void
+  /** The current process's nodes for the node selector: STEPs in canvas order, then CONDITIONs. */
+  nodeOptions?: NodeSelectorOption[]
+  /** The selected node's id (null when nothing, or an edge, is selected). */
+  currentNodeId?: string | null
+  /** Selects a node on the canvas and opens its properties — kept separate from process navigation (the breadcrumb), which moves between processes. */
+  onSelectNode?: (nodeId: string) => void
 }
 
-const btnStyle = (extra: CSSProperties = {}): CSSProperties => ({
-  padding: '8px 12px',
-  borderRadius: 8,
-  border: '1px solid var(--flow-border)',
-  background: 'var(--flow-surface)',
-  color: 'var(--flow-text-muted)',
-  fontSize: 12,
-  fontWeight: 600,
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  gap: 6,
-  ...extra,
-})
+const STATUS_COLORS = { success: 'var(--flow-success)', info: 'var(--flow-magic)', error: 'var(--flow-danger)' } as const
 
+/**
+ * The Process Editor's top bar, grouped by what the user is doing:
+ * - left — context only: Back, then Recipe / Process / Node (the node selector);
+ * - right — canvas controls (Auto Arrange, Fit, Zoom, Undo/Redo), then output: ✨ AI, Preview,
+ *   Export, and finally the save status with Save as the one high-emphasis action.
+ * Secondary labels collapse to icons as the bar narrows (container queries on the bar's own width,
+ * since the editor shares the window with panels), keeping tooltips and accessible names.
+ */
 export default function RecipeProcessTopBar({
+  recipeName,
   name,
   processType,
   breadcrumbAncestors,
@@ -81,178 +91,184 @@ export default function RecipeProcessTopBar({
   onZoomIn,
   onZoomOut,
   onFitView,
-  onVisualize,
+  onAutoArrange,
+  canAutoArrange = false,
+  onPreview,
   onExport,
   onGenerateVisuals,
   isGeneratingVisuals = false,
   visualsProgressLabel,
   generateVisualsStatus,
+  aiActions,
   onAddStep,
   onAddCondition,
-  steps = [],
-  currentStepId,
-  onSelectStep,
+  nodeOptions = [],
+  currentNodeId,
+  onSelectNode,
 }: RecipeProcessTopBarProps) {
-  // Refetch the credit balance whenever a background AI job finishes (it charged or refunded credits).
-  const jobsFinishedSignal = useJobsFinishedSignal()
   const isSaving = saveState.status === 'saving'
+  const steps = nodeOptions.filter((option) => option.kind === 'STEP')
+  const conditions = nodeOptions.filter((option) => option.kind === 'CONDITION')
+  const currentNode = nodeOptions.find((option) => option.id === currentNodeId) ?? null
+
+  const nodeSelector = onSelectNode && (
+    <span className="recipe-node-selector">
+      <select
+        value={currentNode?.id ?? ''}
+        onChange={(event) => {
+          if (event.target.value) onSelectNode(event.target.value)
+        }}
+        disabled={nodeOptions.length === 0}
+        aria-label="Selected node"
+        title={currentNode ? `Selected node: ${currentNode.label} — choose another node to select it` : 'Choose a node to select it on the canvas'}
+        className={currentNode ? 'has-value' : undefined}
+      >
+        {/* Placeholder only — once a node is selected, the select shows that node's label instead. */}
+        <option value="" disabled>{nodeOptions.length === 0 ? 'No nodes yet' : 'Node: Select'}</option>
+        {steps.length > 0 && (
+          <optgroup label="Steps">
+            {steps.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </optgroup>
+        )}
+        {conditions.length > 0 && (
+          <optgroup label="Conditions">
+            {conditions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </optgroup>
+        )}
+      </select>
+      <span aria-hidden className="recipe-topbar-caret">▾</span>
+    </span>
+  )
 
   return (
-    <div className="flex h-[3.75rem] flex-shrink-0 items-center justify-between border-b border-[var(--flow-border)] bg-[var(--flow-surface)] px-4">
-      <div className="flex items-center gap-2.5" style={{ minWidth: 0 }}>
-        {onBack && (
-          <button onClick={onBack} style={{ ...btnStyle(), padding: '8px 10px' }} title="Back to the parent process">
-            ← Back
-          </button>
-        )}
-        <RecipeProcessBreadcrumb
-          ancestors={breadcrumbAncestors}
-          currentName={name || 'Untitled Process'}
-          onNavigateToList={onNavigateToList}
-          onNavigateToAncestor={onNavigateToAncestor}
-        />
-        <span
-          style={{
-            fontSize: 10,
-            fontWeight: 700,
-            padding: '2px 8px',
-            borderRadius: 999,
-            background: processType === 'MAIN' ? '#f0fdf4' : '#eef2ff',
-            border: `1px solid ${processType === 'MAIN' ? '#86efac' : '#c7d2fe'}`,
-            color: processType === 'MAIN' ? '#166534' : '#4338ca',
-          }}
-        >
-          {processType}
-        </span>
+    <div className="recipe-topbar @container">
+      <div className="recipe-topbar-inner">
+        {/* Left: where am I? */}
+        <div className="recipe-topbar-context">
+          {onBack && (
+            <button type="button" onClick={onBack} className="recipe-topbar-button" title="Back to the parent process">
+              ← <span className="hidden @3xl:inline">Back</span>
+            </button>
+          )}
+          <RecipeProcessBreadcrumb
+            recipeName={recipeName}
+            ancestors={breadcrumbAncestors}
+            currentName={name || 'Untitled Process'}
+            processType={processType}
+            onNavigateToList={onNavigateToList}
+            onNavigateToAncestor={onNavigateToAncestor}
+            trailing={nodeSelector}
+          />
+        </div>
 
-        {(onAddStep || onAddCondition) && (
-          <div className="flex items-center gap-1.5 border-l border-[var(--flow-border)] pl-2.5" style={{ flexShrink: 0 }}>
-            {onAddStep && (
+        {/* Right: canvas controls, then AI / output, then save. */}
+        <div className="recipe-topbar-actions">
+          <div className="recipe-topbar-group" role="toolbar" aria-label="Canvas controls">
+            {(onAddStep || onAddCondition) && (
+              <AddNodeMenu
+                onAddStep={onAddStep}
+                onAddCondition={onAddCondition}
+                placement="bottom-start"
+                buttonClassName="recipe-topbar-button"
+                label={<>+ <span className="hidden @4xl:inline">Add</span></>}
+              />
+            )}
+
+            {onAutoArrange && (
               <button
-                onClick={onAddStep}
-                style={btnStyle({ padding: '6px 9px', fontSize: 11.5, background: '#f0f9ff', borderColor: '#bae6fd', color: '#0369a1' })}
-                title="Add a step node"
+                type="button"
+                onClick={onAutoArrange}
+                disabled={!canAutoArrange}
+                className="recipe-topbar-button"
+                aria-label="Auto Arrange"
+                title="Auto Arrange: lay the flow out in rows (Undo restores your layout)"
               >
-                + Step
+                ⇅ <span className="hidden @6xl:inline">Auto Arrange</span>
               </button>
             )}
-            {onAddCondition && (
-              <button
-                onClick={onAddCondition}
-                style={btnStyle({ padding: '6px 9px', fontSize: 11.5, background: '#ecfdf5', borderColor: '#a7f3d0', color: '#047857' })}
-                title="Add a condition node"
-              >
-                + Condition
+
+            {onFitView && (
+              <button type="button" onClick={onFitView} className="recipe-topbar-button" aria-label="Fit to view" title="Fit: show the whole flow">
+                ⛶ <span className="hidden @7xl:inline">Fit</span>
+              </button>
+            )}
+
+            {zoomPercent != null && onZoomIn && onZoomOut && (
+              // Zoom is also on the canvas's own controls (bottom left), so it can step aside on narrow bars.
+              <div className="recipe-topbar-zoom hidden @4xl:flex" role="group" aria-label="Zoom">
+                <button type="button" onClick={onZoomOut} aria-label="Zoom out" title="Zoom out">−</button>
+                <span aria-live="polite">{zoomPercent}%</span>
+                <button type="button" onClick={onZoomIn} aria-label="Zoom in" title="Zoom in">+</button>
+              </div>
+            )}
+
+            {onUndo && onRedo && (
+              <>
+                <button type="button" onClick={onUndo} disabled={!canUndo} className="recipe-topbar-button" aria-label="Undo" title="Undo (Ctrl+Z)">↩</button>
+                <button type="button" onClick={onRedo} disabled={!canRedo} className="recipe-topbar-button" aria-label="Redo" title="Redo (Ctrl+Y)">↪</button>
+              </>
+            )}
+
+            {onDeleteSelected && (
+              <button type="button" onClick={onDeleteSelected} className="recipe-topbar-button is-danger" aria-label="Delete selected" title="Delete the selected node or connection (Delete)">
+                🗑
               </button>
             )}
           </div>
-        )}
 
-        {onSelectStep && (
-          <select
-            value={currentStepId ?? ''}
-            onChange={(event) => {
-              if (event.target.value) onSelectStep(event.target.value)
-            }}
-            disabled={steps.length === 0}
-            title="Select a step to view/edit"
-            style={{
-              flexShrink: 1, minWidth: 0, maxWidth: 200, padding: '6px 8px', borderRadius: 8,
-              border: '1px solid var(--flow-border)', background: 'var(--flow-surface)',
-              color: 'var(--flow-text-muted)', fontSize: 11.5, fontWeight: 600,
-              cursor: steps.length === 0 ? 'default' : 'pointer', opacity: steps.length === 0 ? 0.6 : 1,
-            }}
-          >
-            {/* Placeholder only — once a step is selected, the select's own value shows that
-                step's label instead (native <select> behavior), matching "show the selected node". */}
-            <option value="" disabled>Select node</option>
-            {steps.map((step) => (
-              <option key={step.id} value={step.id}>{step.label}</option>
-            ))}
-          </select>
-        )}
+          <span className="recipe-topbar-divider" aria-hidden />
 
-        <RecipeSaveStatus saveState={saveState} onResolveConflict={onResolveConflict} />
-        {generateVisualsStatus && (
-          <span style={{ fontSize: 11, fontWeight: 600, color: generateVisualsStatus.type === 'success' ? 'var(--flow-success)' : generateVisualsStatus.type === 'info' ? 'var(--flow-magic)' : '#dc2626' }}>
-            {generateVisualsStatus.text}
-          </span>
-        )}
-      </div>
+          <div className="recipe-topbar-group">
+            {generateVisualsStatus && (
+              <span
+                className="recipe-topbar-status hidden @6xl:inline"
+                role="status"
+                title={generateVisualsStatus.text}
+                style={{ color: STATUS_COLORS[generateVisualsStatus.type] }}
+              >
+                {generateVisualsStatus.text}
+              </span>
+            )}
+            <AiActionsMenu
+              recipeActions={aiActions}
+              onGenerateVisuals={onGenerateVisuals}
+              isGeneratingVisuals={isGeneratingVisuals}
+              visualsProgressLabel={visualsProgressLabel}
+              generateVisualsStatus={generateVisualsStatus}
+            />
 
-      <div className="flex items-center gap-2">
-        <AiCreditBadge refreshSignal={jobsFinishedSignal} />
+            {onPreview && (
+              <button type="button" onClick={onPreview} className="recipe-topbar-button" aria-label="Preview" title="Preview: play this process as a slideshow with its visuals and narration">
+                ▶ <span className="hidden @3xl:inline">Preview</span>
+              </button>
+            )}
 
-        {onFitView && (
-          <button onClick={onFitView} style={btnStyle({ padding: '8px 10px' })} title="Fit view">
-            ⛶
-          </button>
-        )}
-
-        {zoomPercent != null && onZoomIn && onZoomOut && (
-          <div className="flex items-center gap-1 rounded-lg border border-[var(--flow-border)] bg-[var(--flow-surface)] px-1 py-1">
-            <button onClick={onZoomOut} style={{ border: 'none', background: 'transparent', padding: '4px 8px', fontSize: 13, fontWeight: 700, cursor: 'pointer', color: 'var(--flow-text-muted)' }} title="Zoom out">−</button>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--flow-text-muted)', minWidth: 38, textAlign: 'center' }}>{zoomPercent}%</span>
-            <button onClick={onZoomIn} style={{ border: 'none', background: 'transparent', padding: '4px 8px', fontSize: 13, fontWeight: 700, cursor: 'pointer', color: 'var(--flow-text-muted)' }} title="Zoom in">+</button>
+            {onExport && (
+              <button type="button" onClick={onExport} className="recipe-topbar-button" aria-label="Export" title="Export this process as JSON">
+                ⤓ <span className="hidden @6xl:inline">Export</span>
+              </button>
+            )}
           </div>
-        )}
 
-        {onUndo && onRedo && (
-          <>
-            <button onClick={onUndo} disabled={!canUndo} style={btnStyle({ padding: '8px 10px', opacity: canUndo ? 1 : 0.5, cursor: canUndo ? 'pointer' : 'default' })} title="Undo">↩</button>
-            <button onClick={onRedo} disabled={!canRedo} style={btnStyle({ padding: '8px 10px', opacity: canRedo ? 1 : 0.5, cursor: canRedo ? 'pointer' : 'default' })} title="Redo">↪</button>
-          </>
-        )}
+          <span className="recipe-topbar-divider" aria-hidden />
 
-        {onDeleteSelected && (
-          <button onClick={onDeleteSelected} style={btnStyle({ padding: '8px 10px', color: '#dc2626', borderColor: '#fda4af' })} title="Delete selected node">
-            🗑
-          </button>
-        )}
-
-        {onGenerateVisuals && (
-          <button
-            onClick={onGenerateVisuals}
-            disabled={isGeneratingVisuals}
-            style={btnStyle({
-              background: 'var(--flow-magic-soft)',
-              borderColor: 'var(--flow-magic-border)',
-              color: 'var(--flow-magic)',
-              opacity: isGeneratingVisuals ? 0.7 : 1,
-              cursor: isGeneratingVisuals ? 'wait' : 'pointer',
-            })}
-            title={isGeneratingVisuals ? 'Visuals are being generated for this process' : 'Generate an AI image for every step of this process'}
-          >
-            {isGeneratingVisuals ? (visualsProgressLabel ?? 'Generating…') : '🖼️ Generate Visuals'}
-          </button>
-        )}
-
-        {onVisualize && (
-          <button onClick={onVisualize} style={btnStyle({ background: 'var(--flow-info-soft)', borderColor: 'var(--flow-info-border)', color: 'var(--flow-info)' })}>
-            🎬 Visualize
-          </button>
-        )}
-
-        {onExport && (
-          <button onClick={onExport} style={btnStyle({ background: 'var(--flow-success-soft)', borderColor: 'var(--flow-success-border)', color: 'var(--flow-success)' })}>
-            📤 Export
-          </button>
-        )}
-
-        <button
-          onClick={onSave}
-          disabled={isSaving}
-          title="Changes are saved automatically — this saves everything right now"
-          style={btnStyle({
-            background: 'var(--flow-accent)',
-            color: 'white',
-            border: '1px solid var(--flow-accent)',
-            opacity: isSaving ? 0.7 : 1,
-            cursor: isSaving ? 'wait' : 'pointer',
-          })}
-        >
-          {isSaving ? 'Saving…' : '💾 Save'}
-        </button>
+          <div className="recipe-topbar-save">
+            {/* A fixed slot, so Saving… / Saved / Unsaved changes never shift the rest of the bar;
+                only a conflict (which needs its buttons) takes the room it needs. */}
+            <span className={`recipe-topbar-save-status${saveState.status === 'conflict' ? ' is-conflict' : ''}`}>
+              <RecipeSaveStatus saveState={saveState} onResolveConflict={onResolveConflict} />
+            </span>
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={isSaving}
+              title="Changes are saved automatically — this saves everything right now"
+              className="recipe-topbar-button is-primary"
+            >
+              {isSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

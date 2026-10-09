@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import '../../styles/recipe-tool.css'
 import '../styles/recipe-process.css'
@@ -6,6 +6,8 @@ import type { NutritionInfo, RecipeDetail } from '../../../../types/recipe'
 import { useRecipeSession } from '../../context/RecipeSessionContext'
 import { recipeToolPath } from '../../recipeToolRoutes'
 import { buildRecipePresentation } from '../model/recipePresentation'
+import { buildCookModeSlides } from '../model/cookModeSlides'
+import RecipeVisualizationSlideshow from '../../process/components/RecipeVisualizationSlideshow'
 import RecipeHero from './RecipeHero'
 import RecipeIngredientsList from './RecipeIngredientsList'
 import RecipeNutritionPanel from './RecipeNutritionPanel'
@@ -38,6 +40,14 @@ export default function RecipeProcessPage({ recipe, isOwner, onNutritionSaved }:
     () => (session && !session.loading ? buildRecipePresentation(session.getProcesses()) : null),
     [session],
   )
+
+  // Cook mode: the whole recipe, one step at a time, narrated. Narration is generated from the
+  // *saved* steps, so the owner's pending edits are saved first (as the editor's Preview does).
+  const [cookMode, setCookMode] = useState<{ ready: Promise<boolean> } | null>(null)
+  const openCookMode = () => {
+    const ready = isOwner && session ? session.saveNow().then((result) => result.ok, () => false) : Promise.resolve(true)
+    setCookMode({ ready })
+  }
 
   if (session?.loadError) {
     return <div className="rp-page"><div className="rp-state">{session.loadError}</div></div>
@@ -88,6 +98,11 @@ export default function RecipeProcessPage({ recipe, isOwner, onNutritionSaved }:
               <span className="rp-section-title-icon" aria-hidden>👩‍🍳</span>
               Recipe Steps
             </h2>
+            {hasSteps && (
+              <button type="button" className="rp-button" onClick={openCookMode} title="Follow the recipe one step at a time, with narration">
+                <span aria-hidden>▶</span> Cook mode
+              </button>
+            )}
           </div>
           {hasSteps ? (
             <RecipeStepsTimeline sections={presentation.sections} />
@@ -117,6 +132,17 @@ export default function RecipeProcessPage({ recipe, isOwner, onNutritionSaved }:
           />
         </section>
       </div>
+
+      {cookMode && (
+        <RecipeVisualizationSlideshow
+          steps={buildCookModeSlides(presentation.sections)}
+          recipeId={recipe.id}
+          processId={null}
+          narrationReady={cookMode.ready}
+          heading="👩‍🍳 Cook mode"
+          onClose={() => setCookMode(null)}
+        />
+      )}
     </div>
   )
 }

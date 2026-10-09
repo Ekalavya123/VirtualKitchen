@@ -3,6 +3,7 @@ import { httpStatusOf } from '../../../../api/client'
 import { StepNarrationApi } from '../../../../api/narrationApi'
 import { createHtmlNarrationAudio } from './narrationAudio'
 import { NarrationPlayer, PLAYBACK_RATES, type NarrationPlayerState, type NarrationSource, type PlayerStep } from './narrationPlayer'
+import type { StepNarration } from '../../../../types/narration'
 
 const PREFS_KEY = 'recipeTool.narration.prefs.v1'
 
@@ -47,10 +48,60 @@ const describeRequestError = (error: unknown): Error => {
   return new Error(message, { cause: error })
 }
 
+/** A recipe-wide step id: the step's process and its node id, as `${processId}:${nodeId}`. */
+export const recipeStepId = (processId: number, nodeId: string) => `${processId}:${nodeId}`
+
+const splitRecipeStepId = (id: string) => {
+  const separator = id.indexOf(':')
+  return { processId: Number(id.slice(0, separator)), stepId: id.slice(separator + 1) }
+}
+
+const silentNarration = (stepId: string): StepNarration => ({ stepId, status: 'NOT_GENERATED', narratable: false })
+
+/**
+ * Narration across every process of a recipe (Cook mode): step ids are recipe-wide
+ * ({@link recipeStepId}), and each request goes to that step's own process. Steps in `silent`
+ * (e.g. checks) are never narrated; a process that isn't saved yet (a temporary negative id) has
+ * no narration to fetch. The processes are the ones the walkthrough opened with (it mounts per opening).
+ */
+const recipeWideSource = (
+  recipeId: number,
+  gate: Promise<boolean>,
+  steps: PlayerStep[],
+  silent: ReadonlySet<string>,
+): NarrationSource => {
+  const processIds = [...new Set(steps.map((step) => splitRecipeStepId(step.id).processId))].filter((id) => id > 0)
+  return {
+    list: async () => {
+      await gate
+      const perProcess = await Promise.all(processIds.map(async (processId) =>
+        (await StepNarrationApi.list(recipeId, processId)).map((narration) => ({ ...narration, stepId: recipeStepId(processId, narration.stepId) }))))
+      return [...perProcess.flat().filter((narration) => !silent.has(narration.stepId)), ...[...silent].map(silentNarration)]
+    },
+    ensure: async (id, force) => {
+      if (silent.has(id)) return silentNarration(id)
+      await gate
+      const { processId, stepId } = splitRecipeStepId(id)
+      if (!(processId > 0)) throw new Error('this part of the recipe is not saved yet')
+      try {
+        return { ...(await StepNarrationApi.ensure(recipeId, processId, stepId, force)), stepId: id }
+      } catch (error) {
+        throw describeRequestError(error)
+      }
+    },
+  }
+}
+
 export type UseNarrationPlayerOptions = {
   recipeId: number
-  processId: number
+  /**
+   * The process whose steps are narrated, or null for a recipe-wide walkthrough (Cook mode), whose
+   * step ids are then {@link recipeStepId}s spanning several processes.
+   */
+  processId: number | null
   steps: PlayerStep[]
+  /** Steps that are never narrated (recipe-wide mode only), e.g. checks. */
+  silentStepIds?: readonly string[]
   /**
    * Resolves once the editor's pending changes are saved (true) or could not be (false). Narration
    * is generated from the *saved* step text, so nothing is requested from the backend before this
@@ -72,26 +123,28 @@ export type UseNarrationPlayerResult = {
  * One NarrationPlayer for the lifetime of the calling component (the slideshow mounts per opening,
  * and the canvas around it remounts per process, so the ids never change underneath it).
  */
-export function useNarrationPlayer({ recipeId, processId, steps, ready }: UseNarrationPlayerOptions): UseNarrationPlayerResult {
-  const unavailable = !(recipeId > 0 && processId > 0)
+export function useNarrationPlayer({ recipeId, processId, steps, silentStepIds, ready }: UseNarrationPlayerOptions): UseNarrationPlayerResult {
+  const unavailable = !(recipeId > 0 && (processId == null || processId > 0))
   const [{ player, gate }] = useState(() => {
     const gate = (ready ?? Promise.resolve(true)).catch(() => false)
     const source: NarrationSource | null = unavailable
       ? null
-      : {
-          list: async () => {
-            await gate
-            return StepNarrationApi.list(recipeId, processId)
-          },
-          ensure: async (stepId, force) => {
-            await gate
-            try {
-              return await StepNarrationApi.ensure(recipeId, processId, stepId, force)
-            } catch (error) {
-              throw describeRequestError(error)
-            }
-          },
-        }
+      : processId == null
+        ? recipeWideSource(recipeId, gate, steps, new Set(silentStepIds))
+        : {
+            list: async () => {
+              await gate
+              return StepNarrationApi.list(recipeId, processId)
+            },
+            ensure: async (stepId, force) => {
+              await gate
+              try {
+                return await StepNarrationApi.ensure(recipeId, processId, stepId, force)
+              } catch (error) {
+                throw describeRequestError(error)
+              }
+            },
+          }
     return {
       gate,
       player: new NarrationPlayer({ steps, source, audio: createHtmlNarrationAudio(), initial: loadPrefs() }),
