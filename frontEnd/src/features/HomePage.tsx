@@ -1,6 +1,7 @@
 import './HomePage.css'
 import chefLogo from '../assets/kitchen/blackShadowChef.png'
 import { isAuthenticated } from '../shared/auth/session'
+import { useTheme } from '../shared/theme/ThemeProvider'
 
 type Props = {
   onTryIt?: () => void
@@ -9,6 +10,7 @@ type Props = {
 
 export default function HomePage({ onTryIt, onLogin }: Props) {
   const hideLogin = isAuthenticated()
+  const { theme, toggleTheme } = useTheme()
   return (
     <div className="home-page">
       <header className="home-nav">
@@ -24,6 +26,15 @@ export default function HomePage({ onTryIt, onLogin }: Props) {
           <a href="#vision">Our vision</a>
         </nav>
         <div className="nav-actions">
+          <button
+            type="button"
+            className="home-theme-toggle"
+            onClick={toggleTheme}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           {!hideLogin && (
             <button className="login-btn" onClick={onLogin}>Log in</button>
           )}

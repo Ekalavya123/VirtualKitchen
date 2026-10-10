@@ -3,6 +3,8 @@ import type { ProcessGenerationMode } from '../../../../types/recipe'
 import '../styles/RecipeProcessCanvas.css'
 import { useDraft } from '../../../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
+import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
+import { useConfirmDiscard } from '../../components/useConfirmDiscard'
 
 /** A finished AI edit waiting for the user's review — either a list of changes or a question back. */
 export type PendingProcessEdit = {
@@ -86,6 +88,7 @@ export default function RecipeProcessGenerationModal({
   const [chosenMode, setChosenMode] = useState<ProcessGenerationMode>(editTargetName ? 'EDIT' : 'CREATE')
   const { value: text, setValue: setText, clear: clearText, restored } = useDraft(draftKey, '')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const confirmDiscard = useConfirmDiscard()
 
   const mode: ProcessGenerationMode = !allowCreate || pendingEdit
     ? 'EDIT'
@@ -172,7 +175,7 @@ export default function RecipeProcessGenerationModal({
                 </div>
               )}
 
-              {restored && text.trim() && !isGenerating && <DraftRestoredNote onDiscard={clearText} />}
+              {restored && text.trim() && !isGenerating && <DraftRestoredNote onDiscard={() => void confirmDiscard(editing ? 'change description' : 'recipe text', clearText)} />}
               <textarea
                 value={text}
                 onChange={(event) => setText(event.target.value)}
@@ -226,6 +229,19 @@ function PendingEditReview({ pendingEdit, onApply, onDiscard, onSwitchToCreate }
   onDiscard: () => void
   onSwitchToCreate: () => void
 }) {
+  const confirm = useConfirm()
+  // Discarding the reviewed changes throws away the AI's work (nothing was applied yet); a question
+  // back from the AI ("Rephrase") has nothing to lose, so only this asks first.
+  const handleDiscard = async () => {
+    const count = pendingEdit.changes.length
+    if (await confirm({
+      eyebrow: 'Discard AI changes',
+      title: 'Discard the suggested changes?',
+      message: `The ${count > 0 ? `${count} ` : ''}change${count === 1 ? '' : 's'} the AI suggested will be thrown away without being applied. Your flow stays as it is; to get them back you'd have to ask the AI again.`,
+      confirmLabel: 'Discard',
+    })) onDiscard()
+  }
+
   if (pendingEdit.clarification) {
     return (
       <>
@@ -254,7 +270,7 @@ function PendingEditReview({ pendingEdit, onApply, onDiscard, onSwitchToCreate }
       </div>
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="button" onClick={onApply} style={primaryButton(false)}>Apply changes</button>
-        <button type="button" onClick={onDiscard} style={secondaryButton}>Discard</button>
+        <button type="button" onClick={() => void handleDiscard()} style={secondaryButton}>Discard</button>
       </div>
     </>
   )

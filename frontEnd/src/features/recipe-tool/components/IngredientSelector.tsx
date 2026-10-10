@@ -4,11 +4,12 @@ import '../process/styles/RecipePropertiesPanel.css'
 import SearchableSelect, { type SearchableSelectOption } from '../../../shared/components/SearchableSelect'
 import {
   CUSTOM_INGREDIENT_ID,
-  INGREDIENTS_BY_CATEGORY,
-  INGREDIENT_CATEGORY_ORDER,
   getIngredientCategoryLabel,
+  getIngredientCategoryOrder,
   getIngredientDefaultUnit,
+  getIngredientsByCategory,
   isIngredientId,
+  useIngredientCatalog,
   type IngredientId,
 } from '../catalog/ingredientCatalog'
 import { CUSTOM_PREPARATION_STYLE_ID, DEFAULT_PREPARATION_STYLE_ID } from '../catalog/preparationStyleCatalog'
@@ -19,17 +20,27 @@ import type { ActionOnIngredient } from '../process/model/recipeStepData'
 import { PreparationStyleSelect, UnitSelect } from './StepFieldInputs'
 import { useDraft } from '../../../shared/drafts/useDraft'
 
-// Built once: the full global catalog, grouped by category, searchable by aliases — never
-// restricted to what the Kitchen inventory currently holds.
-const ALL_INGREDIENT_OPTIONS: SearchableSelectOption[] = INGREDIENT_CATEGORY_ORDER.flatMap((category) =>
-  INGREDIENTS_BY_CATEGORY[category].map((item) => ({
-    value: item.id,
-    label: item.name,
-    icon: item.icon,
-    category: getIngredientCategoryLabel(category),
-    keywords: item.aliases,
-  }))
-)
+// The full global catalog (the database's ingredients), grouped by category, searchable by
+// aliases — never restricted to what the Kitchen inventory currently holds.
+// Built once per catalog version (the catalog only changes when it's reloaded).
+let cachedOptions: { version: number; options: SearchableSelectOption[] } | null = null
+
+const getIngredientOptions = (catalogVersion: number): SearchableSelectOption[] => {
+  if (cachedOptions?.version !== catalogVersion) {
+    const byCategory = getIngredientsByCategory()
+    const options = getIngredientCategoryOrder().flatMap((category) =>
+      (byCategory[category] ?? []).map((item) => ({
+        value: item.id,
+        label: item.name,
+        icon: item.icon,
+        category: getIngredientCategoryLabel(category),
+        keywords: item.aliases,
+      }))
+    )
+    cachedOptions = { version: catalogVersion, options }
+  }
+  return cachedOptions.options
+}
 
 type IngredientSelectorProps = {
   /** Ingredient ids already on this step, excluded from the picker so the same ingredient isn't added twice (custom ingredients excepted). */
@@ -39,13 +50,19 @@ type IngredientSelectorProps = {
   onAdd: (ingredient: ActionOnIngredient) => void
   /** Where the half-filled row is kept until the ingredient is added (see shared/drafts); null keeps nothing. */
   draftKey?: string | null
+  /**
+   * Edit mode: the existing Action On entry to start from. `onAdd` then receives the edited entry
+   * (Save), and `onCancel` closes the editor without changing anything. Nothing is kept as a draft.
+   */
+  editing?: ActionOnIngredient
+  onCancel?: () => void
 }
 
 type IngredientDraft = {
   ingredientIdValue: string
   customIngredientName: string
   quantity: string
-  unit: UnitId
+  unit: UnitId | ''
   notes: string
   preparationStyleId: string
   customPreparationStyle: string
@@ -61,17 +78,29 @@ const EMPTY_INGREDIENT_DRAFT: IngredientDraft = {
   customPreparationStyle: '',
 }
 
+/** The form filled in from an existing Action On entry (edit mode). */
+const draftFromEntry = (entry: ActionOnIngredient): IngredientDraft => ({
+  ingredientIdValue: entry.ingredientId,
+  customIngredientName: entry.customIngredientName ?? '',
+  quantity: entry.quantity != null ? String(entry.quantity) : '',
+  unit: entry.unit,
+  notes: entry.notes ?? '',
+  preparationStyleId: entry.preparationStyleId ?? '',
+  customPreparationStyle: entry.customPreparationStyle ?? '',
+})
+
 /**
  * Small "add an ingredient" row for a step's Action On: pick from the app's shared ingredient
  * catalog (catalog/ingredientCatalog.ts, the same list the AI generator uses) or name a custom
- * ingredient, then set this step's own quantity/unit/preparation for it.
+ * ingredient, then set this step's own quantity/unit/preparation for it. With `editing`, the same
+ * form edits an existing entry instead — same pickers, same validation.
  */
-export default function IngredientSelector({ excludeIngredientIds, action, onAdd, draftKey = null }: IngredientSelectorProps) {
+export default function IngredientSelector({ excludeIngredientIds, action, onAdd, draftKey = null, editing, onCancel }: IngredientSelectorProps) {
   const quantityRelevant = isStepFieldEnabled(action, 'quantity')
 
   // What's typed here is kept as a draft until the ingredient is added, so selecting another step
-  // or leaving the recipe and coming back doesn't lose it.
-  const draft = useDraft<IngredientDraft>(draftKey, EMPTY_INGREDIENT_DRAFT)
+  // or leaving the recipe and coming back doesn't lose it. Editing an entry keeps no draft.
+  const draft = useDraft<IngredientDraft>(editing ? null : draftKey, editing ? draftFromEntry(editing) : EMPTY_INGREDIENT_DRAFT)
   const { ingredientIdValue, customIngredientName, quantity, unit, notes, preparationStyleId, customPreparationStyle } = draft.value
   const field = <K extends keyof IngredientDraft>(key: K) => (value: IngredientDraft[K]) =>
     draft.setValue((current) => ({ ...current, [key]: value }))
@@ -83,7 +112,7 @@ export default function IngredientSelector({ excludeIngredientIds, action, onAdd
   const setCustomPreparationStyle = field('customPreparationStyle')
   const [error, setError] = useState<string | null>(null)
 
-  const options = ALL_INGREDIENT_OPTIONS.filter((option) => option.value === CUSTOM_INGREDIENT_ID || !excludeIngredientIds.includes(option.value))
+  const options = getIngredientOptions(useIngredientCatalog()).filter((option) => option.value === CUSTOM_INGREDIENT_ID || !excludeIngredientIds.includes(option.value))
   const selectedIngredientId: IngredientId | '' = isIngredientId(ingredientIdValue) ? ingredientIdValue : ''
   const unitQuantifiable = isQuantifiableUnit(unit)
 
@@ -136,11 +165,15 @@ export default function IngredientSelector({ excludeIngredientIds, action, onAdd
       preparationStyleId: preparationRelevant ? preparationStyleId : '',
       customPreparationStyle: preparationRelevant && preparationStyleId === CUSTOM_PREPARATION_STYLE_ID ? customPreparationStyle.trim() : undefined,
     })
-    reset()
+    // The edit form closes once saved (the caller unmounts it), so there's nothing to reset.
+    if (!editing) reset()
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border p-3" style={{ border: '1px solid var(--flow-border)', background: 'var(--flow-surface-muted)' }}>
+    <div
+      className="flex flex-col gap-2 rounded-xl border p-3"
+      style={{ border: `1px solid ${editing ? 'var(--flow-accent)' : 'var(--flow-border)'}`, background: editing ? 'var(--flow-surface)' : 'var(--flow-surface-muted)' }}
+    >
       <div className="flex flex-wrap items-end gap-2">
         <div style={{ minWidth: 200, flex: 1 }}>
           <label className="flow-properties-label">Ingredient</label>
@@ -202,13 +235,24 @@ export default function IngredientSelector({ excludeIngredientIds, action, onAdd
 
       {error && <div style={{ fontSize: 12, color: '#dc2626', fontWeight: 600 }}>{error}</div>}
 
-      <button
-        type="button"
-        onClick={handleAdd}
-        style={{ alignSelf: 'flex-start', padding: '6px 14px', borderRadius: 8, border: '1px solid var(--flow-accent)', background: 'var(--flow-accent)', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
-      >
-        + Add Ingredient
-      </button>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={handleAdd}
+          style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--flow-accent)', background: 'var(--flow-accent)', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+        >
+          {editing ? 'Save' : '+ Add Ingredient'}
+        </button>
+        {editing && onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text-muted)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+          >
+            Cancel
+          </button>
+        )}
+      </div>
     </div>
   )
 }

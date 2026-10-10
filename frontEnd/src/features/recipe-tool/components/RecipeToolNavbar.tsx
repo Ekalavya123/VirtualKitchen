@@ -13,6 +13,10 @@ const TABS: { id: RecipeToolView; label: string; icon: string }[] = [
 type RecipeToolNavbarProps = {
   recipe: RecipeDetail
   onBack: () => void
+  /** Owners only: "Order Recipe" starts a recipe order (of the last saved version) and opens it. */
+  onOrderRecipe?: () => void
+  /** The order is being created. */
+  ordering?: boolean
 }
 
 /**
@@ -25,7 +29,7 @@ type RecipeToolNavbarProps = {
  * ingredients have one), so the compact metadata uses a plain icon rather
  * than fabricating a thumbnail.
  */
-export default function RecipeToolNavbar({ recipe, onBack }: RecipeToolNavbarProps) {
+export default function RecipeToolNavbar({ recipe, onBack, onOrderRecipe, ordering = false }: RecipeToolNavbarProps) {
   const [showDetails, setShowDetails] = useState(false)
 
   return (
@@ -107,6 +111,26 @@ export default function RecipeToolNavbar({ recipe, onBack }: RecipeToolNavbarPro
             <span className="sm:hidden" aria-label={tab.label}>{tab.icon}</span>
           </NavLink>
         ))}
+      </div>
+
+      <div className="flex min-w-0 items-center justify-end">
+        {onOrderRecipe && (
+          <button
+            type="button"
+            onClick={onOrderRecipe}
+            disabled={ordering}
+            aria-label={ordering ? 'Starting recipe order' : 'Order Recipe'}
+            title="Order this recipe from your kitchen — uses the last saved version (simulated preparation and delivery)"
+            style={{
+              padding: '8px 12px', borderRadius: 8, border: 0, flexShrink: 0, whiteSpace: 'nowrap',
+              background: 'linear-gradient(135deg, var(--flow-accent), var(--flow-accent-secondary))',
+              color: 'white', fontSize: 12, fontWeight: 700, cursor: ordering ? 'progress' : 'pointer', opacity: ordering ? 0.7 : 1,
+            }}
+          >
+            <span aria-hidden>🛒</span>
+            <span className="hidden md:inline"> {ordering ? 'Starting…' : 'Order Recipe'}</span>
+          </button>
+        )}
       </div>
 
       {showDetails && (

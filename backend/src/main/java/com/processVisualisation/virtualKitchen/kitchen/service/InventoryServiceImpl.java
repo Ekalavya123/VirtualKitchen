@@ -10,12 +10,20 @@ import com.processVisualisation.virtualKitchen.store.repository.IngredientReposi
 import com.processVisualisation.virtualKitchen.store.repository.EquipmentRepository;
 import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
 
+import com.processVisualisation.virtualKitchen.store.model.Ingredient;
+import com.processVisualisation.virtualKitchen.store.units.UnitConversionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.mongodb.core.FindAndModifyOptions;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static org.springframework.data.mongodb.core.query.Criteria.where;
 
 /**
  * Default implementation of {@link IInventoryService}.
@@ -24,7 +32,8 @@ import java.util.stream.Collectors;
  * adding or updating stock, kitchen-scoped matches are preferred over
  * user-scoped matches; if no existing record is found a new one is created
  * with an id generated via {@link SequenceGeneratorService}, otherwise the
- * existing record's quantity is incremented. Kitchen-scoped lookups are
+ * existing record's quantity is atomically incremented (after converting the
+ * added amount into the record's unit). Kitchen-scoped lookups are
  * enriched with the item's display name via the ingredient/equipment
  * repositories.
  */
@@ -46,24 +55,62 @@ public class InventoryServiceImpl implements IInventoryService {
     @Autowired
     private SequenceGeneratorService seq;
 
+    @Autowired
+    private MongoTemplate mongoTemplate;
+
+    @Autowired
+    private UnitConversionService unitConversionService;
+
     /**
      * Creates a new inventory record or increments the quantity of an
      * existing one. Kitchen-scoped inventory is looked up first when
      * {@code dto.getKitchenId()} is present; if no match is found (or no
      * kitchen id was supplied) the method falls back to a user-scoped lookup.
      * When no existing record matches, a new one is created with a generated
-     * id; otherwise the existing record's quantity is incremented by the
-     * requested amount. If an existing record has no kitchen id set but the
-     * request supplies one, it is backfilled onto the record. The record's
-     * {@code lastUpdated} timestamp is refreshed and the entity is persisted.
+     * id. Otherwise the requested amount is converted into the existing
+     * record's unit (500 GRAM added to a KG row adds 0.5) and applied with a
+     * single atomic {@code $inc}, so concurrent additions and recipe-order
+     * reservations on the same row are never lost. If an existing record has
+     * no kitchen id set but the request supplies one, it is backfilled.
      *
      * @param dto the item being added/updated, including its user/kitchen
      *            scope, item type/id, quantity and unit
      * @return the resulting inventory record's current state
+     * @throws com.processVisualisation.virtualKitchen.store.units.UnitConversionException
+     *         when the quantity cannot be converted into the existing record's unit
      */
     @Override
     public InventoryResponseDTO addOrUpdate(InventoryRequestDTO dto){
+        Inventory inv = findExisting(dto);
 
+        if (inv == null) {
+            inv = mapper.toEntity(dto);
+            inv.setId(seq.generateSequence(Inventory.SEQUENCE_NAME));
+            inv.setLastUpdated(LocalDateTime.now());
+            return mapper.toDTO(repo.save(inv));
+        }
+
+        double delta = quantityInRowUnit(dto, inv);
+        Update update = new Update().inc("quantity", delta).set("lastUpdated", LocalDateTime.now());
+        // If inventory existed but didn't have kitchenId set, and request provides it, persist it
+        if (inv.getKitchenId() == null && dto.getKitchenId() != null) {
+            update.set("kitchenId", dto.getKitchenId());
+        }
+        Inventory updated = mongoTemplate.findAndModify(
+                Query.query(where("_id").is(inv.getId())), update,
+                FindAndModifyOptions.options().returnNew(true), Inventory.class);
+        return mapper.toDTO(updated != null ? updated : inv);
+    }
+
+    @Override
+    public void validateAdd(InventoryRequestDTO dto) {
+        Inventory inv = findExisting(dto);
+        if (inv != null) {
+            quantityInRowUnit(dto, inv);
+        }
+    }
+
+    private Inventory findExisting(InventoryRequestDTO dto) {
         Inventory inv = null;
 
         // Prefer kitchen-scoped inventory when kitchenId is provided
@@ -79,22 +126,18 @@ public class InventoryServiceImpl implements IInventoryService {
                     dto.getUserId(), dto.getItemType(), dto.getItemId()
             ).orElse(null);
         }
+        return inv;
+    }
 
-        if(inv == null){
-            inv = mapper.toEntity(dto);
-            inv.setId(seq.generateSequence(Inventory.SEQUENCE_NAME));
-        } else {
-            inv.setQuantity(inv.getQuantity() + dto.getQuantity());
+    /** {@code dto}'s quantity expressed in {@code inv}'s unit. */
+    private double quantityInRowUnit(InventoryRequestDTO dto, Inventory inv) {
+        if (dto.getUnit() == null || inv.getUnit() == null || dto.getUnit() == inv.getUnit()) {
+            return dto.getQuantity();
         }
-
-        // If inventory existed but didn't have kitchenId set, and request provides it, persist it
-        if (inv.getKitchenId() == null && dto.getKitchenId() != null) {
-            inv.setKitchenId(dto.getKitchenId());
-        }
-
-        inv.setLastUpdated(LocalDateTime.now());
-
-        return mapper.toDTO(repo.save(inv));
+        Ingredient ingredient = dto.getItemType() == ItemType.INGREDIENT
+                ? ingredientRepository.findById(dto.getItemId()).orElse(null)
+                : null;
+        return unitConversionService.convert(dto.getQuantity(), dto.getUnit().name(), inv.getUnit(), ingredient).value();
     }
 
     /**

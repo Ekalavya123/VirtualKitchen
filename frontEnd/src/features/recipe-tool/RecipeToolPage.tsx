@@ -8,6 +8,7 @@ import RecipeToolNavbar from './components/RecipeToolNavbar'
 import RecipeEditorView from './process/components/RecipeEditorView'
 import RecipeProcessPage from './presentation/components/RecipeProcessPage'
 import { recipeToolPath, type RecipeToolView } from './recipeToolRoutes'
+import { useStartRecipeOrder } from '../recipe-order/useStartRecipeOrder'
 
 type RecipeToolPageProps = {
   recipeId: number
@@ -32,6 +33,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
   const [recipe, setRecipe] = useState<RecipeDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const { startOrder, orderingRecipeId } = useStartRecipeOrder()
   // The editor mounts on first visit and then stays mounted (hidden while reading the Recipe
   // Process), so switching tabs never loses its canvas state — undo history, selection, the open
   // process. Not mounted up front: React Flow shouldn't initialise inside a hidden container.
@@ -123,7 +125,12 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
           KitchenPage.css) so the editor's canvas can use the full available area edge-to-edge;
           the Recipe Process manages its own padding/scroll. */}
       <div className="flow-canvas-container flex h-full w-full flex-col" style={{ background: 'var(--flow-surface-muted)' }}>
-        <RecipeToolNavbar recipe={recipe} onBack={onBack} />
+        <RecipeToolNavbar
+          recipe={recipe}
+          onBack={onBack}
+          onOrderRecipe={isOwner ? () => void startOrder(recipe.id, recipe.nutrition?.servings) : undefined}
+          ordering={orderingRecipeId === recipe.id}
+        />
 
         {editorMounted && (
           <div className="min-h-0 flex-1" style={{ display: view === 'editor' ? 'flex' : 'none', flexDirection: 'column' }}>

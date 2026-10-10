@@ -265,11 +265,12 @@ public class RecipeProcessEditValidator {
                 errors.add(label + ".ingredientId is required");
                 return;
             }
-            GeneratedActionOnIngredientDTO current = presentIngredient(step, operation.ingredientId(), operation.target(), label, errors);
+            String ingredientId = normalizer.resolveIngredientId(operation.ingredientId());
+            GeneratedActionOnIngredientDTO current = presentIngredient(step, ingredientId, operation.target(), label, errors);
             if (current == null) return;
             step.getActionOn().getIngredients().remove(current);
             translated.add(ProcessEditOperationDTO.builder()
-                    .op("REMOVE_INGREDIENT").target(ref(operation.target())).ingredientId(operation.ingredientId()).build());
+                    .op("REMOVE_INGREDIENT").target(ref(operation.target())).ingredientId(ingredientId).build());
         }
 
         /** Without a target, replaces the ingredient in every step that uses it — emitted as one operation per step. */
@@ -280,18 +281,19 @@ public class RecipeProcessEditValidator {
                 return;
             }
             if (replacement == null) return;
+            String from = normalizer.resolveIngredientId(operation.from());
 
             List<String> targets = new ArrayList<>();
             if (!isBlank(operation.target())) {
                 GeneratedRecipeStepDTO step = existing(operation.target(), label + ".target", "STEP", errors);
-                if (step == null || presentIngredient(step, operation.from(), operation.target(), label, errors) == null) return;
+                if (step == null || presentIngredient(step, from, operation.target(), label, errors) == null) return;
                 targets.add(operation.target());
             } else {
                 for (GeneratedRecipeStepDTO step : steps) {
-                    if ("STEP".equals(step.getNodeType()) && findIngredient(step, operation.from()) != null) targets.add(step.getStepId());
+                    if ("STEP".equals(step.getNodeType()) && findIngredient(step, from) != null) targets.add(step.getStepId());
                 }
                 if (targets.isEmpty()) {
-                    errors.add(label + ": no step uses ingredient " + operation.from());
+                    errors.add(label + ": no step uses ingredient " + from);
                     return;
                 }
             }
@@ -299,7 +301,7 @@ public class RecipeProcessEditValidator {
             for (String alias : targets) {
                 GeneratedRecipeStepDTO step = steps.get(indexOf(alias));
                 List<GeneratedActionOnIngredientDTO> ingredients = step.getActionOn().getIngredients();
-                GeneratedActionOnIngredientDTO current = findIngredient(step, operation.from());
+                GeneratedActionOnIngredientDTO current = findIngredient(step, from);
                 // Keep the old amount (quantity and unit travel together) and style unless the model gave new ones.
                 boolean keepAmount = replacement.getQuantity() == null && replacement.getUnit() == null;
                 GeneratedActionOnIngredientDTO resolved = new GeneratedActionOnIngredientDTO(
@@ -310,7 +312,7 @@ public class RecipeProcessEditValidator {
                         replacement.getCustomIngredientName());
                 ingredients.set(ingredients.indexOf(current), resolved);
                 translated.add(ProcessEditOperationDTO.builder()
-                        .op("REPLACE_INGREDIENT").target(ref(alias)).ingredientId(operation.from())
+                        .op("REPLACE_INGREDIENT").target(ref(alias)).ingredientId(from)
                         .ingredient(RecipeProcessEditContext.copy(resolved)).build());
             }
         }
@@ -411,7 +413,7 @@ public class RecipeProcessEditValidator {
                 errors.add(label + ".ingredientId is required");
                 return null;
             }
-            return new GeneratedActionOnIngredientDTO(ingredient.ingredientId(), ingredient.quantity(), ingredient.unit(),
+            return new GeneratedActionOnIngredientDTO(normalizer.resolveIngredientId(ingredient.ingredientId()), ingredient.quantity(), ingredient.unit(),
                     ingredient.preparationStyle(), ingredient.customIngredientName());
         }
 

@@ -241,25 +241,37 @@ export const RecipeProcessVisualizationApi = {
 }
 
 /**
- * A global ingredient catalog entry (store/dto/IngredientResponseDTO), as referenced by a
- * recipe's ingredient list (RecipeIngredient.ingredientId). Distinct from the looser `ShopItem`
- * type in inventoryApi.ts — that one is shared with equipment and predates `imageUrl` — this one
- * is typed to exactly what the backend returns for an ingredient.
+ * A global ingredient catalog entry (store/dto/IngredientResponseDTO). This DB collection is THE
+ * ingredient catalog: recipe steps reference an entry by `String(id)` (see
+ * features/recipe-tool/catalog/ingredientCatalog.ts), and the shop sells the same entries. Distinct
+ * from the looser `ShopItem` type in inventoryApi.ts, which is shared with equipment — this one is
+ * typed to exactly what the backend returns for an ingredient.
  */
 export interface GlobalIngredient {
   id: number
   name: string
-  description?: string
-  defaultUnit: UnitType
-  imageUrl?: string
+  description?: string | null
+  /** The shop/inventory unit. */
+  defaultUnit: UnitType | null
+  imageUrl?: string | null
+  /** The entry's id in the original static catalog (e.g. "onion"); legacy step data may still use it. */
+  catalogSlug?: string | null
+  category?: string | null
+  icon?: string | null
+  aliases?: string[] | null
+  /** Recipe unit ids (catalog/unitCatalog.ts), default first. */
+  recipeUnits?: string[] | null
+  preparationStyleSets?: string[] | null
+  densityGPerMl?: number | null
+  unitWeightsG?: Record<string, number> | null
   createdAt?: string
   updatedAt?: string
 }
 
 /**
  * The global ingredient catalog (`/api/v1/ingredients`, the same endpoint `ShopApi.getIngredients`
- * already calls) — reused here with accurate typing (including `imageUrl`) for the Recipe Tool's
- * ingredient selector. Recipes never copy an ingredient's own data; they only reference it by id.
+ * already calls), typed accurately for the Recipe Tool's ingredient catalog store. Recipes never
+ * copy an ingredient's own data; they only reference it by id.
  */
 export const IngredientCatalogApi = {
   async list(): Promise<GlobalIngredient[]> {

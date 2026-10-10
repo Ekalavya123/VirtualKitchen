@@ -132,7 +132,6 @@ function ProfileMenu({
 
 export default function KitchenNavbar({
   user,
-  kitchen,
   onLogout,
 }: KitchenNavbarProps) {
   const [profileOpen, setProfileOpen] =

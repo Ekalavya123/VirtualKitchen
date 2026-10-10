@@ -18,6 +18,8 @@ import java.util.List;
 public class OrderResponseDTO {
 
     private Long orderId;
+    /** Human-readable code, e.g. {@code SO-000045} (shop orders; recipe orders use {@code RO-}). */
+    private String orderCode;
     private Long userId;
     private List<OrderItemResponseDTO> items;
     private double totalAmount;

@@ -49,6 +49,23 @@ export const API = {
     byUserId: (userId: number) => `/api/v1/orders/user/${userId}`,
   },
 
+  // Recipe orders: order one of your recipes to be prepared and delivered (simulated).
+  recipeOrders: {
+    list: '/api/v1/recipe-orders',
+    byId: (orderId: number) => `/api/v1/recipe-orders/${orderId}`,
+    confirm: (orderId: number) => `/api/v1/recipe-orders/${orderId}/confirm`,
+    availability: (orderId: number) => `/api/v1/recipe-orders/${orderId}/availability`,
+    reserve: (orderId: number) => `/api/v1/recipe-orders/${orderId}/reserve`,
+    pay: (orderId: number) => `/api/v1/recipe-orders/${orderId}/pay`,
+    advance: (orderId: number) => `/api/v1/recipe-orders/${orderId}/advance`,
+    cancel: (orderId: number) => `/api/v1/recipe-orders/${orderId}/cancel`,
+  },
+
+  // The signed-in user's saved default delivery address.
+  deliveryAddress: {
+    mine: '/api/v1/users/me/delivery-address',
+  },
+
   // Recipes / Process Templates
   recipes: {
     list: '/api/v1/process-templates',

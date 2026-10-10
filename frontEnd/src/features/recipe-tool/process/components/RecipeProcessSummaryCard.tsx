@@ -5,6 +5,9 @@ type RecipeProcessSummaryCardProps = {
   process: Process
   onOpen?: () => void
   actionLabel?: string
+  /** Shows a Delete button (the caller confirms and deletes); omit to hide it, e.g. for the MAIN process or readers. */
+  onDelete?: () => void
+  deleting?: boolean
 }
 
 /**
@@ -18,7 +21,7 @@ type RecipeProcessSummaryCardProps = {
  * and deriving it from every STEP node's own duration field isn't "easily
  * available" the way a node-kind count is — left for a later phase.
  */
-export default function RecipeProcessSummaryCard({ process, onOpen, actionLabel = 'Open' }: RecipeProcessSummaryCardProps) {
+export default function RecipeProcessSummaryCard({ process, onOpen, actionLabel = 'Open', onDelete, deleting = false }: RecipeProcessSummaryCardProps) {
   const stepCount = process.nodes.filter((node) => node.kind === 'STEP').length
   const conditionCount = process.nodes.filter((node) => node.kind === 'CONDITION').length
 
@@ -65,25 +68,47 @@ export default function RecipeProcessSummaryCard({ process, onOpen, actionLabel 
         <span>{conditionCount} condition{conditionCount === 1 ? '' : 's'}</span>
       </div>
 
-      {onOpen && (
-        <button
-          type="button"
-          onClick={onOpen}
-          style={{
-            alignSelf: 'flex-start',
-            marginTop: 4,
-            padding: '6px 12px',
-            borderRadius: 8,
-            border: '1px solid var(--flow-border)',
-            background: 'var(--flow-surface-muted)',
-            color: 'var(--flow-text)',
-            fontSize: 12,
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-        >
-          {actionLabel} →
-        </button>
+      {(onOpen || onDelete) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+          {onOpen && (
+            <button
+              type="button"
+              onClick={onOpen}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--flow-border)',
+                background: 'var(--flow-surface-muted)',
+                color: 'var(--flow-text)',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              {actionLabel} →
+            </button>
+          )}
+          {onDelete && (
+            <button
+              type="button"
+              onClick={onDelete}
+              disabled={deleting}
+              style={{
+                marginLeft: 'auto',
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: '1px solid var(--flow-danger-border)',
+                background: 'var(--flow-danger-soft)',
+                color: 'var(--flow-danger)',
+                fontSize: 12,
+                fontWeight: 700,
+                cursor: deleting ? 'wait' : 'pointer',
+              }}
+            >
+              {deleting ? 'Deleting…' : '🗑 Delete'}
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

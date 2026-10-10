@@ -1,11 +1,28 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Ref } from 'react'
+import { Link } from 'react-router-dom'
 import {
   OrderApi,
   type OrderCreateRequest,
   type OrderUnitType,
   ShopApi,
 } from '../../api'
+import {
+  clearCart,
+  defaultShopPrice,
+  getCartItemKey as getItemKey,
+  loadCart,
+  mergeCartLine,
+  saveCart,
+  toCartUnit as toOrderUnit,
+  type CartItem,
+} from '../../shared/cart/cartStorage'
 import CatalogItemImage from './CatalogItemImage'
+import { formatMoney } from '../../shared/format/money'
+import { useConfirm } from '../../shared/components/confirm/confirmContext'
+import { useIncrementalReveal } from '../../shared/hooks/useIncrementalReveal'
+import ListEnd from '../../shared/components/ListEnd'
+import PaymentGatewayOverlay, { type PaymentPhase } from '../../shared/components/payment/PaymentGatewayOverlay'
+import { withMinimumDuration } from '../../shared/components/payment/withMinimumDuration'
 import './InventoryShopView.css'
 
 interface ShopItem {
@@ -18,18 +35,17 @@ interface ShopItem {
   imageUrl?: string | null
 }
 
-interface CartItem {
-  itemId: number
-  itemType: 'INGREDIENT' | 'EQUIPMENT'
-  itemName: string
-  quantity: number
-  unit: OrderUnitType
-  price: number
-}
-
 interface InventoryShopViewProps {
   userId: number
   onOrderPlaced: () => void
+  /**
+   * Set when the user came from a recipe order's ingredient check to buy what's missing: the shop
+   * shows which order it's shopping for (with a way back), and opens the cart that check filled.
+   */
+  resumeRecipeOrder?: {
+    orderId: number
+    orderCode?: string | null
+  }
 }
 
 const INGREDIENT_UNIT_OPTIONS: OrderUnitType[] = [
@@ -42,31 +58,14 @@ const INGREDIENT_UNIT_OPTIONS: OrderUnitType[] = [
 
 const EQUIPMENT_UNIT_OPTIONS: OrderUnitType[] = ['COUNT']
 
-const toOrderUnit = (value: unknown): OrderUnitType => {
-  const normalized = String(value ?? '').trim().toUpperCase()
-
-  if (normalized === 'KG') return 'KG'
-  if (normalized === 'GRAM') return 'GRAM'
-  if (normalized === 'LITER') return 'LITER'
-  if (normalized === 'ML') return 'ML'
-
-  return 'COUNT'
-}
-
-const getCartStorageKey = (userId: number) =>
-  `virtual-kitchen.cart.${userId}`
-
-const getItemKey = (
-  itemType: 'INGREDIENT' | 'EQUIPMENT',
-  itemId: number,
-) => `${itemType}-${itemId}`
-
 function ShopHeader({
   cartCount,
   onOpenCart,
+  cartButtonRef,
 }: {
   cartCount: number
   onOpenCart: () => void
+  cartButtonRef: Ref<HTMLButtonElement>
 }) {
   return (
     <header className="shop-header">
@@ -81,6 +80,7 @@ function ShopHeader({
       </div>
 
       <button
+        ref={cartButtonRef}
         className="shop-cart-button"
         onClick={onOpenCart}
         aria-label={`Open cart with ${cartCount} items`}
@@ -91,13 +91,52 @@ function ShopHeader({
 
         <span className="shop-cart-label">Cart</span>
 
-        {cartCount > 0 && (
-          <span className="shop-cart-badge">
-            {cartCount > 99 ? '99+' : cartCount}
-          </span>
-        )}
+        <CartBadge count={cartCount} />
       </button>
     </header>
+  )
+}
+
+/** The cart's item count; re-keyed on every change so its "bump" animation replays. */
+function CartBadge({ count }: { count: number }) {
+  if (count <= 0) return null
+  return (
+    <span key={count} className="shop-cart-badge">
+      {count > 99 ? '99+' : count}
+    </span>
+  )
+}
+
+/**
+ * A floating cart button that takes over when the header's cart button scrolls out of view, so
+ * the cart stays one click away (and visibly fills up) while browsing a long catalog.
+ */
+function FloatingCartButton({
+  visible,
+  cartCount,
+  cartTotal,
+  onOpenCart,
+}: {
+  visible: boolean
+  cartCount: number
+  cartTotal: number
+  onOpenCart: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className={`shop-cart-fab${visible ? ' visible' : ''}`}
+      onClick={onOpenCart}
+      aria-label={`Open cart with ${cartCount} items`}
+      aria-hidden={!visible}
+      tabIndex={visible ? 0 : -1}
+    >
+      <span className="shop-cart-icon" aria-hidden="true">
+        🛒
+      </span>
+      <span className="shop-cart-fab-total">{formatMoney(cartTotal)}</span>
+      <CartBadge count={cartCount} />
+    </button>
   )
 }
 
@@ -209,7 +248,7 @@ function ShopCard({
 
       <div className="shop-card-bottom">
         <div className="shop-card-price">
-          ${item.basePrice.toFixed(2)}
+          {formatMoney(item.basePrice)}
         </div>
 
         <button
@@ -424,11 +463,11 @@ function CartDrawer({
 
                     <div className="cart-item-pricing">
                       <span>
-                        ${item.price.toFixed(2)} / unit
+                        {formatMoney(item.price)} / unit
                       </span>
 
                       <strong>
-                        ${subTotal.toFixed(2)}
+                        {formatMoney(subTotal)}
                       </strong>
                     </div>
                   </div>
@@ -443,14 +482,14 @@ function CartDrawer({
             <div className="cart-summary-row">
               <span>Subtotal</span>
               <strong>
-                ${cartTotal.toFixed(2)}
+                {formatMoney(cartTotal)}
               </strong>
             </div>
 
             <div className="cart-summary-row cart-summary-total">
               <span>Total</span>
               <strong>
-                ${cartTotal.toFixed(2)}
+                {formatMoney(cartTotal)}
               </strong>
             </div>
 
@@ -461,9 +500,7 @@ function CartDrawer({
             >
               {processingPayment
                 ? 'Processing payment...'
-                : `Proceed to payment · $${cartTotal.toFixed(
-                    2,
-                  )}`}
+                : `Proceed to payment · ${formatMoney(cartTotal)}`}
             </button>
 
             <button
@@ -475,8 +512,9 @@ function CartDrawer({
             </button>
 
             <div className="checkout-note">
-              Dummy payment only. No real payment
-              gateway is used.
+              Demo payment only. No real payment
+              gateway is used and no card details are
+              collected.
             </div>
           </div>
         )}
@@ -488,9 +526,14 @@ function CartDrawer({
 export default function InventoryShopView({
   userId,
   onOrderPlaced,
+  resumeRecipeOrder,
 }: InventoryShopViewProps) {
   const [allItems, setAllItems] = useState<ShopItem[]>([])
-  const [cartItems, setCartItems] = useState<CartItem[]>([])
+  // Read from storage on mount (not in an effect), so the persist effect below can never write an
+  // empty cart over the stored one before it has been read.
+  const [cartItems, setCartItems] = useState<CartItem[]>(
+    () => loadCart(userId),
+  )
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -502,68 +545,52 @@ export default function InventoryShopView({
   const [processingPayment, setProcessingPayment] =
     useState(false)
 
+  // The simulated gateway sheet shown while checkout runs and with its outcome.
+  const [paymentPhase, setPaymentPhase] =
+    useState<PaymentPhase | null>(null)
+  const [paymentAmount, setPaymentAmount] = useState(0)
+  const [paymentReference, setPaymentReference] =
+    useState<string | null>(null)
+
+  const confirm = useConfirm()
+
+  // The floating cart button shows once the header's cart button has scrolled away.
+  const [headerCartVisible, setHeaderCartVisible] =
+    useState(true)
+  const headerCartObserver =
+    useRef<IntersectionObserver | null>(null)
+  const headerCartRef = useCallback(
+    (node: HTMLButtonElement | null) => {
+      headerCartObserver.current?.disconnect()
+      headerCartObserver.current = null
+      if (!node) return
+      headerCartObserver.current = new IntersectionObserver(
+        ([entry]) => setHeaderCartVisible(entry.isIntersecting),
+      )
+      headerCartObserver.current.observe(node)
+    },
+    [],
+  )
+  useEffect(
+    () => () => headerCartObserver.current?.disconnect(),
+    [],
+  )
+
   const [filter, setFilter] = useState<
     'all' | 'ingredients' | 'equipment'
   >('all')
 
   const [search, setSearch] = useState('')
-  const [cartOpen, setCartOpen] = useState(false)
-
-  /*
-   * Load persisted cart
-   */
-  useEffect(() => {
-    const rawCart = localStorage.getItem(
-      getCartStorageKey(userId),
-    )
-
-    if (!rawCart) {
-      setCartItems([])
-      return
-    }
-
-    try {
-      const parsed = JSON.parse(rawCart)
-
-      if (!Array.isArray(parsed)) {
-        setCartItems([])
-        return
-      }
-
-      const normalized = parsed
-        .map(entry => ({
-          itemId: Number(entry.itemId),
-          itemType:
-            (entry.itemType === 'EQUIPMENT'
-              ? 'EQUIPMENT'
-              : 'INGREDIENT') as CartItem['itemType'],
-          itemName: String(entry.itemName ?? ''),
-          quantity: Number(entry.quantity),
-          unit: toOrderUnit(entry.unit),
-          price: Number(entry.price),
-        }))
-        .filter(
-          entry =>
-            Number.isFinite(entry.itemId) &&
-            entry.itemName &&
-            entry.quantity > 0 &&
-            entry.price >= 0,
-        )
-
-      setCartItems(normalized)
-    } catch {
-      setCartItems([])
-    }
-  }, [userId])
+  // Coming from a recipe order, the cart already holds the missing ingredients: show it.
+  const [cartOpen, setCartOpen] = useState(
+    Boolean(resumeRecipeOrder),
+  )
 
   /*
    * Persist cart
    */
   useEffect(() => {
-    localStorage.setItem(
-      getCartStorageKey(userId),
-      JSON.stringify(cartItems),
-    )
+    saveCart(userId, cartItems)
   }, [cartItems, userId])
 
   /*
@@ -590,7 +617,10 @@ export default function InventoryShopView({
                 description:
                   item.description ||
                   'High quality ingredient',
-                basePrice: item.basePrice ?? 5,
+                basePrice: defaultShopPrice(
+                  'INGREDIENT',
+                  item.basePrice,
+                ),
                 defaultUnit: toOrderUnit(
                   item.defaultUnit,
                 ),
@@ -607,7 +637,10 @@ export default function InventoryShopView({
                 description:
                   item.description ||
                   'Professional kitchen equipment',
-                basePrice: item.basePrice ?? 50,
+                basePrice: defaultShopPrice(
+                  'EQUIPMENT',
+                  item.basePrice,
+                ),
                 defaultUnit: 'COUNT',
                 imageUrl: item.imageUrl,
               }))
@@ -699,53 +732,20 @@ export default function InventoryShopView({
     setCheckoutError('')
     setPaymentSuccessMessage('')
 
-    setCartItems(current => {
-      const key = getItemKey(
-        item.itemType,
-        item.id,
-      )
-
-      const existing = current.find(
-        cartItem =>
-          getItemKey(
-            cartItem.itemType,
-            cartItem.itemId,
-          ) === key,
-      )
-
-      if (!existing) {
-        return [
-          ...current,
-          {
-            itemId: item.id,
-            itemType: item.itemType,
-            itemName: item.name,
-            quantity: 1,
-            unit:
-              item.itemType === 'EQUIPMENT'
-                ? 'COUNT'
-                : (item.defaultUnit ?? 'GRAM'),
-            price: item.basePrice,
-          },
-        ]
-      }
-
-      return current.map(cartItem => {
-        if (
-          getItemKey(
-            cartItem.itemType,
-            cartItem.itemId,
-          ) !== key
-        ) {
-          return cartItem
-        }
-
-        return {
-          ...cartItem,
-          quantity: cartItem.quantity + 1,
-        }
-      })
-    })
+    // One more of an item already in the cart keeps that line's unit.
+    setCartItems(current =>
+      mergeCartLine(current, {
+        itemId: item.id,
+        itemType: item.itemType,
+        itemName: item.name,
+        quantity: 1,
+        unit:
+          item.itemType === 'EQUIPMENT'
+            ? 'COUNT'
+            : (item.defaultUnit ?? 'GRAM'),
+        price: item.basePrice,
+      }),
+    )
   }
 
   const handleQuantityChange = (
@@ -757,7 +757,7 @@ export default function InventoryShopView({
       : 0
 
     if (safeQuantity <= 0) {
-      handleRemoveItem(item)
+      void handleRemoveItem(item)
       return
     }
 
@@ -811,7 +811,15 @@ export default function InventoryShopView({
     )
   }
 
-  const handleRemoveItem = (item: CartItem) => {
+  const handleRemoveItem = async (item: CartItem) => {
+    const confirmed = await confirm({
+      eyebrow: 'Remove from cart',
+      title: `Remove ${item.itemName}?`,
+      message: `${item.itemName} (${item.quantity} ${item.unit}) will be taken out of your cart.`,
+      confirmLabel: 'Remove',
+    })
+    if (!confirmed) return
+
     setCartItems(current =>
       current.filter(
         cartItem =>
@@ -838,13 +846,13 @@ export default function InventoryShopView({
     setCheckoutError('')
     setPaymentSuccessMessage('')
     setProcessingPayment(true)
+    setPaymentAmount(cartTotal)
+    setPaymentReference(null)
+    setPaymentPhase('processing')
 
     try {
-      // Dummy payment flow placeholder.
-      await new Promise(resolve => {
-        window.setTimeout(resolve, 1200)
-      })
-
+      // The backend takes the buyer from the session token; the
+      // signed-in user's own id is sent only for older backends.
       const payload: OrderCreateRequest = {
         userId,
         items: cartItems.map(item => ({
@@ -857,23 +865,24 @@ export default function InventoryShopView({
         })),
       }
 
-      const createdOrder =
-        await OrderApi.createOrder(payload)
+      // The demo gateway: the processing animation always plays for a moment.
+      const createdOrder = await withMinimumDuration(
+        OrderApi.createOrder(payload),
+      )
+      const orderLabel =
+        createdOrder.orderCode ?? `#${createdOrder.orderId}`
 
       setPaymentSuccessMessage(
-        `Dummy payment successful. Order #${createdOrder.orderId} created.`,
+        `Demo payment successful. Order ${orderLabel} created.`,
       )
+      setPaymentReference(orderLabel)
 
       setCartItems([])
 
-      localStorage.removeItem(
-        getCartStorageKey(userId),
-      )
+      clearCart(userId)
 
-      onOrderPlaced()
-
-      // Keep the drawer open so the success message
-      // can be seen.
+      // The gateway sheet shows the success, then moves on (finishPayment).
+      setPaymentPhase('success')
     } catch (checkoutFailure) {
       console.error(
         'Checkout failed:',
@@ -885,18 +894,62 @@ export default function InventoryShopView({
           ? checkoutFailure.message
           : 'Checkout failed. Please try again.',
       )
+      setPaymentPhase('failure')
     } finally {
       setProcessingPayment(false)
     }
   }
 
+  const finishPayment = () => {
+    const succeeded = paymentPhase === 'success'
+    setPaymentPhase(null)
+    if (succeeded) {
+      onOrderPlaced()
+    }
+  }
+
+  // Long catalogs render a page at a time, revealing more on scroll.
+  const {
+    visible: visibleItems,
+    hasMore: hasMoreItems,
+    sentinelRef: itemsSentinelRef,
+    showMore: showMoreItems,
+  } = useIncrementalReveal(
+    filteredItems,
+    `${filter}|${search.trim().toLowerCase()}`,
+  )
+
   return (
     <>
       <div className="shop-page">
         <div className="shop-view">
+          {resumeRecipeOrder && (
+            <div className="shop-resume-banner" role="status">
+              <span aria-hidden="true">🧾</span>
+
+              <span className="shop-resume-text">
+                Shopping for recipe order{' '}
+                <strong>
+                  {resumeRecipeOrder.orderCode ??
+                    `#${resumeRecipeOrder.orderId}`}
+                </strong>
+                . After checkout you'll go straight back to
+                its ingredient check.
+              </span>
+
+              <Link
+                className="shop-resume-link"
+                to={`/kitchen/recipe-orders/${resumeRecipeOrder.orderId}/ingredients`}
+              >
+                ← Back to order
+              </Link>
+            </div>
+          )}
+
           <ShopHeader
             cartCount={cartCount}
             onOpenCart={() => setCartOpen(true)}
+            cartButtonRef={headerCartRef}
           />
 
           <ShopSearch
@@ -943,7 +996,7 @@ export default function InventoryShopView({
               </div>
 
               <div className="shop-grid">
-                {filteredItems.map(item => (
+                {visibleItems.map(item => (
                   <ShopCard
                     key={`${item.itemType}-${item.id}`}
                     item={item}
@@ -954,10 +1007,40 @@ export default function InventoryShopView({
                   />
                 ))}
               </div>
+
+              <ListEnd
+                hasMore={hasMoreItems}
+                shown={visibleItems.length}
+                total={filteredItems.length}
+                noun="items"
+                sentinelRef={itemsSentinelRef}
+                onShowMore={showMoreItems}
+              />
             </>
           )}
         </div>
       </div>
+
+      <FloatingCartButton
+        visible={!headerCartVisible && !cartOpen}
+        cartCount={cartCount}
+        cartTotal={cartTotal}
+        onOpenCart={() => setCartOpen(true)}
+      />
+
+      <PaymentGatewayOverlay
+        phase={paymentPhase}
+        amount={formatMoney(paymentAmount)}
+        description="Shop order"
+        reference={paymentReference}
+        failureMessage={checkoutError}
+        onDone={finishPayment}
+        successLabel={
+          resumeRecipeOrder
+            ? 'Back to recipe order'
+            : 'View my orders'
+        }
+      />
 
       <CartDrawer
         open={cartOpen}
@@ -967,7 +1050,7 @@ export default function InventoryShopView({
         paymentSuccessMessage={paymentSuccessMessage}
         processingPayment={processingPayment}
         onClose={() => setCartOpen(false)}
-        onRemove={handleRemoveItem}
+        onRemove={item => void handleRemoveItem(item)}
         onQuantityChange={handleQuantityChange}
         onUnitChange={handleUnitChange}
         onCheckout={() => void handleCheckout()}

@@ -49,4 +49,7 @@ public class User {
     private LocalDateTime updatedAt;
 
     private UserStatus status = UserStatus.ACTIVE;
+
+    /** The address recipe orders are delivered to by default; each order keeps its own copy. */
+    private DeliveryAddress deliveryAddress;
 }
