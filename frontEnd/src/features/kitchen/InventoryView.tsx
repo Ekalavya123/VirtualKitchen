@@ -116,6 +116,13 @@ function InventoryCard({
       ? item.quantity
       : 0
 
+  // Part of the stock can be held for recipe orders awaiting payment or in preparation.
+  const reserved = item.reservedQuantity ?? 0
+  const free =
+    item.availableQuantity ?? Math.max(0, quantity - reserved)
+  const formatAmount = (value: number) =>
+    String(Math.round(value * 100) / 100)
+
   return (
     <article className="inventory-card">
       <div className="inventory-card-image">
@@ -149,6 +156,19 @@ function InventoryCard({
             )}
           </span>
         </div>
+
+        {reserved > 0 && (
+          <div className="inventory-reserved-note">
+            <span className="inventory-reserved-chip">
+              {formatAmount(reserved)} reserved
+            </span>
+
+            <span>
+              {formatAmount(free)} free for new
+              orders
+            </span>
+          </div>
+        )}
 
         <div className="inventory-card-footer">
           <span>Last updated</span>

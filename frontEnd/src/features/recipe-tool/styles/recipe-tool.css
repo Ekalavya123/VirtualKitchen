@@ -303,10 +303,36 @@
 
 .recipe-card-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.75rem 1rem 1rem;
+}
+
+/* "Order Recipe" on My Recipes cards — starts a (simulated) recipe order. */
+.recipe-card-order-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.7rem;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--flow-accent), var(--flow-accent-secondary));
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.recipe-card-order-button:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.recipe-card-order-button:disabled {
+  cursor: progress;
+  opacity: 0.7;
 }
 
 .recipe-card-open-button {

@@ -85,6 +85,15 @@ public class OrderServiceImpl implements IOrderService {
 
         userRepository.findById(dto.getUserId()).orElseThrow(() -> new IllegalArgumentException("User not found"));
 
+        // Reject a purchase whose units can't be added to the kitchen's existing stock before saving
+        // anything, so an order is never recorded without its items reaching the inventory.
+        List<Kitchen> userKitchens = kitchenRepository.findByOwnerId(dto.getUserId());
+        if (userKitchens != null && !userKitchens.isEmpty()) {
+            for (InventoryRequestDTO invReq : toInventoryRequests(dto.getUserId(), userKitchens.get(0).getId(), orderMapper.toEntity(dto).getItems())) {
+                inventoryService.validateAdd(invReq);
+            }
+        }
+
         Order order = orderMapper.toEntity(dto);
         order.setOrderId(sequenceGeneratorService.generateSequence(Order.SEQUENCE_NAME));
         order.setCreatedAt(LocalDateTime.now());
@@ -101,18 +110,8 @@ public class OrderServiceImpl implements IOrderService {
             }
             Kitchen kitchen = kitchens.get(0);
 
-            if (saved.getItems() != null) {
-                for (OrderItem item : saved.getItems()) {
-                    if (item == null) continue;
-                    InventoryRequestDTO invReq = new InventoryRequestDTO();
-                    invReq.setUserId(saved.getUserId());
-                    invReq.setKitchenId(kitchen.getId());
-                    invReq.setItemType(item.getItemType());
-                    invReq.setItemId(item.getItemId());
-                    invReq.setQuantity(item.getQuantity());
-                    invReq.setUnit(item.getUnit());
-                    inventoryService.addOrUpdate(invReq);
-                }
+            for (InventoryRequestDTO invReq : toInventoryRequests(saved.getUserId(), kitchen.getId(), saved.getItems())) {
+                inventoryService.addOrUpdate(invReq);
             }
         } catch (Exception ex) {
             // Log and continue - order creation should not fail because inventory update failed
@@ -138,6 +137,23 @@ public class OrderServiceImpl implements IOrderService {
         return orderRepository.findByUserIdOrderByCreatedAtDesc(userId)
                 .stream()
                 .map(orderMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    private static List<InventoryRequestDTO> toInventoryRequests(Long userId, Long kitchenId, List<OrderItem> items) {
+        if (items == null) return List.of();
+        return items.stream()
+                .filter(item -> item != null)
+                .map(item -> {
+                    InventoryRequestDTO invReq = new InventoryRequestDTO();
+                    invReq.setUserId(userId);
+                    invReq.setKitchenId(kitchenId);
+                    invReq.setItemType(item.getItemType());
+                    invReq.setItemId(item.getItemId());
+                    invReq.setQuantity(item.getQuantity());
+                    invReq.setUnit(item.getUnit());
+                    return invReq;
+                })
                 .collect(Collectors.toList());
     }
 

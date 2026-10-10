@@ -4,7 +4,10 @@ import com.processVisualisation.virtualKitchen.kitchen.dto.OrderCreateRequestDTO
 import com.processVisualisation.virtualKitchen.kitchen.dto.OrderResponseDTO;
 import com.processVisualisation.virtualKitchen.kitchen.service.IOrderService;
 import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import com.processVisualisation.virtualKitchen.common.exception.AuthException;
+import com.processVisualisation.virtualKitchen.common.security.CurrentUser;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -12,8 +15,9 @@ import java.util.List;
 
 /**
  * REST controller exposing order endpoints under {@code /api/v1/orders}:
- * placing a new order and retrieving a user's order history. Delegates all
- * business logic to {@link IOrderService}.
+ * placing a new order and retrieving a user's order history. Both act only
+ * for the authenticated caller. Delegates all business logic to
+ * {@link IOrderService}.
  */
 @RestController
 @RequestMapping("/api/v1/orders")
@@ -35,6 +39,12 @@ public class OrderController {
      */
     @PostMapping
     public ApiResponse<OrderResponseDTO> createOrder(@RequestBody OrderCreateRequestDTO dto) {
+        // The order belongs to the authenticated caller, never to a user id sent in the body.
+        Long userId = CurrentUser.requireUserId();
+        if (dto.getUserId() != null && !dto.getUserId().equals(userId)) {
+            throw new AuthException("Cannot place an order for another user", HttpStatus.FORBIDDEN);
+        }
+        dto.setUserId(userId);
         return build(orderService.createOrder(dto), "created");
     }
 
@@ -47,6 +57,9 @@ public class OrderController {
      */
     @GetMapping("/user/{userId}")
     public ApiResponse<List<OrderResponseDTO>> getOrdersByUser(@PathVariable Long userId) {
+        if (!userId.equals(CurrentUser.requireUserId())) {
+            throw new AuthException("Cannot view another user's orders", HttpStatus.FORBIDDEN);
+        }
         return build(orderService.getOrdersByUser(userId), "fetched");
     }
 

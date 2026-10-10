@@ -47,9 +47,10 @@ class RecipeProcessGenerationPromptBuilderTest {
     }
 
     @Test
-    void rendersIngredientsWithDefaultUnitAndAliases() {
-        assertTrue(prompt.contains("garlic (clove) [lahsun"));
-        assertTrue(prompt.contains("chickpea-flour (cup) [besan"));
+    void rendersIngredientsWithNameDefaultUnitAndAliases() {
+        // id=name, so the model can tell which ingredient a (database) id stands for.
+        assertTrue(prompt.contains("garlic=Garlic (clove) [lahsun"));
+        assertTrue(prompt.contains("chickpea-flour=Chickpea Flour (cup) [besan"));
     }
 
     @Test

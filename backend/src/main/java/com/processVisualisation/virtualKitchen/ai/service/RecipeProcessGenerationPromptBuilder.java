@@ -122,20 +122,32 @@ public class RecipeProcessGenerationPromptBuilder {
 
                 """;
 
-    private final String vocabularyBlock;
+    private final RecipeStepVocabularyProvider vocabulary;
+    private final RecipeProcessOutputSchema outputSchema;
 
     /**
      * Everything that is identical for every request (instructions, schema, rules, vocabulary). It is sent as
-     * the system prompt and never varies, so providers with prefix caching (Ollama's KV cache, Gemini/OpenAI
-     * implicit caching) only have to process it once — each request then only adds the recipe itself.
+     * the system prompt and only changes when the ingredient catalog does, so providers with prefix caching
+     * (Ollama's KV cache, Gemini/OpenAI implicit caching) only have to process it once — each request then
+     * only adds the recipe itself. Built on first use and rebuilt when the ingredient catalog version changes.
      */
-    private final String systemPrompt;
+    private volatile Prompts prompts;
+
+    private record Prompts(long catalogVersion, String vocabularyBlock, String systemPrompt) {}
 
     public RecipeProcessGenerationPromptBuilder(
             RecipeStepVocabularyProvider recipeStepVocabularyProvider, RecipeProcessOutputSchema outputSchema
     ) {
-        this.vocabularyBlock = buildVocabularyBlock(recipeStepVocabularyProvider);
-        this.systemPrompt = """
+        this.vocabulary = recipeStepVocabularyProvider;
+        this.outputSchema = outputSchema;
+    }
+
+    private Prompts prompts() {
+        long version = vocabulary.ingredientCatalogVersion();
+        Prompts current = prompts;
+        if (current == null || current.catalogVersion() != version) {
+            String vocabularyBlock = buildVocabularyBlock(vocabulary);
+            String systemPrompt = """
                 Convert recipe text into a semantic recipe process structure.
 
                 Return ONLY valid JSON.
@@ -143,16 +155,25 @@ public class RecipeProcessGenerationPromptBuilder {
                 Do not include node ids, edge ids, positions, width, height, handles, or any other
                 React Flow or UI presentation field. Only semantic recipe/process data.
 
-                """ + buildSchemaAndRulesBlock(outputSchema);
+                """ + buildSchemaAndRulesBlock(outputSchema, vocabularyBlock);
+            current = new Prompts(version, vocabularyBlock, systemPrompt);
+            prompts = current;
+        }
+        return current;
     }
 
     public String buildSystemPrompt() {
-        return systemPrompt;
+        return prompts().systemPrompt();
+    }
+
+    /** Changes whenever the vocabulary (and so the system prompt) does — lets dependent prompt caches rebuild. */
+    long vocabularyVersion() {
+        return vocabulary.ingredientCatalogVersion();
     }
 
     /** The STEP field rules followed by the VOCABULARY section — the part of the system prompt the edit flow reuses. */
     String stepAuthoringRulesAndVocabulary() {
-        return STEP_AUTHORING_RULES + vocabularyBlock;
+        return STEP_AUTHORING_RULES + prompts().vocabularyBlock();
     }
 
     public String buildInitialPrompt(String recipeText) {
@@ -171,7 +192,7 @@ public class RecipeProcessGenerationPromptBuilder {
                 + "\n\nFix only these errors and return the complete corrected JSON only.";
     }
 
-    private String buildSchemaAndRulesBlock(RecipeProcessOutputSchema outputSchema) {
+    private String buildSchemaAndRulesBlock(RecipeProcessOutputSchema outputSchema, String vocabularyBlock) {
         return outputSchema.promptBlock() + """
 
                 PROCESS MODEL
@@ -227,7 +248,7 @@ public class RecipeProcessGenerationPromptBuilder {
                 """;
     }
 
-    // --- vocabulary rendering (once, at startup — the catalog is static) ---
+    // --- vocabulary rendering (on first use, and again whenever the ingredient catalog changes) ---
 
     private static String buildVocabularyBlock(RecipeStepVocabularyProvider vocabulary) {
         StringBuilder out = new StringBuilder("VOCABULARY\n\n");
@@ -258,7 +279,7 @@ public class RecipeProcessGenerationPromptBuilder {
         vocabulary.preparationStyleSets().forEach(set ->
                 out.append("- ").append(set.id()).append(": ").append(String.join(", ", set.styles())).append('\n'));
 
-        out.append("\nINGREDIENTS — id (default unit) [aliases]:\n");
+        out.append("\nINGREDIENTS — id=name (default unit) [aliases]; ingredientId is the id before \"=\":\n");
         Map<String, List<IngredientDefinition>> ingredientsByCategory = groupBy(vocabulary.ingredients(), IngredientDefinition::category);
         for (RecipeStepVocabularyProvider.CategoryDefinition category : vocabulary.ingredientCategories()) {
             List<IngredientDefinition> inCategory = ingredientsByCategory.getOrDefault(category.id(), List.of());
@@ -318,7 +339,8 @@ public class RecipeProcessGenerationPromptBuilder {
     }
 
     private static String describeIngredient(IngredientDefinition ingredient) {
-        StringBuilder entry = new StringBuilder(ingredient.id()).append(" (").append(ingredient.defaultUnit()).append(')');
+        StringBuilder entry = new StringBuilder(ingredient.id()).append('=').append(ingredient.name())
+                .append(" (").append(ingredient.defaultUnit()).append(')');
         if (!ingredient.aliases().isEmpty()) {
             entry.append(" [")
                     .append(String.join(", ", ingredient.aliases().subList(0, Math.min(MAX_INGREDIENT_ALIASES, ingredient.aliases().size()))))

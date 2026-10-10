@@ -54,6 +54,7 @@ public class OrderMapper {
     public OrderResponseDTO toDTO(Order order) {
         return OrderResponseDTO.builder()
                 .orderId(order.getOrderId())
+                .orderCode(order.getOrderId() == null ? null : String.format("SO-%06d", order.getOrderId()))
                 .userId(order.getUserId())
                 .items(toResponseItems(order.getItems()))
                 .totalAmount(order.getTotalAmount())

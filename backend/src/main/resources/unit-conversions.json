@@ -1,0 +1,59 @@
+{
+  "_comment": "Default unit-conversion factors used to compare recipe quantities with kitchen inventory. Every unit maps to a dimension (MASS in grams, VOLUME in millilitres, COUNT in pieces) and a factor in that dimension's base unit. 'approximate' marks factors that are estimates rather than exact definitions; 'nominal' marks units with no number (to taste / as needed), which count as one unit of the factor. Per-ingredient overrides live on the ingredient documents (densityGPerMl, unitWeightsG) and win over these defaults. Edit freely; point vk.units.conversions-file at a copy outside the jar to change it without a rebuild.",
+  "defaults": {
+    "densityGPerMl": 1.0,
+    "gramsPerPiece": 100
+  },
+  "units": {
+    "mg": { "dimension": "MASS", "factor": 0.001 },
+    "g": { "dimension": "MASS", "factor": 1 },
+    "kg": { "dimension": "MASS", "factor": 1000 },
+    "oz": { "dimension": "MASS", "factor": 28.3495 },
+    "lb": { "dimension": "MASS", "factor": 453.592 },
+
+    "ml": { "dimension": "VOLUME", "factor": 1 },
+    "l": { "dimension": "VOLUME", "factor": 1000 },
+    "fl-oz": { "dimension": "VOLUME", "factor": 29.5735 },
+    "pint": { "dimension": "VOLUME", "factor": 473.176 },
+    "quart": { "dimension": "VOLUME", "factor": 946.353 },
+    "tsp": { "dimension": "VOLUME", "factor": 5 },
+    "tbsp": { "dimension": "VOLUME", "factor": 15 },
+    "cup": { "dimension": "VOLUME", "factor": 240 },
+
+    "piece": { "dimension": "COUNT", "factor": 1 },
+
+    "clove": { "dimension": "MASS", "factor": 5, "approximate": true },
+    "slice": { "dimension": "MASS", "factor": 25, "approximate": true },
+    "sprig": { "dimension": "MASS", "factor": 1, "approximate": true },
+    "bunch": { "dimension": "MASS", "factor": 100, "approximate": true },
+    "leaf": { "dimension": "MASS", "factor": 0.5, "approximate": true },
+    "stalk": { "dimension": "MASS", "factor": 40, "approximate": true },
+    "head": { "dimension": "MASS", "factor": 500, "approximate": true },
+    "fillet": { "dimension": "MASS", "factor": 150, "approximate": true },
+    "stick": { "dimension": "MASS", "factor": 113, "approximate": true },
+    "sheet": { "dimension": "MASS", "factor": 3, "approximate": true },
+    "cube": { "dimension": "MASS", "factor": 4, "approximate": true },
+    "inch": { "dimension": "MASS", "factor": 5, "approximate": true },
+    "cm": { "dimension": "MASS", "factor": 2, "approximate": true },
+
+    "pinch": { "dimension": "MASS", "factor": 0.36, "approximate": true },
+    "dash": { "dimension": "VOLUME", "factor": 0.6, "approximate": true },
+    "drop": { "dimension": "VOLUME", "factor": 0.05, "approximate": true },
+    "handful": { "dimension": "MASS", "factor": 30, "approximate": true },
+
+    "can": { "dimension": "MASS", "factor": 400, "approximate": true },
+    "jar": { "dimension": "MASS", "factor": 350, "approximate": true },
+    "packet": { "dimension": "MASS", "factor": 200, "approximate": true },
+    "bottle": { "dimension": "VOLUME", "factor": 750, "approximate": true },
+
+    "to-taste": { "dimension": "MASS", "factor": 2, "approximate": true, "nominal": true },
+    "as-needed": { "dimension": "MASS", "factor": 10, "approximate": true, "nominal": true }
+  },
+  "inventoryUnits": {
+    "GRAM": "g",
+    "KG": "kg",
+    "ML": "ml",
+    "LITER": "l",
+    "COUNT": "piece"
+  }
+}

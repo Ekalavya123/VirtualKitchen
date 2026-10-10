@@ -1,79 +1,221 @@
-import { useEffect, useState } from 'react'
-import { OrderApi, type OrderResponse } from '../../api'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { OrderApi, RecipeOrderApi, type OrderResponse } from '../../api'
+import type { RecipeOrder } from '../../types/recipeOrder'
+import OrderStatusBadge from '../recipe-order/components/OrderStatusBadge'
+import OrderThumb from '../recipe-order/components/OrderThumb'
+import { formatDateTime, formatMoney, formatServings, timeValue } from '../recipe-order/model/orderFormat'
+import { isPaidStatus, recipeOrderPath } from '../recipe-order/model/orderView'
 import './OrderHistoryView.css'
 
 interface OrderHistoryViewProps {
   userId: number
 }
 
+type OrderTab = 'all' | 'recipe' | 'shop'
+
+type OrderEntry =
+  | { kind: 'recipe'; key: string; time: number; order: RecipeOrder }
+  | { kind: 'shop'; key: string; time: number; order: OrderResponse }
+
+const TABS: { id: OrderTab; label: string }[] = [
+  { id: 'all', label: 'All Orders' },
+  { id: 'recipe', label: 'Recipe Orders' },
+  { id: 'shop', label: 'Shop Orders' },
+]
+
+const errorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback)
+
+function RecipeOrderCard({ order }: { order: RecipeOrder }) {
+  const name = order.recipe?.name ?? 'Recipe'
+  const paid = isPaidStatus(order.status)
+
+  return (
+    <article className="order-card recipe-order-card">
+      <OrderThumb src={order.recipe?.thumbnailUrl} alt={name} icon={order.recipe?.fallbackIcon} size="md" />
+
+      <div className="recipe-order-main">
+        <div className="recipe-order-top">
+          <span className="order-kind order-kind-recipe">Recipe order</span>
+          <span className="order-code">{order.orderCode}</span>
+        </div>
+        <h3>{name}</h3>
+        <p>
+          {formatServings(order.servings, order.baseServings)} · {formatDateTime(order.timestamps?.createdAt) || 'N/A'}
+        </p>
+      </div>
+
+      <div className="recipe-order-side">
+        <OrderStatusBadge status={order.status} />
+        <strong className="recipe-order-amount">{formatMoney(order.pricing?.total, order.pricing?.currency)}</strong>
+        <div className="recipe-order-actions">
+          {paid || order.status === 'CANCELLED' ? (
+            <>
+              <Link className="ro-btn ro-btn-ghost" to={recipeOrderPath(order.id, 'receipt')}>View receipt</Link>
+              {paid && <Link className="ro-btn ro-btn-primary" to={recipeOrderPath(order.id, 'track')}>Track order</Link>}
+            </>
+          ) : (
+            // Not paid yet: there's nothing to track — pick the order up where it was left.
+            <Link className="ro-btn ro-btn-primary" to={recipeOrderPath(order.id)}>Continue order</Link>
+          )}
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function ShopOrderCard({ order }: { order: OrderResponse }) {
+  return (
+    <article className="order-card">
+      <header className="order-card-header">
+        <div>
+          <div className="recipe-order-top">
+            <span className="order-kind order-kind-shop">Shop order</span>
+            {order.orderCode && <span className="order-code">{order.orderCode}</span>}
+          </div>
+          <h3>Order #{order.orderId}</h3>
+          <p>{order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}</p>
+        </div>
+        <div className="order-status-block">
+          <span className={`status-badge payment-${order.paymentStatus.toLowerCase()}`}>Payment: {order.paymentStatus}</span>
+          <span className={`status-badge order-${order.orderStatus.toLowerCase()}`}>Order: {order.orderStatus}</span>
+        </div>
+      </header>
+
+      <div className="order-items">
+        {order.items.map((item) => (
+          <div className="order-item-row" key={`${order.orderId}-${item.itemType}-${item.itemId}`}>
+            <span>{item.itemName}</span>
+            <span>
+              {item.quantity} {item.unit}
+            </span>
+            <span>${item.price.toFixed(2)}</span>
+            <span>${item.subTotal.toFixed(2)}</span>
+          </div>
+        ))}
+      </div>
+
+      <footer className="order-card-footer">Total: ${order.totalAmount.toFixed(2)}</footer>
+    </article>
+  )
+}
+
+/**
+ * Order history: shop orders and recipe orders, together (newest first) or one kind at a time.
+ * Both lists load in parallel; if one fails the other still shows, with the failure noted.
+ */
 export default function OrderHistoryView({ userId }: OrderHistoryViewProps) {
-  const [orders, setOrders] = useState<OrderResponse[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [tab, setTab] = useState<OrderTab>('all')
+  const [shopOrders, setShopOrders] = useState<OrderResponse[] | null>(null)
+  const [recipeOrders, setRecipeOrders] = useState<RecipeOrder[] | null>(null)
+  const [shopError, setShopError] = useState('')
+  const [recipeError, setRecipeError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
-    const fetchOrders = async () => {
-      try {
-        setLoading(true)
-        setError('')
-        const fetchedOrders = await OrderApi.getOrdersByUser(userId)
-        setOrders(Array.isArray(fetchedOrders) ? fetchedOrders : [])
-      } catch (fetchError) {
-        console.error('Failed to fetch orders:', fetchError)
-        setError(fetchError instanceof Error ? fetchError.message : 'Failed to load order history')
-      } finally {
-        setLoading(false)
+    let cancelled = false
+    void Promise.allSettled([OrderApi.getOrdersByUser(userId), RecipeOrderApi.list()]).then(([shop, recipe]) => {
+      if (cancelled) return
+      if (shop.status === 'fulfilled') {
+        setShopOrders(Array.isArray(shop.value) ? shop.value : [])
+        setShopError('')
+      } else {
+        console.error('Failed to fetch shop orders:', shop.reason)
+        setShopOrders([])
+        setShopError(errorMessage(shop.reason, 'Failed to load shop orders'))
       }
+      if (recipe.status === 'fulfilled') {
+        setRecipeOrders(Array.isArray(recipe.value) ? recipe.value : [])
+        setRecipeError('')
+      } else {
+        console.error('Failed to fetch recipe orders:', recipe.reason)
+        setRecipeOrders([])
+        setRecipeError(errorMessage(recipe.reason, 'Failed to load recipe orders'))
+      }
+    })
+    return () => {
+      cancelled = true
     }
+  }, [userId, reloadKey])
 
-    void fetchOrders()
-  }, [userId])
+  const loading = shopOrders == null || recipeOrders == null
+
+  const entries = useMemo<OrderEntry[]>(() => {
+    const recipe: OrderEntry[] = (recipeOrders ?? []).map((order) => ({
+      kind: 'recipe', key: `recipe-${order.id}`, time: timeValue(order.timestamps?.createdAt), order,
+    }))
+    const shop: OrderEntry[] = (shopOrders ?? []).map((order) => ({
+      kind: 'shop', key: `shop-${order.orderId}`, time: timeValue(order.createdAt), order,
+    }))
+    const selected = tab === 'recipe' ? recipe : tab === 'shop' ? shop : [...recipe, ...shop]
+    return [...selected].sort((a, b) => b.time - a.time)
+  }, [recipeOrders, shopOrders, tab])
+
+  const errors = [tab !== 'shop' && recipeError, tab !== 'recipe' && shopError].filter(Boolean) as string[]
+  const counts: Record<OrderTab, number> = {
+    all: (recipeOrders?.length ?? 0) + (shopOrders?.length ?? 0),
+    recipe: recipeOrders?.length ?? 0,
+    shop: shopOrders?.length ?? 0,
+  }
+
+  const retry = () => {
+    setShopOrders(null)
+    setRecipeOrders(null)
+    setReloadKey((value) => value + 1)
+  }
 
   return (
     <div className="order-history-view">
       <div className="order-history-header">
         <h2>Order History</h2>
-        <p>View your previous orders, totals, payment status, and order status.</p>
+        <p>View your recipe orders and shop orders, their totals, payment status, and order status.</p>
+      </div>
+
+      <div className="order-tabs" role="tablist" aria-label="Order type">
+        {TABS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            className={`order-tab${tab === item.id ? ' active' : ''}`}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+            {!loading && <span className="order-tab-count">{counts[item.id]}</span>}
+          </button>
+        ))}
       </div>
 
       {loading ? (
-        <div className="order-state">Loading orders...</div>
-      ) : error ? (
-        <div className="order-state order-error">{error}</div>
-      ) : orders.length === 0 ? (
-        <div className="order-state">No previous orders found.</div>
+        <div className="order-state" role="status">Loading orders...</div>
       ) : (
-        <div className="order-history-list">
-          {orders.map((order) => (
-            <article key={order.orderId} className="order-card">
-              <header className="order-card-header">
-                <div>
-                  <h3>Order #{order.orderId}</h3>
-                  <p>{order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}</p>
-                </div>
-                <div className="order-status-block">
-                  <span className={`status-badge payment-${order.paymentStatus.toLowerCase()}`}>Payment: {order.paymentStatus}</span>
-                  <span className={`status-badge order-${order.orderStatus.toLowerCase()}`}>Order: {order.orderStatus}</span>
-                </div>
-              </header>
+        <>
+          {errors.length > 0 && (
+            <div className="order-state order-error" role="alert">
+              {errors.join(' · ')}{' '}
+              <button type="button" className="order-retry" onClick={retry}>Try again</button>
+            </div>
+          )}
 
-              <div className="order-items">
-                {order.items.map((item) => (
-                  <div className="order-item-row" key={`${order.orderId}-${item.itemType}-${item.itemId}`}>
-                    <span>{item.itemName}</span>
-                    <span>
-                      {item.quantity} {item.unit}
-                    </span>
-                    <span>${item.price.toFixed(2)}</span>
-                    <span>${item.subTotal.toFixed(2)}</span>
-                  </div>
-                ))}
+          {entries.length === 0 ? (
+            errors.length === 0 && (
+              <div className="order-state">
+                {tab === 'recipe'
+                  ? 'No recipe orders yet. Use “Order Recipe” on one of your recipes to start one.'
+                  : tab === 'shop'
+                    ? 'No shop orders yet.'
+                    : 'No previous orders found.'}
               </div>
-
-              <footer className="order-card-footer">Total: ${order.totalAmount.toFixed(2)}</footer>
-            </article>
-          ))}
-        </div>
+            )
+          ) : (
+            <div className="order-history-list">
+              {entries.map((entry) =>
+                entry.kind === 'recipe' ? <RecipeOrderCard key={entry.key} order={entry.order} /> : <ShopOrderCard key={entry.key} order={entry.order} />,
+              )}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

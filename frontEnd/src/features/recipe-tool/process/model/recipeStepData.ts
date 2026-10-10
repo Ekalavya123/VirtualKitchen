@@ -1,8 +1,8 @@
 /**
  * Recipe STEP node data model of the Recipe Process (Recipe -> Process ->
  * ProcessNode): an Action plus its "Action On" targets — a step's action can
- * apply to *multiple* ingredients (from the app's UI static ingredient
- * catalog, catalog/ingredientCatalog.ts — not a backend catalog API) and/or
+ * apply to *multiple* ingredients (from the database ingredient catalog,
+ * loaded by catalog/ingredientCatalog.ts) and/or
  * *multiple* subprocess references — and its cooking properties (flame,
  * temperature, duration, repeat interval). Which of those fields apply is
  * decided per action by the shared catalog (catalog/actionSchemaCatalog.ts).
@@ -15,7 +15,14 @@
 
 import { CUSTOM_ACTION_ID, getActionDisplayName, resolveStepActionId, type StepActionId } from '../../catalog/actionCatalog'
 import { STEP_LEVEL_FIELD_KEYS, isStepFieldEnabled, type StepSchemaFieldKey } from '../../catalog/actionSchemaCatalog'
-import { CUSTOM_INGREDIENT_ID, getIngredientDisplayName, isIngredientId, type IngredientId } from '../../catalog/ingredientCatalog'
+import {
+  CUSTOM_INGREDIENT_ID,
+  getIngredientDisplayName,
+  isIngredientCatalogLoaded,
+  isIngredientId,
+  resolveIngredientId,
+  type IngredientId,
+} from '../../catalog/ingredientCatalog'
 import {
   resolvePreparationStyleId,
   type PreparationStyleId,
@@ -33,12 +40,11 @@ import {
 } from '../../catalog/stepFieldCatalog'
 
 /**
- * One "On:" ingredient target of a step's Action On — sourced from the UI's
- * static ingredient catalog (catalog/ingredientCatalog.ts), identified by
- * its string id there (e.g. "onion"), not the numeric backend `Ingredient`
- * catalog used elsewhere (RecipeIngredient in types/process.ts). Backend
- * storage is identical either way (an opaque field inside the STEP's data
- * bag), so this is purely a frontend catalog-source choice.
+ * One "On:" ingredient target of a step's Action On — a database ingredient
+ * (catalog/ingredientCatalog.ts), identified by its id as a string (e.g.
+ * "42"), or "custom" with a free-text name. Stored as an opaque field inside
+ * the STEP's data bag. Older data used the static catalog's slugs ("onion");
+ * those are mapped to the database id on read (see resolveStoredIngredientId).
  *
  * Preparation style is per-ingredient (e.g. Cut → onion: medium, tomato:
  * large), not a step-level field — the same action can be applied
@@ -148,11 +154,26 @@ const asNumber = (value: unknown): number | null => {
   return null
 }
 
+/**
+ * A stored ingredient reference as a catalog id: the database id (string, or a number from older
+ * writers), else a legacy static-catalog slug ("onion" — e.g. from a local draft or recovery
+ * snapshot saved before the database catalog) resolved through the entry's aliases. Null when it
+ * names nothing the catalog knows. Before the catalog has loaded nothing can be checked, so a
+ * non-empty reference is kept as-is rather than dropped (and later saved without it).
+ */
+const resolveStoredIngredientId = (value: unknown): IngredientId | null => {
+  const id = typeof value === 'number' && Number.isFinite(value) ? String(value) : value
+  if (typeof id !== 'string' || !id.trim()) return null
+  if (!isIngredientCatalogLoaded()) return id
+  if (isIngredientId(id)) return id
+  return resolveIngredientId(id) || null
+}
+
 // Only an unknown ingredient drops the entry — a missing quantity or an unrecognized unit is kept
 // (as null / '') rather than silently discarding the ingredient, as the pre-catalog normalizer did.
 const normalizeActionOnIngredient = (value: unknown): ActionOnIngredient | null => {
   const raw = asRecord(value)
-  const ingredientId = isIngredientId(raw.ingredientId) ? raw.ingredientId : null
+  const ingredientId = resolveStoredIngredientId(raw.ingredientId)
   if (ingredientId == null) return null
 
   return {

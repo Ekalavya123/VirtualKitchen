@@ -26,5 +26,9 @@ public class InventoryResponseDTO {
     private String imageUrl;
     private double quantity;
     private UnitType unit;
+    /** Held for recipe orders awaiting payment or being prepared. */
+    private double reservedQuantity;
+    /** {@code quantity - reservedQuantity}: what new recipe orders can still use. */
+    private double availableQuantity;
     private LocalDateTime lastUpdated;
 }

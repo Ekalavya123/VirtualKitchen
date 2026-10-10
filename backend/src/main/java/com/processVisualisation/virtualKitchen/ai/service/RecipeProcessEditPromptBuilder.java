@@ -26,13 +26,32 @@ public class RecipeProcessEditPromptBuilder {
     /** Logged with every edit; bump it whenever the edit prompt wording or structure changes. */
     public static final String PROMPT_VERSION = "1";
 
-    private final String systemPrompt;
+    private final RecipeProcessGenerationPromptBuilder generationPromptBuilder;
+    private final RecipeProcessEditOutputSchema outputSchema;
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /** Built on first use and rebuilt when the vocabulary (the ingredient catalog) changes. */
+    private volatile String systemPrompt;
+    private volatile long systemPromptVersion = Long.MIN_VALUE;
 
     public RecipeProcessEditPromptBuilder(
             RecipeProcessGenerationPromptBuilder generationPromptBuilder, RecipeProcessEditOutputSchema outputSchema
     ) {
-        this.systemPrompt = """
+        this.generationPromptBuilder = generationPromptBuilder;
+        this.outputSchema = outputSchema;
+    }
+
+    public String buildSystemPrompt() {
+        long version = generationPromptBuilder.vocabularyVersion();
+        if (systemPrompt == null || systemPromptVersion != version) {
+            systemPrompt = renderSystemPrompt();
+            systemPromptVersion = version;
+        }
+        return systemPrompt;
+    }
+
+    private String renderSystemPrompt() {
+        return """
                 You edit an existing recipe process. The user gives an INSTRUCTION; return the SMALLEST set of edit
                 operations that carries it out on CURRENT PROCESS. You are changing a recipe the user already built,
                 not writing a new one.
@@ -124,10 +143,6 @@ public class RecipeProcessEditPromptBuilder {
                 - Keep every value of CURRENT PROCESS that the instruction does not change exactly as it is.
                 - Return ONLY minified JSON matching the OUTPUT shape, with every empty/default field omitted.
                 """;
-    }
-
-    public String buildSystemPrompt() {
-        return systemPrompt;
     }
 
     String buildInitialPrompt(RecipeProcessEditContext context, String instruction) {

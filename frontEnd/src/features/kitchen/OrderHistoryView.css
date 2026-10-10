@@ -3,6 +3,11 @@
   margin: 0 auto;
 }
 
+/* Long histories: keep the page footer below the list (see KitchenPage.css's .kitchen-content). */
+.kitchen-content:has(> .order-history-view) {
+  flex: 1 0 auto;
+}
+
 .order-history-header {
   margin-bottom: 24px;
 }
@@ -36,6 +41,156 @@
 .order-history-list {
   display: grid;
   gap: 16px;
+}
+
+/* All / Recipe / Shop tabs */
+.order-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border: 1px solid var(--flow-border);
+  border-radius: 12px;
+  background: var(--flow-surface-muted);
+}
+
+.order-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--flow-text-muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.order-tab.active {
+  background: var(--flow-surface);
+  color: var(--flow-accent-strong);
+  box-shadow: var(--flow-shadow-card);
+}
+
+.order-tab:focus-visible,
+.order-retry:focus-visible {
+  outline: 2px solid var(--flow-accent);
+  outline-offset: 2px;
+}
+
+.order-tab-count {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--flow-accent-soft);
+  color: var(--flow-accent-strong);
+  font-size: 11px;
+  text-align: center;
+}
+
+.order-retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.order-error + .order-history-list {
+  margin-top: 16px;
+}
+
+.order-kind {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.order-kind-recipe {
+  color: var(--flow-accent);
+}
+
+.order-kind-shop {
+  color: var(--flow-text-muted);
+}
+
+.order-code {
+  padding: 2px 8px;
+  border: 1px solid var(--flow-border);
+  border-radius: 999px;
+  background: var(--flow-surface-muted);
+  color: var(--flow-text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Recipe order row */
+.recipe-order-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.recipe-order-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.recipe-order-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.recipe-order-main h3 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--flow-text);
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recipe-order-main p {
+  margin: 4px 0 0;
+  color: var(--flow-text-muted);
+  font-size: 12px;
+}
+
+.recipe-order-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.recipe-order-amount {
+  color: var(--flow-text);
+  font-size: 18px;
+}
+
+.recipe-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.recipe-order-actions .ro-btn {
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: 12px;
 }
 
 .order-card {
@@ -126,8 +281,12 @@
 }
 
 .order-card-footer {
+  /* Undo HomePage.css's global `footer` rule, which otherwise leaks into this card footer. */
+  display: block;
+  min-height: 0;
+  background: none;
   margin-top: 12px;
-  padding-top: 10px;
+  padding: 10px 0 0;
   border-top: 1px solid var(--flow-border);
   text-align: right;
   font-size: 18px;
@@ -146,5 +305,17 @@
 
   .order-card-header {
     flex-direction: column;
+  }
+
+  .recipe-order-card {
+    flex-wrap: wrap;
+  }
+
+  .recipe-order-side {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
   }
 }

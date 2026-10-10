@@ -2,6 +2,9 @@ package com.processVisualisation.virtualKitchen.ai.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.processVisualisation.virtualKitchen.store.catalog.IngredientCatalogChangedEvent;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.event.EventListener;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
@@ -17,16 +20,19 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 /**
  * Loads the recipe step-property vocabulary (actions and their per-action field/target/preparation
- * rules, ingredients, units, preparation styles, heat levels, temperature and duration units) from
+ * rules, units, preparation styles, heat levels, temperature and duration units) from
  * {@code stepCatalogs.data.json} — the same file the frontend's recipe catalogs are built from
  * (copied onto the classpath at build time, see backend/pom.xml) — so the recipe AI prompt
  * vocabulary and validator can never drift out of sync with the frontend's actual catalog.
+ * Ingredients are the exception: they come from an {@link IngredientVocabularySource} — the
+ * database ingredient catalog in the application, whose ids recipe steps store.
  * See docs/recipe-vocabulary-v2.md for the schema.
  */
 @Component
@@ -97,7 +103,6 @@ public class RecipeStepVocabularyProvider {
     private final List<ActionDefinition> actions;
     private final List<CategoryDefinition> ingredientCategories;
     private final Map<String, List<String>> ingredientCategoryStyleSets;
-    private final List<IngredientDefinition> ingredients;
     private final List<CategoryDefinition> unitCategories;
     private final List<UnitDefinition> units;
     private final List<PreparationStyleSet> preparationStyleSets;
@@ -108,18 +113,38 @@ public class RecipeStepVocabularyProvider {
     private final List<String> durationUnitIds;
 
     private final Map<String, ActionDefinition> actionById;
-    private final Map<String, IngredientDefinition> ingredientById;
     private final Map<String, UnitDefinition> unitById;
     private final Map<String, PreparationStyleSet> styleSetById;
 
     private final Map<String, String> actionAliases;
-    private final Map<String, String> ingredientAliases;
     private final Map<String, String> unitAliases;
     private final Map<String, String> preparationStyleAliases;
     private final Map<String, String> durationUnitAliases;
 
+    /**
+     * Ingredients come from {@link #ingredientSource} (the database catalog in the application) and,
+     * unlike the rest of the vocabulary, can change at runtime: they are loaded on first use and
+     * reloaded by {@link #refreshIngredients()}.
+     */
+    private final IngredientVocabularySource ingredientSource;
+    private volatile IngredientIndex ingredientIndex;
+    private final AtomicLong ingredientCatalogVersion = new AtomicLong();
+
+    private record IngredientIndex(
+            List<IngredientDefinition> ingredients,
+            Map<String, IngredientDefinition> byId,
+            Map<String, String> aliases
+    ) {}
+
+    /** Reads every ingredient from the seed list in stepCatalogs.data.json (ids are the catalog slugs). */
     public RecipeStepVocabularyProvider() {
+        this(null);
+    }
+
+    @Autowired
+    public RecipeStepVocabularyProvider(IngredientVocabularySource ingredientSource) {
         JsonNode root = loadCatalog();
+        this.ingredientSource = ingredientSource != null ? ingredientSource : () -> seedIngredients(root);
 
         this.actionCategories = categories(root, "actionCategories");
         this.actions = map(root, "actions", this::toAction);
@@ -127,15 +152,6 @@ public class RecipeStepVocabularyProvider {
         this.ingredientCategoryStyleSets = new HashMap<>();
         root.path("ingredientCategories").forEach(entry ->
                 ingredientCategoryStyleSets.put(entry.path("id").asText(), strings(entry.path("preparationStyleSets"))));
-        this.ingredients = map(root, "ingredients", entry -> new IngredientDefinition(
-                entry.path("id").asText(),
-                entry.path("name").asText(),
-                entry.path("category").asText(),
-                entry.path("defaultUnit").asText(),
-                strings(entry.path("units")),
-                strings(entry.path("aliases")),
-                entry.has("preparationStyleSets") ? strings(entry.path("preparationStyleSets")) : null
-        ));
         this.unitCategories = categories(root, "unitCategories");
         this.units = map(root, "units", entry -> new UnitDefinition(
                 entry.path("id").asText(),
@@ -154,23 +170,83 @@ public class RecipeStepVocabularyProvider {
         this.durationUnitIds = map(root, "durationUnits", entry -> entry.path("id").asText());
 
         this.actionById = index(actions, ActionDefinition::id);
-        this.ingredientById = index(ingredients, IngredientDefinition::id);
         this.unitById = index(units, UnitDefinition::id);
         this.styleSetById = index(preparationStyleSets, PreparationStyleSet::id);
 
         this.actionAliases = aliasLookup(root, "actions", "displayName");
-        this.ingredientAliases = aliasLookup(root, "ingredients", "name");
         this.unitAliases = aliasLookup(root, "units", "label", "shortLabel");
         this.preparationStyleAliases = aliasLookup(root, "preparationStyles", "label");
         this.durationUnitAliases = aliasLookup(root, "durationUnits", "label");
     }
 
     private JsonNode loadCatalog() {
+        return readCatalogResource();
+    }
+
+    /** The ingredient seed list in stepCatalogs.data.json, keyed by catalog slug. */
+    public static List<IngredientDefinition> seedIngredients(JsonNode root) {
+        return map(root, "ingredients", entry -> new IngredientDefinition(
+                entry.path("id").asText(),
+                entry.path("name").asText(),
+                entry.path("category").asText(),
+                entry.path("defaultUnit").asText(),
+                strings(entry.path("units")),
+                strings(entry.path("aliases")),
+                entry.has("preparationStyleSets") ? strings(entry.path("preparationStyleSets")) : null
+        ));
+    }
+
+    /** The parsed stepCatalogs.data.json, for the ingredient catalog seeder. */
+    public static JsonNode readCatalogResource() {
         try (InputStream stream = new ClassPathResource(CATALOG_RESOURCE).getInputStream()) {
             return new ObjectMapper().readTree(stream);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to load " + CATALOG_RESOURCE + " from the classpath", e);
         }
+    }
+
+    private IngredientIndex ingredientIndex() {
+        IngredientIndex index = ingredientIndex;
+        if (index == null) {
+            synchronized (this) {
+                index = ingredientIndex;
+                if (index == null) {
+                    index = buildIngredientIndex(ingredientSource.loadIngredients());
+                    ingredientIndex = index;
+                }
+            }
+        }
+        return index;
+    }
+
+    private static IngredientIndex buildIngredientIndex(List<IngredientDefinition> ingredients) {
+        Map<String, String> aliases = new HashMap<>();
+        for (IngredientDefinition ingredient : ingredients) {
+            aliases.put(normalize(ingredient.id()), ingredient.id());
+            aliases.put(normalize(ingredient.name()), ingredient.id());
+        }
+        for (IngredientDefinition ingredient : ingredients) {
+            ingredient.aliases().forEach(alias -> aliases.putIfAbsent(normalize(alias), ingredient.id()));
+        }
+        return new IngredientIndex(List.copyOf(ingredients), index(ingredients, IngredientDefinition::id), aliases);
+    }
+
+    /** Drops the cached ingredient list so the next lookup reloads it from the source. */
+    public void refreshIngredients() {
+        synchronized (this) {
+            ingredientIndex = null;
+            ingredientCatalogVersion.incrementAndGet();
+        }
+    }
+
+    @EventListener
+    public void onIngredientCatalogChanged(IngredientCatalogChangedEvent event) {
+        refreshIngredients();
+    }
+
+    /** Increments whenever the ingredient list is reloaded — lets prompt builders rebuild cached prompts. */
+    public long ingredientCatalogVersion() {
+        return ingredientCatalogVersion.get();
     }
 
     private ActionDefinition toAction(JsonNode entry) {
@@ -256,7 +332,7 @@ public class RecipeStepVocabularyProvider {
     }
 
     public List<IngredientDefinition> ingredients() {
-        return ingredients;
+        return ingredientIndex().ingredients();
     }
 
     public List<CategoryDefinition> unitCategories() {
@@ -294,7 +370,7 @@ public class RecipeStepVocabularyProvider {
     }
 
     public String ingredientIds() {
-        return joinIds(ingredientById.keySet());
+        return joinIds(ingredientIndex().byId().keySet());
     }
 
     public String unitIds() {
@@ -320,7 +396,7 @@ public class RecipeStepVocabularyProvider {
     }
 
     public Optional<IngredientDefinition> ingredient(String id) {
-        return Optional.ofNullable(id == null ? null : ingredientById.get(id));
+        return Optional.ofNullable(id == null ? null : ingredientIndex().byId().get(id));
     }
 
     public Optional<UnitDefinition> unit(String id) {
@@ -341,7 +417,7 @@ public class RecipeStepVocabularyProvider {
     }
 
     public Optional<String> resolveIngredientId(String text) {
-        return resolve(ingredientAliases, text);
+        return resolve(ingredientIndex().aliases(), text);
     }
 
     /** Also maps the Process model's legacy UnitType values (COUNT/GRAM/KG/ML/LITER) via unit aliases. */

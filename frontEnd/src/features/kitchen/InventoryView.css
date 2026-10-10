@@ -284,6 +284,27 @@
   text-transform: uppercase;
 }
 
+/* Stock held for recipe orders. */
+.inventory-reserved-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-top: 8px;
+  color: var(--flow-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.inventory-reserved-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--flow-warning-border);
+  border-radius: 999px;
+  background: var(--flow-warning-soft);
+  color: var(--flow-warning);
+  font-weight: 800;
+}
+
 
 /* =========================================================
    Card footer

@@ -7,8 +7,8 @@ import { DEFAULT_HANDLE_SIDES, type HandleSides } from '../model/processLayout'
  * Read-only lookup data a STEP node needs to display its Action On
  * information (subprocess names) directly on the canvas, without opening
  * the properties panel. Ingredient names don't need this — they come from
- * the app's static UI catalog (catalog/ingredientCatalog.ts), importable
- * directly wherever needed. Provided by RecipeProcessCanvas (which already loads
+ * the ingredient catalog (catalog/ingredientCatalog.ts, loaded from the
+ * database before the editor renders), importable directly wherever needed. Provided by RecipeProcessCanvas (which already loads
  * the recipe's process list for the panel) and consumed by RecipeStepNode —
  * plain React Context, not a new state-management framework, and not
  * written to by anything downstream.

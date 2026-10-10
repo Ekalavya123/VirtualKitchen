@@ -4,6 +4,7 @@ import com.processVisualisation.virtualKitchen.recipe.dto.GeneratedActionOnDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.GeneratedActionOnIngredientDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.GeneratedRecipeProcessDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.GeneratedRecipeStepDTO;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -16,10 +17,24 @@ import java.util.Set;
  * Maps the compact model output ({@link RecipeProcessOutput}) onto the {@code Generated*DTO}s the validator and the
  * frontend work with, filling every default the model was told to omit: nodeType STEP, expectedOutput "",
  * expectedResult success, empty target lists, and a stepId for steps that no later step references.
- * Values are carried over as-is — deciding whether they are valid is {@link RecipeProcessGenerationValidator}'s job.
+ * Values are carried over as-is — deciding whether they are valid is {@link RecipeProcessGenerationValidator}'s job —
+ * except an ingredientId that names a catalog ingredient by its name, an alias or its old catalog slug, which is
+ * mapped onto that ingredient's catalog id (when a vocabulary is available).
  */
 @Component
 public class RecipeProcessOutputNormalizer {
+
+    private final RecipeStepVocabularyProvider vocabulary;
+
+    /** Carries ingredient ids over unchanged. */
+    public RecipeProcessOutputNormalizer() {
+        this(null);
+    }
+
+    @Autowired
+    public RecipeProcessOutputNormalizer(RecipeStepVocabularyProvider vocabulary) {
+        this.vocabulary = vocabulary;
+    }
 
     public GeneratedRecipeProcessDTO toProcess(RecipeProcessOutput.Process process) {
         if (process == null) return null;
@@ -84,12 +99,20 @@ public class RecipeProcessOutputNormalizer {
     private GeneratedActionOnIngredientDTO toIngredient(RecipeProcessOutput.Ingredient ingredient) {
         if (ingredient == null) return null;
         return new GeneratedActionOnIngredientDTO(
-                ingredient.ingredientId(),
+                resolveIngredientId(ingredient.ingredientId()),
                 ingredient.quantity(),
                 ingredient.unit(),
                 ingredient.preparationStyle(),
                 ingredient.customIngredientName()
         );
+    }
+
+    /** A known id as-is; otherwise the id its name/alias resolves to; otherwise unchanged (the validator reports it). */
+    public String resolveIngredientId(String ingredientId) {
+        if (vocabulary == null || ingredientId == null || vocabulary.ingredient(ingredientId).isPresent()) {
+            return ingredientId;
+        }
+        return vocabulary.resolveIngredientId(ingredientId).orElse(ingredientId);
     }
 
     /** "s<position>", suffixed until it collides with no stepId the model wrote itself. */

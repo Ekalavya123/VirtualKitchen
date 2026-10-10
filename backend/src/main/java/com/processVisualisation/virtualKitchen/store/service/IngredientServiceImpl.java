@@ -8,7 +8,9 @@ import com.processVisualisation.virtualKitchen.store.dto.IngredientUpdateDTO;
 import com.processVisualisation.virtualKitchen.store.repository.IngredientRepository;
 import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
 
+import com.processVisualisation.virtualKitchen.store.catalog.IngredientCatalogChangedEvent;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -32,6 +34,9 @@ public class IngredientServiceImpl implements IIngredientService {
     @Autowired
     private SequenceGeneratorService sequenceGeneratorService;
 
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
     /**
      * Creates a new ingredient catalog entry after checking that the name
      * is not already in use, assigning it a generated sequence id.
@@ -51,6 +56,7 @@ public class IngredientServiceImpl implements IIngredientService {
         ingredient.setId(sequenceGeneratorService.generateSequence(Ingredient.SEQUENCE_NAME));
 
         Ingredient saved = ingredientRepository.save(ingredient);
+        eventPublisher.publishEvent(new IngredientCatalogChangedEvent("create"));
         return ingredientMapper.toDTO(saved);
     }
 
@@ -102,6 +108,7 @@ public class IngredientServiceImpl implements IIngredientService {
         ingredient.setImageUrl(request.getImageUrl());
 
         Ingredient updated = ingredientRepository.save(ingredient);
+        eventPublisher.publishEvent(new IngredientCatalogChangedEvent("update"));
         return ingredientMapper.toDTO(updated);
     }
 
@@ -118,5 +125,6 @@ public class IngredientServiceImpl implements IIngredientService {
                 .orElseThrow(() -> new RuntimeException("Ingredient not found with id: " + id));
 
         ingredientRepository.delete(ingredient);
+        eventPublisher.publishEvent(new IngredientCatalogChangedEvent("delete"));
     }
 }

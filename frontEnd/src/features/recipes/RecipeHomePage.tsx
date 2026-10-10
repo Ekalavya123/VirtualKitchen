@@ -7,6 +7,7 @@ import { browserStorage, clearRecovery } from '../recipe-tool/persistence/recove
 import { clearRecipeDrafts, draftKeys } from '../../shared/drafts/draftStore'
 import { useDraft } from '../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../shared/drafts/DraftRestoredNote'
+import { useStartRecipeOrder } from '../recipe-order/useStartRecipeOrder'
 
 type RecipeTab = 'mine' | 'global'
 
@@ -28,6 +29,10 @@ type RecipeCardProps = {
   onToggleVisibility?: () => void
   onAddToMyRecipes?: () => void
   onOpenRecipeTool?: () => void
+  /** "Order Recipe" (My Recipes only): starts a recipe order and opens its confirm page. */
+  onOrderRecipe?: () => void
+  /** This card's order is being created. */
+  ordering?: boolean
 }
 
 function RecipeCard({
@@ -39,6 +44,8 @@ function RecipeCard({
   onToggleVisibility,
   onAddToMyRecipes,
   onOpenRecipeTool,
+  onOrderRecipe,
+  ordering,
 }: RecipeCardProps) {
   // Falls back to the recipe icon when there is no thumbnail or it fails to load.
   const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null)
@@ -109,6 +116,17 @@ function RecipeCard({
               className="recipe-card-open-button"
             >
               🧰 Recipe Tool
+            </button>
+          )}
+
+          {variant === 'mine' && onOrderRecipe && (
+            <button
+              onClick={onOrderRecipe}
+              disabled={ordering}
+              title="Order this recipe from your kitchen (simulated preparation and delivery)"
+              className="recipe-card-order-button"
+            >
+              {ordering ? 'Starting…' : '🛒 Order Recipe'}
             </button>
           )}
         </div>
@@ -576,6 +594,7 @@ export default function RecipeHomePage({
     onCreateRecipe || onOpenRecipies
 
   const { notifySuccess, notifyError } = useNotifications()
+  const { startOrder, orderingRecipeId } = useStartRecipeOrder()
 
   const [activeTab, setActiveTab] = useState<RecipeTab>('mine')
 
@@ -930,6 +949,10 @@ export default function RecipeHomePage({
                     ? () => onOpenRecipeTool(recipe.id)
                     : undefined
                 }
+                onOrderRecipe={() =>
+                  void startOrder(recipe.id)
+                }
+                ordering={orderingRecipeId === recipe.id}
               />
             ))}
           </div>

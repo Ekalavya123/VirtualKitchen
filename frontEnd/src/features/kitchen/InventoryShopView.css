@@ -15,6 +15,42 @@
   margin: 0 auto;
 }
 
+/* Shown while shopping for a recipe order's missing ingredients. */
+.shop-resume-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--flow-accent-soft-border);
+  border-radius: var(--flow-radius-lg);
+  background: var(--flow-surface);
+  box-shadow: var(--flow-shadow-card);
+  color: var(--flow-text);
+  font-size: 0.9rem;
+}
+
+.shop-resume-text {
+  flex: 1;
+  min-width: 200px;
+}
+
+.shop-resume-link {
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--flow-accent), var(--flow-accent-secondary));
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.shop-resume-link:hover {
+  filter: brightness(1.05);
+}
+
 
 /* =========================================================
    Header

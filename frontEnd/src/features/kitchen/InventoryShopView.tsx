@@ -1,10 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   OrderApi,
   type OrderCreateRequest,
   type OrderUnitType,
   ShopApi,
 } from '../../api'
+import {
+  clearCart,
+  defaultShopPrice,
+  getCartItemKey as getItemKey,
+  loadCart,
+  mergeCartLine,
+  saveCart,
+  toCartUnit as toOrderUnit,
+  type CartItem,
+} from '../../shared/cart/cartStorage'
 import CatalogItemImage from './CatalogItemImage'
 import './InventoryShopView.css'
 
@@ -18,18 +29,17 @@ interface ShopItem {
   imageUrl?: string | null
 }
 
-interface CartItem {
-  itemId: number
-  itemType: 'INGREDIENT' | 'EQUIPMENT'
-  itemName: string
-  quantity: number
-  unit: OrderUnitType
-  price: number
-}
-
 interface InventoryShopViewProps {
   userId: number
   onOrderPlaced: () => void
+  /**
+   * Set when the user came from a recipe order's ingredient check to buy what's missing: the shop
+   * shows which order it's shopping for (with a way back), and opens the cart that check filled.
+   */
+  resumeRecipeOrder?: {
+    orderId: number
+    orderCode?: string | null
+  }
 }
 
 const INGREDIENT_UNIT_OPTIONS: OrderUnitType[] = [
@@ -41,25 +51,6 @@ const INGREDIENT_UNIT_OPTIONS: OrderUnitType[] = [
 ]
 
 const EQUIPMENT_UNIT_OPTIONS: OrderUnitType[] = ['COUNT']
-
-const toOrderUnit = (value: unknown): OrderUnitType => {
-  const normalized = String(value ?? '').trim().toUpperCase()
-
-  if (normalized === 'KG') return 'KG'
-  if (normalized === 'GRAM') return 'GRAM'
-  if (normalized === 'LITER') return 'LITER'
-  if (normalized === 'ML') return 'ML'
-
-  return 'COUNT'
-}
-
-const getCartStorageKey = (userId: number) =>
-  `virtual-kitchen.cart.${userId}`
-
-const getItemKey = (
-  itemType: 'INGREDIENT' | 'EQUIPMENT',
-  itemId: number,
-) => `${itemType}-${itemId}`
 
 function ShopHeader({
   cartCount,
@@ -488,9 +479,14 @@ function CartDrawer({
 export default function InventoryShopView({
   userId,
   onOrderPlaced,
+  resumeRecipeOrder,
 }: InventoryShopViewProps) {
   const [allItems, setAllItems] = useState<ShopItem[]>([])
-  const [cartItems, setCartItems] = useState<CartItem[]>([])
+  // Read from storage on mount (not in an effect), so the persist effect below can never write an
+  // empty cart over the stored one before it has been read.
+  const [cartItems, setCartItems] = useState<CartItem[]>(
+    () => loadCart(userId),
+  )
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -507,63 +503,16 @@ export default function InventoryShopView({
   >('all')
 
   const [search, setSearch] = useState('')
-  const [cartOpen, setCartOpen] = useState(false)
-
-  /*
-   * Load persisted cart
-   */
-  useEffect(() => {
-    const rawCart = localStorage.getItem(
-      getCartStorageKey(userId),
-    )
-
-    if (!rawCart) {
-      setCartItems([])
-      return
-    }
-
-    try {
-      const parsed = JSON.parse(rawCart)
-
-      if (!Array.isArray(parsed)) {
-        setCartItems([])
-        return
-      }
-
-      const normalized = parsed
-        .map(entry => ({
-          itemId: Number(entry.itemId),
-          itemType:
-            (entry.itemType === 'EQUIPMENT'
-              ? 'EQUIPMENT'
-              : 'INGREDIENT') as CartItem['itemType'],
-          itemName: String(entry.itemName ?? ''),
-          quantity: Number(entry.quantity),
-          unit: toOrderUnit(entry.unit),
-          price: Number(entry.price),
-        }))
-        .filter(
-          entry =>
-            Number.isFinite(entry.itemId) &&
-            entry.itemName &&
-            entry.quantity > 0 &&
-            entry.price >= 0,
-        )
-
-      setCartItems(normalized)
-    } catch {
-      setCartItems([])
-    }
-  }, [userId])
+  // Coming from a recipe order, the cart already holds the missing ingredients: show it.
+  const [cartOpen, setCartOpen] = useState(
+    Boolean(resumeRecipeOrder),
+  )
 
   /*
    * Persist cart
    */
   useEffect(() => {
-    localStorage.setItem(
-      getCartStorageKey(userId),
-      JSON.stringify(cartItems),
-    )
+    saveCart(userId, cartItems)
   }, [cartItems, userId])
 
   /*
@@ -590,7 +539,10 @@ export default function InventoryShopView({
                 description:
                   item.description ||
                   'High quality ingredient',
-                basePrice: item.basePrice ?? 5,
+                basePrice: defaultShopPrice(
+                  'INGREDIENT',
+                  item.basePrice,
+                ),
                 defaultUnit: toOrderUnit(
                   item.defaultUnit,
                 ),
@@ -607,7 +559,10 @@ export default function InventoryShopView({
                 description:
                   item.description ||
                   'Professional kitchen equipment',
-                basePrice: item.basePrice ?? 50,
+                basePrice: defaultShopPrice(
+                  'EQUIPMENT',
+                  item.basePrice,
+                ),
                 defaultUnit: 'COUNT',
                 imageUrl: item.imageUrl,
               }))
@@ -699,53 +654,20 @@ export default function InventoryShopView({
     setCheckoutError('')
     setPaymentSuccessMessage('')
 
-    setCartItems(current => {
-      const key = getItemKey(
-        item.itemType,
-        item.id,
-      )
-
-      const existing = current.find(
-        cartItem =>
-          getItemKey(
-            cartItem.itemType,
-            cartItem.itemId,
-          ) === key,
-      )
-
-      if (!existing) {
-        return [
-          ...current,
-          {
-            itemId: item.id,
-            itemType: item.itemType,
-            itemName: item.name,
-            quantity: 1,
-            unit:
-              item.itemType === 'EQUIPMENT'
-                ? 'COUNT'
-                : (item.defaultUnit ?? 'GRAM'),
-            price: item.basePrice,
-          },
-        ]
-      }
-
-      return current.map(cartItem => {
-        if (
-          getItemKey(
-            cartItem.itemType,
-            cartItem.itemId,
-          ) !== key
-        ) {
-          return cartItem
-        }
-
-        return {
-          ...cartItem,
-          quantity: cartItem.quantity + 1,
-        }
-      })
-    })
+    // One more of an item already in the cart keeps that line's unit.
+    setCartItems(current =>
+      mergeCartLine(current, {
+        itemId: item.id,
+        itemType: item.itemType,
+        itemName: item.name,
+        quantity: 1,
+        unit:
+          item.itemType === 'EQUIPMENT'
+            ? 'COUNT'
+            : (item.defaultUnit ?? 'GRAM'),
+        price: item.basePrice,
+      }),
+    )
   }
 
   const handleQuantityChange = (
@@ -845,6 +767,8 @@ export default function InventoryShopView({
         window.setTimeout(resolve, 1200)
       })
 
+      // The backend takes the buyer from the session token; the
+      // signed-in user's own id is sent only for older backends.
       const payload: OrderCreateRequest = {
         userId,
         items: cartItems.map(item => ({
@@ -861,14 +785,12 @@ export default function InventoryShopView({
         await OrderApi.createOrder(payload)
 
       setPaymentSuccessMessage(
-        `Dummy payment successful. Order #${createdOrder.orderId} created.`,
+        `Dummy payment successful. Order ${createdOrder.orderCode ?? `#${createdOrder.orderId}`} created.`,
       )
 
       setCartItems([])
 
-      localStorage.removeItem(
-        getCartStorageKey(userId),
-      )
+      clearCart(userId)
 
       onOrderPlaced()
 
@@ -894,6 +816,29 @@ export default function InventoryShopView({
     <>
       <div className="shop-page">
         <div className="shop-view">
+          {resumeRecipeOrder && (
+            <div className="shop-resume-banner" role="status">
+              <span aria-hidden="true">🧾</span>
+
+              <span className="shop-resume-text">
+                Shopping for recipe order{' '}
+                <strong>
+                  {resumeRecipeOrder.orderCode ??
+                    `#${resumeRecipeOrder.orderId}`}
+                </strong>
+                . After checkout you'll go straight back to
+                its ingredient check.
+              </span>
+
+              <Link
+                className="shop-resume-link"
+                to={`/kitchen/recipe-orders/${resumeRecipeOrder.orderId}/ingredients`}
+              >
+                ← Back to order
+              </Link>
+            </div>
+          )}
+
           <ShopHeader
             cartCount={cartCount}
             onOpenCart={() => setCartOpen(true)}

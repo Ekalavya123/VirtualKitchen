@@ -7,6 +7,7 @@ import {
   useLocation,
   useNavigate,
   useParams,
+  useSearchParams,
 } from 'react-router-dom'
 import Auth from '../features/auth/Auth'
 import KitchenLayout from '../features/kitchen/KitchenPage'
@@ -19,12 +20,16 @@ import RecipeProcessListPage from '../features/recipe-tool/process/components/Re
 import RecipeToolPage from '../features/recipe-tool/RecipeToolPage'
 import { isRecipeToolView, recipeToolPath } from '../features/recipe-tool/recipeToolRoutes'
 import { RecipeSessionProvider } from '../features/recipe-tool/context/RecipeSessionContext'
+import IngredientCatalogGate from '../features/recipe-tool/catalog/IngredientCatalogGate'
+import RecipeOrderPage from '../features/recipe-order/RecipeOrderPage'
+import { recipeOrderPath } from '../features/recipe-order/model/orderView'
 import HomePage from '../features/HomePage'
 import type { User } from '../types/User'
 import type { RecipeProcessBreadcrumbEntry } from '../types/recipe'
-import { AuthenticationApi, KitchenApi } from '../api'
+import { AuthenticationApi, KitchenApi, RecipeOrderApi } from '../api'
 import { clearStoredToken, isAuthenticated } from '../shared/auth/session'
 import { clearAllDrafts } from '../shared/drafts/draftStore'
+import type { ShopResumeState } from '../shared/cart/cartStorage'
 import '../App.css'
 
 interface Kitchen {
@@ -35,11 +40,65 @@ interface Kitchen {
 
 function ShopRoute({ userId }: { userId: number }) {
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+
+  // `?resumeRecipeOrder=<id>`: shopping for a recipe order's missing ingredients.
+  const resumeParam = Number(searchParams.get('resumeRecipeOrder'))
+  const resumeOrderId = Number.isInteger(resumeParam) && resumeParam > 0 ? resumeParam : null
+  const stateCode = (location.state as ShopResumeState | null)?.recipeOrderCode
+  const [fetchedCode, setFetchedCode] = useState<{ orderId: number; code: string } | null>(null)
+
+  useEffect(() => {
+    // The code normally comes with the navigation; after a reload it's looked up.
+    if (resumeOrderId == null || stateCode) return
+    let cancelled = false
+    RecipeOrderApi.get(resumeOrderId)
+      .then((order) => {
+        if (!cancelled) setFetchedCode({ orderId: resumeOrderId, code: order.orderCode })
+      })
+      .catch(() => {
+        // The banner falls back to the order id.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [resumeOrderId, stateCode])
+
+  const resumeOrderCode = stateCode ?? (fetchedCode?.orderId === resumeOrderId ? fetchedCode.code : null)
 
   return (
     <InventoryShopView
+      // Remount when the resume target changes, so the cart is re-read from storage.
+      key={resumeOrderId ?? 'shop'}
       userId={userId}
-      onOrderPlaced={() => navigate('/kitchen/orders')}
+      resumeRecipeOrder={resumeOrderId != null ? { orderId: resumeOrderId, orderCode: resumeOrderCode } : undefined}
+      // Back to the order's ingredient check (which re-checks stock) instead of the order list.
+      onOrderPlaced={() => navigate(resumeOrderId != null ? recipeOrderPath(resumeOrderId, 'ingredients') : '/kitchen/orders')}
+    />
+  )
+}
+
+function RecipeOrderRoute({ userId }: { userId: number }) {
+  const { orderId: orderIdParam, view } = useParams()
+  const orderId = Number(orderIdParam)
+
+  if (!Number.isInteger(orderId) || orderId <= 0) {
+    return (
+      <Navigate
+        to="/kitchen/orders"
+        replace
+      />
+    )
+  }
+
+  // RecipeOrderPage itself validates `view` against the order's status (and redirects).
+  return (
+    <RecipeOrderPage
+      key={orderId}
+      orderId={orderId}
+      view={view}
+      userId={userId}
     />
   )
 }
@@ -362,7 +421,9 @@ function App() {
             path="recipes/:recipeId/tool/:view?"
             element={
               currentUser ? (
-                <RecipeToolRoute currentUserId={currentUser.id} />
+                <IngredientCatalogGate>
+                  <RecipeToolRoute currentUserId={currentUser.id} />
+                </IngredientCatalogGate>
               ) : null
             }
           />
@@ -370,13 +431,31 @@ function App() {
             path="recipes/:recipeId/processes"
             element={
               currentUser ? (
-                <RecipeProcessListRoute currentUserId={currentUser.id} />
+                <IngredientCatalogGate>
+                  <RecipeProcessListRoute currentUserId={currentUser.id} />
+                </IngredientCatalogGate>
               ) : null
             }
           />
           <Route
             path="recipes/:recipeId/process/:processId"
-            element={<RecipeProcessEditorRoute />}
+            element={
+              <IngredientCatalogGate>
+                <RecipeProcessEditorRoute />
+              </IngredientCatalogGate>
+            }
+          />
+
+          {/* Recipe orders: confirm -> ingredients -> payment -> receipt -> track (see features/recipe-order). */}
+          <Route
+            path="recipe-orders/:orderId/:view?"
+            element={
+              currentUser ? (
+                <IngredientCatalogGate>
+                  <RecipeOrderRoute userId={currentUser.id} />
+                </IngredientCatalogGate>
+              ) : null
+            }
           />
 
           <Route

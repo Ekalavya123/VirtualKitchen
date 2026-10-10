@@ -13,7 +13,12 @@ export interface InventoryItem {
   itemId?: number
   itemName?: string
   itemType?: string
+  /** On-hand quantity, including what is reserved for recipe orders. */
   quantity?: number
+  /** Held for recipe orders that are awaiting payment or being prepared. */
+  reservedQuantity?: number
+  /** quantity - reservedQuantity: what new orders can still use. */
+  availableQuantity?: number
   unit?: string
   lastUpdated?: string
   /** Catalog image of the ingredient/equipment; null until one is generated. */

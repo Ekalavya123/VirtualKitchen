@@ -4,11 +4,12 @@ import '../process/styles/RecipePropertiesPanel.css'
 import SearchableSelect, { type SearchableSelectOption } from '../../../shared/components/SearchableSelect'
 import {
   CUSTOM_INGREDIENT_ID,
-  INGREDIENTS_BY_CATEGORY,
-  INGREDIENT_CATEGORY_ORDER,
   getIngredientCategoryLabel,
+  getIngredientCategoryOrder,
   getIngredientDefaultUnit,
+  getIngredientsByCategory,
   isIngredientId,
+  useIngredientCatalog,
   type IngredientId,
 } from '../catalog/ingredientCatalog'
 import { CUSTOM_PREPARATION_STYLE_ID, DEFAULT_PREPARATION_STYLE_ID } from '../catalog/preparationStyleCatalog'
@@ -19,17 +20,27 @@ import type { ActionOnIngredient } from '../process/model/recipeStepData'
 import { PreparationStyleSelect, UnitSelect } from './StepFieldInputs'
 import { useDraft } from '../../../shared/drafts/useDraft'
 
-// Built once: the full global catalog, grouped by category, searchable by aliases — never
-// restricted to what the Kitchen inventory currently holds.
-const ALL_INGREDIENT_OPTIONS: SearchableSelectOption[] = INGREDIENT_CATEGORY_ORDER.flatMap((category) =>
-  INGREDIENTS_BY_CATEGORY[category].map((item) => ({
-    value: item.id,
-    label: item.name,
-    icon: item.icon,
-    category: getIngredientCategoryLabel(category),
-    keywords: item.aliases,
-  }))
-)
+// The full global catalog (the database's ingredients), grouped by category, searchable by
+// aliases — never restricted to what the Kitchen inventory currently holds.
+// Built once per catalog version (the catalog only changes when it's reloaded).
+let cachedOptions: { version: number; options: SearchableSelectOption[] } | null = null
+
+const getIngredientOptions = (catalogVersion: number): SearchableSelectOption[] => {
+  if (cachedOptions?.version !== catalogVersion) {
+    const byCategory = getIngredientsByCategory()
+    const options = getIngredientCategoryOrder().flatMap((category) =>
+      (byCategory[category] ?? []).map((item) => ({
+        value: item.id,
+        label: item.name,
+        icon: item.icon,
+        category: getIngredientCategoryLabel(category),
+        keywords: item.aliases,
+      }))
+    )
+    cachedOptions = { version: catalogVersion, options }
+  }
+  return cachedOptions.options
+}
 
 type IngredientSelectorProps = {
   /** Ingredient ids already on this step, excluded from the picker so the same ingredient isn't added twice (custom ingredients excepted). */
@@ -83,7 +94,7 @@ export default function IngredientSelector({ excludeIngredientIds, action, onAdd
   const setCustomPreparationStyle = field('customPreparationStyle')
   const [error, setError] = useState<string | null>(null)
 
-  const options = ALL_INGREDIENT_OPTIONS.filter((option) => option.value === CUSTOM_INGREDIENT_ID || !excludeIngredientIds.includes(option.value))
+  const options = getIngredientOptions(useIngredientCatalog()).filter((option) => option.value === CUSTOM_INGREDIENT_ID || !excludeIngredientIds.includes(option.value))
   const selectedIngredientId: IngredientId | '' = isIngredientId(ingredientIdValue) ? ingredientIdValue : ''
   const unitQuantifiable = isQuantifiableUnit(unit)
 

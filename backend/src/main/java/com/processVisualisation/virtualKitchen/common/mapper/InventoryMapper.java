@@ -48,6 +48,8 @@ public class InventoryMapper {
                 .itemId(inv.getItemId())
                 .quantity(inv.getQuantity())
                 .unit(inv.getUnit())
+                .reservedQuantity(inv.getReservedQuantity())
+                .availableQuantity(Math.max(0, inv.getQuantity() - inv.getReservedQuantity()))
                 .lastUpdated(inv.getLastUpdated())
                 .build();
     }
