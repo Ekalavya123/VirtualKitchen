@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { RecipeDetailApi } from '../../api'
+import { RecipeApi, RecipeDetailApi } from '../../api'
 import type { NutritionInfo, RecipeDetail } from '../../types/recipe'
 import { RecipeSessionProvider } from './context/RecipeSessionContext'
 import './process/styles/RecipeProcessCanvas.css'
@@ -9,6 +9,11 @@ import RecipeEditorView from './process/components/RecipeEditorView'
 import RecipeProcessPage from './presentation/components/RecipeProcessPage'
 import { recipeToolPath, type RecipeToolView } from './recipeToolRoutes'
 import { useStartRecipeOrder } from '../recipe-order/useStartRecipeOrder'
+import EditRecipeDetailsModal, { type RecipeDetailsDraft } from '../recipes/EditRecipeDetailsModal'
+import { useConfirm } from '../../shared/components/confirm/confirmContext'
+import { useNotifications } from '../../shared/components/notifications/NotificationProvider'
+import { browserStorage, clearRecovery } from './persistence/recoveryStore'
+import { clearRecipeDrafts } from '../../shared/drafts/draftStore'
 
 type RecipeToolPageProps = {
   recipeId: number
@@ -34,6 +39,9 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const { startOrder, orderingRecipeId } = useStartRecipeOrder()
+  const confirm = useConfirm()
+  const { notifySuccess, notifyError } = useNotifications()
+  const [editingDetails, setEditingDetails] = useState(false)
   // The editor mounts on first visit and then stays mounted (hidden while reading the Recipe
   // Process), so switching tabs never loses its canvas state — undo history, selection, the open
   // process. Not mounted up front: React Flow shouldn't initialise inside a hidden container.
@@ -92,6 +100,59 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
     setRecipe((current) => (current ? { ...current, nutrition } : current))
   }, [])
 
+  // --- owner actions (the header's ⋯ menu) ---
+
+  const saveDetails = async (details: RecipeDetailsDraft) => {
+    const updated = await RecipeApi.updateRecipe(recipeId, currentUserId, details)
+    setRecipe((current) => (current ? { ...current, name: updated.name, description: updated.description } : current))
+    setEditingDetails(false)
+    notifySuccess('Recipe details saved.')
+  }
+
+  const toggleVisibility = async () => {
+    if (!recipe) return
+    const makingPublic = recipe.visibility !== 'PUBLIC'
+    const confirmed = await confirm({
+      eyebrow: makingPublic ? 'Make public' : 'Make private',
+      title: makingPublic ? 'Make this recipe public?' : 'Make this recipe private?',
+      message: makingPublic
+        ? 'Anyone browsing Global Recipes will be able to view this recipe and add a copy of it to their own kitchen. You can make it private again at any time.'
+        : 'This recipe will be removed from Global Recipes and other users will no longer be able to find or add it. Copies already added to other kitchens will not be affected.',
+      confirmLabel: makingPublic ? 'Make public' : 'Make private',
+      tone: 'default',
+    })
+    if (!confirmed) return
+    try {
+      const updated = await RecipeApi.updateVisibility(recipeId, currentUserId, makingPublic ? 'PUBLIC' : 'PRIVATE')
+      setRecipe((current) => (current ? { ...current, visibility: updated.visibility } : current))
+      notifySuccess(makingPublic ? 'Recipe is now public.' : 'Recipe is now private.')
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : 'Unable to update recipe visibility')
+    }
+  }
+
+  const deleteRecipe = async () => {
+    if (!recipe) return
+    const confirmed = await confirm({
+      eyebrow: 'Delete recipe',
+      title: `Delete "${recipe.name}"?`,
+      message:
+        'The recipe, its processes and step images will be permanently removed from your kitchen. Orders already placed keep their own copy. This cannot be undone.',
+      confirmLabel: 'Delete recipe',
+    })
+    if (!confirmed) return
+    try {
+      await RecipeApi.deleteRecipe(recipeId, currentUserId)
+      // Unsaved Recipe Tool changes left on this device for a deleted recipe can never be recovered.
+      clearRecovery(browserStorage(), recipeId)
+      clearRecipeDrafts(recipeId)
+      notifySuccess('Recipe deleted.')
+      onBack()
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : 'Unable to delete recipe')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-full w-full items-center justify-center" style={{ color: 'var(--flow-text-muted)' }}>
@@ -130,6 +191,15 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
           onBack={onBack}
           onOrderRecipe={isOwner ? () => void startOrder(recipe.id, recipe.nutrition?.servings) : undefined}
           ordering={orderingRecipeId === recipe.id}
+          onEditDetails={isOwner ? () => setEditingDetails(true) : undefined}
+          onToggleVisibility={isOwner ? () => void toggleVisibility() : undefined}
+          onDeleteRecipe={isOwner ? () => void deleteRecipe() : undefined}
+        />
+
+        <EditRecipeDetailsModal
+          recipe={editingDetails ? recipe : null}
+          onSave={saveDetails}
+          onClose={() => setEditingDetails(false)}
         />
 
         {editorMounted && (

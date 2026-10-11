@@ -4,6 +4,7 @@ import '../styles/recipe-tool.css'
 import type { RecipeDetail } from '../../../types/recipe'
 import { recipeToolPath, type RecipeToolView } from '../recipeToolRoutes'
 import RecipeSummarySection from './RecipeSummarySection'
+import ActionMenu, { type ActionMenuItem } from '../../../shared/components/ActionMenu'
 
 const TABS: { id: RecipeToolView; label: string; icon: string }[] = [
   { id: 'editor', label: 'Recipe Editor', icon: '🧩' },
@@ -17,6 +18,10 @@ type RecipeToolNavbarProps = {
   onOrderRecipe?: () => void
   /** The order is being created. */
   ordering?: boolean
+  /** Owners only: the ⋯ menu's recipe actions. */
+  onEditDetails?: () => void
+  onToggleVisibility?: () => void
+  onDeleteRecipe?: () => void
 }
 
 /**
@@ -29,8 +34,17 @@ type RecipeToolNavbarProps = {
  * ingredients have one), so the compact metadata uses a plain icon rather
  * than fabricating a thumbnail.
  */
-export default function RecipeToolNavbar({ recipe, onBack, onOrderRecipe, ordering = false }: RecipeToolNavbarProps) {
+export default function RecipeToolNavbar({
+  recipe, onBack, onOrderRecipe, ordering = false, onEditDetails, onToggleVisibility, onDeleteRecipe,
+}: RecipeToolNavbarProps) {
   const [showDetails, setShowDetails] = useState(false)
+  const menuItems: ActionMenuItem[] = [
+    ...(onEditDetails ? [{ label: '✏️ Edit name & description', onSelect: onEditDetails }] : []),
+    ...(onToggleVisibility
+      ? [{ label: recipe.visibility === 'PUBLIC' ? '🔒 Make private' : '🌐 Make public', onSelect: onToggleVisibility }]
+      : []),
+    ...(onDeleteRecipe ? [{ label: '🗑️ Delete recipe', onSelect: onDeleteRecipe, danger: true }] : []),
+  ]
 
   return (
     <div
@@ -113,7 +127,7 @@ export default function RecipeToolNavbar({ recipe, onBack, onOrderRecipe, orderi
         ))}
       </div>
 
-      <div className="flex min-w-0 items-center justify-end">
+      <div className="flex min-w-0 items-center justify-end gap-2">
         {onOrderRecipe && (
           <button
             type="button"
@@ -131,6 +145,8 @@ export default function RecipeToolNavbar({ recipe, onBack, onOrderRecipe, orderi
             <span className="hidden md:inline"> {ordering ? 'Starting…' : 'Order Recipe'}</span>
           </button>
         )}
+
+        <ActionMenu items={menuItems} label={`More actions for ${recipe.name}`} placement="down" />
       </div>
 
       {showDetails && (

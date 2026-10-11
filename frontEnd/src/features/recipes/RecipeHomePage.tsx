@@ -11,6 +11,8 @@ import { useStartRecipeOrder } from '../recipe-order/useStartRecipeOrder'
 import { useConfirm } from '../../shared/components/confirm/confirmContext'
 import { useIncrementalReveal } from '../../shared/hooks/useIncrementalReveal'
 import ListEnd from '../../shared/components/ListEnd'
+import ActionMenu, { type ActionMenuItem } from '../../shared/components/ActionMenu'
+import EditRecipeDetailsModal, { type RecipeDetailsDraft } from './EditRecipeDetailsModal'
 
 type RecipeTab = 'mine' | 'global'
 
@@ -28,6 +30,7 @@ type RecipeCardProps = {
   variant: RecipeTab
   highlighted?: boolean
   onOpen: () => void
+  onEditDetails?: () => void
   onDelete?: () => void
   onToggleVisibility?: () => void
   onAddToMyRecipes?: () => void
@@ -39,6 +42,7 @@ function RecipeCard({
   variant,
   highlighted,
   onOpen,
+  onEditDetails,
   onDelete,
   onToggleVisibility,
   onAddToMyRecipes,
@@ -48,14 +52,15 @@ function RecipeCard({
   const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null)
   const showThumbnail = Boolean(recipe.thumbnailUrl) && recipe.thumbnailUrl !== failedThumbnail
   const isPublic = recipe.visibility === 'PUBLIC'
+  const visibilityHint = isPublic
+    ? 'Public: anyone can find it in Global Recipes. Click to make it private.'
+    : 'Private: only you can see it. Click to make it public.'
 
-  // My Recipes: everything but the main action lives in the card's "⋯" menu.
-  const menuItems: RecipeCardMenuItem[] = variant === 'mine'
+  // My Recipes: the card's actions live in its "⋯" menu (visibility has its own icon).
+  const menuItems: ActionMenuItem[] = variant === 'mine'
     ? [
+        ...(onEditDetails ? [{ label: '✏️ Edit name & description', onSelect: onEditDetails }] : []),
         ...(onOpenRecipeTool ? [{ label: '🧰 Recipe Tool', onSelect: onOpenRecipeTool }] : []),
-        ...(onToggleVisibility
-          ? [{ label: isPublic ? '🔒 Make private' : '🌐 Make public', onSelect: onToggleVisibility }]
-          : []),
         ...(onDelete ? [{ label: '🗑️ Delete recipe', onSelect: onDelete, danger: true }] : []),
       ]
     : []
@@ -82,12 +87,6 @@ function RecipeCard({
               <img src={recipeIcon} alt="Recipe" className="recipe-card-logo" />
             </div>
           )}
-
-          {variant === 'mine' && (
-            <span className="recipe-card-badge">
-              {isPublic ? '🌐 Public' : '🔒 Private'}
-            </span>
-          )}
         </div>
 
         <div className="recipe-card-body">
@@ -100,90 +99,47 @@ function RecipeCard({
               {recipe.description}
             </p>
           )}
+
+          {recipe.createdAt && (
+            <span className="recipe-card-meta">
+              {formatDate(recipe.createdAt)}
+            </span>
+          )}
         </div>
       </button>
 
-      <div className="recipe-card-footer">
-        <span className="recipe-card-meta">
-          {recipe.createdAt ? formatDate(recipe.createdAt) : ''}
-        </span>
+      {/* Overlays on the image corners — siblings of the open-button, so they never open the recipe. */}
+      {variant === 'mine' && onToggleVisibility && (
+        <button
+          type="button"
+          onClick={onToggleVisibility}
+          className="recipe-card-visibility"
+          aria-label={visibilityHint}
+          data-tooltip={isPublic ? 'Public · click to make private' : 'Private · click to make public'}
+        >
+          {isPublic ? '🌐' : '🔒'}
+        </button>
+      )}
 
-        {variant === 'global' ? (
+      {menuItems.length > 0 && (
+        <ActionMenu
+          items={menuItems}
+          label={`More actions for ${recipe.name}`}
+          className="recipe-card-actions"
+        />
+      )}
+
+      {variant === 'global' && (
+        <div className="recipe-card-footer">
           <button
             onClick={onAddToMyRecipes}
             className="recipe-card-order-button"
           >
             + Add to My Recipes
           </button>
-        ) : (
-          menuItems.length > 0 && (
-            <RecipeCardMenu recipeName={recipe.name} items={menuItems} />
-          )
-        )}
-      </div>
-    </article>
-  )
-}
-
-type RecipeCardMenuItem = {
-  label: string
-  onSelect: () => void
-  danger?: boolean
-}
-
-/** A card's "⋯" menu: closes on choosing an item, clicking elsewhere, or Escape. */
-function RecipeCardMenu({ recipeName, items }: { recipeName: string; items: RecipeCardMenuItem[] }) {
-  const [open, setOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (event: PointerEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setOpen(false)
-    }
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open])
-
-  return (
-    <div ref={menuRef} className={`recipe-card-menu${open ? ' open' : ''}`}>
-      <button
-        type="button"
-        className="recipe-card-menu-trigger"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-label={`More actions for ${recipeName}`}
-        onClick={() => setOpen(current => !current)}
-      >
-        ⋯
-      </button>
-
-      {open && (
-        <div className="recipe-card-menu-popover" role="menu">
-          {items.map(item => (
-            <button
-              key={item.label}
-              type="button"
-              role="menuitem"
-              className={`recipe-card-menu-item${item.danger ? ' danger' : ''}`}
-              onClick={() => {
-                setOpen(false)
-                item.onSelect()
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
         </div>
       )}
-    </div>
+    </article>
   )
 }
 
@@ -796,6 +752,7 @@ export default function RecipeHomePage({
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [viewRecipe, setViewRecipe] = useState<Recipe | null>(null)
   const [orderModalOpen, setOrderModalOpen] = useState(false)
+  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
 
   const [visibilityRecipe, setVisibilityRecipe] = useState<Recipe | null>(null)
   const [visibilityLoading, setVisibilityLoading] = useState(false)
@@ -963,6 +920,17 @@ export default function RecipeHomePage({
           : 'Unable to delete recipe',
       )
     }
+  }
+
+  const saveRecipeDetails = async (details: RecipeDetailsDraft) => {
+    if (!editingRecipe) return
+    const updated = await RecipeApi.updateRecipe(editingRecipe.id, userId, details)
+    setRecipes(current =>
+      // The update endpoint doesn't resolve thumbnails, so keep the one already shown.
+      current.map(item => (item.id === updated.id ? { ...item, ...updated, thumbnailUrl: item.thumbnailUrl } : item)),
+    )
+    setEditingRecipe(null)
+    notifySuccess('Recipe details saved.')
   }
 
   const requestToggleVisibility = (recipe: Recipe) => {
@@ -1142,6 +1110,7 @@ export default function RecipeHomePage({
                     ? handleOpenRecipe?.(recipe.id, recipe.name)
                     : setViewRecipe(recipe)
                 }
+                onEditDetails={() => setEditingRecipe(recipe)}
                 onDelete={() =>
                   void handleDeleteRecipe(recipe)
                 }
@@ -1184,6 +1153,13 @@ export default function RecipeHomePage({
         onClose={closeCreateModal}
         draftRestored={createDraft.restored}
         onClearDraft={createDraft.clear}
+      />
+
+      {/* Edit a recipe's name and description */}
+      <EditRecipeDetailsModal
+        recipe={editingRecipe}
+        onSave={saveRecipeDetails}
+        onClose={() => setEditingRecipe(null)}
       />
 
       {/* Order Recipe: pick one of your recipes */}
