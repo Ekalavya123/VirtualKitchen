@@ -54,7 +54,7 @@ export default function RecipeToolNavbar({
       <div className="flex min-w-0 items-center gap-2">
         <button
           onClick={onBack}
-          style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', cursor: 'pointer', fontSize: 12, fontWeight: 600, flexShrink: 0 }}
+          style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text)', cursor: 'pointer', fontSize: 12, fontWeight: 600, flexShrink: 0 }}
         >
           ← Back
         </button>
