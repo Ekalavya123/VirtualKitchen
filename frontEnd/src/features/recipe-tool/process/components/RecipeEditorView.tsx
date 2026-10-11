@@ -12,6 +12,8 @@ import { applyProcessEdit, describeProcessEdit, ProcessEditConflictError } from 
 import { serializeProcessForEdit } from '../adapters/recipeProcessEditSerializer'
 import { normalizeConditionNodeData } from '../model/recipeConditionData'
 import { normalizeRecipeStepNodeData } from '../model/recipeStepData'
+import { countSubprocessReferences, withoutSubprocessReferences } from '../model/subprocessReferences'
+import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
 import { generationJobKey, isTrackedJobActive, isWorkflowOpen, workflowJobKey } from '../../context/jobTracker'
 import { useJobTracker, useTrackedJob } from '../../context/useJobTracker'
 import RecipeAiCreationModal from '../../workflow/components/RecipeAiCreationModal'
@@ -62,6 +64,7 @@ type RecipeEditorViewProps = {
  */
 export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMainProcessChanged }: RecipeEditorViewProps) {
   const { notifyError, notifySuccess } = useNotifications()
+  const confirm = useConfirm()
   const session = useRecipeSession()
   const processes = useMemo(() => session?.getProcesses() ?? [], [session])
   const [selectedProcessId, setSelectedProcessId] = useState<number | null>(null)
@@ -183,6 +186,53 @@ export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMain
     setSelectedProcessId(created.id)
     notifySuccess('Subprocess created')
   }, [recipeId, session, selectedProcessId, notifySuccess])
+
+  /**
+   * Deletes a SUBPROCESS from the session as one undoable edit, after confirming: every step's
+   * Action On reference to it is removed first (in whichever process it's in — an open canvas
+   * re-seeds from the session), then the process itself; the next autosave deletes it on the
+   * backend (persistence/snapshotPersistence.ts — after the references are saved away). Undo brings
+   * it back, references included; a save then re-creates it. The MAIN process is never deletable.
+   */
+  const handleDeleteSubprocess = useCallback(async (processId: number) => {
+    if (!session) return
+    const target = session.getProcess(processId)
+    if (!target || target.type !== 'SUBPROCESS') return
+    const stepCount = target.nodes.filter((node) => node.kind === 'STEP').length
+    const references = countSubprocessReferences(session.getProcesses(), processId)
+    const confirmed = await confirm({
+      eyebrow: 'Delete subprocess',
+      title: `Delete “${target.name}”?`,
+      message: `The subprocess and its ${stepCount} step${stepCount === 1 ? '' : 's'} will be deleted. `
+        + (references > 0
+          ? `${references} step${references === 1 ? ' uses' : 's use'} its output — ${references === 1 ? 'that reference' : 'those references'} will be removed too. `
+          : 'No step uses its output. ')
+        + 'You can Undo this until you leave the recipe.',
+      confirmLabel: 'Delete subprocess',
+    })
+    if (!confirmed) return
+    // Re-read: the session may have changed while the dialog was open (e.g. a save gave a new
+    // subprocess its real id).
+    const id = session.getProcess(processId) ? processId : session.resolveProcessId(processId)
+    const latest = session.getProcess(id)
+    if (!latest || latest.type !== 'SUBPROCESS') return
+
+    session.recordHistory({ focusProcessId: id })
+    session.getProcesses().forEach((process) => {
+      if (process.id === id) return
+      const stripped = withoutSubprocessReferences(process, id)
+      if (stripped !== process) session.addProcess(stripped)
+    })
+    // Leave the deleted process (or a breadcrumb trail through it) before it's gone.
+    const isGone = (candidate: number | null) => candidate != null && (candidate === processId || session.resolveProcessId(candidate) === id)
+    if (isGone(selectedProcessId) || ancestorTrail.some((entry) => isGone(entry.processId))) {
+      const main = session.getProcesses().find((process) => process.type === 'MAIN')
+      setAncestorTrail([])
+      setSelectedProcessId(main ? main.id : null)
+    }
+    session.removeProcess(id)
+    notifySuccess(`Subprocess “${latest.name}” deleted. Use Undo to bring it back.`)
+  }, [session, confirm, selectedProcessId, ancestorTrail, notifySuccess])
 
   const existingMain = processes.find((process) => process.type === 'MAIN') ?? null
 
@@ -406,6 +456,7 @@ export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMain
       onCreateMainProcess={() => void handleCreateMainProcess()}
       creatingMainProcess={creatingMainProcess}
       onCreateSubprocess={handleCreateSubprocess}
+      onDeleteSubprocess={isOwner && session.canEdit ? (processId) => void handleDeleteSubprocess(processId) : undefined}
       newSubprocessDraftKey={draftKeys.newSubprocess(recipeId)}
     />
   )

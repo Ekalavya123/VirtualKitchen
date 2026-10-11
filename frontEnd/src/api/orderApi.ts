@@ -16,7 +16,8 @@ export interface OrderItemRequest {
 }
 
 export interface OrderCreateRequest {
-  userId: number
+  /** Optional: the backend takes the buyer from the session token; when sent it must be the signed-in user. */
+  userId?: number
   items: OrderItemRequest[]
 }
 
@@ -32,6 +33,8 @@ export interface OrderItemResponse {
 
 export interface OrderResponse {
   orderId: number
+  /** Human-readable order number ("SO-000045"); absent on orders from older backends. */
+  orderCode?: string
   userId: number
   items: OrderItemResponse[]
   totalAmount: number

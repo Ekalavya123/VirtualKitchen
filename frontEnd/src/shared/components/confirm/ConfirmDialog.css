@@ -1,0 +1,142 @@
+/* The app-wide confirmation dialog — same look as the recipe "Make public / private" prompt. */
+
+.confirm-dialog-backdrop {
+  position: fixed;
+  /* Above every other layer, including the Recipe Tool's own modals (9999), which can open it. */
+  z-index: 10000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(4px);
+  animation: confirm-dialog-fade 0.15s ease-out;
+}
+
+.confirm-dialog {
+  width: min(100%, 460px);
+  overflow: hidden;
+  border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-xl, 1rem);
+  background: var(--flow-surface);
+  color: var(--flow-text);
+  box-shadow: 0 30px 80px rgba(15, 23, 42, 0.2);
+  font-family: var(--flow-font, inherit);
+  animation: confirm-dialog-pop 0.18s ease-out;
+}
+
+.confirm-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--flow-border);
+}
+
+.confirm-dialog-eyebrow {
+  margin-bottom: 0.25rem;
+  color: var(--flow-accent);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.confirm-dialog-eyebrow.danger {
+  color: var(--flow-danger, #dc2626);
+}
+
+.confirm-dialog-title {
+  margin: 0;
+  color: var(--flow-text);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.confirm-dialog-close {
+  display: flex;
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--flow-text-muted);
+  cursor: pointer;
+}
+
+.confirm-dialog-close:hover {
+  background: var(--flow-surface-muted);
+  color: var(--flow-text);
+}
+
+.confirm-dialog-message {
+  margin: 0;
+  padding: 1.25rem 1.5rem;
+  color: var(--flow-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.4rem;
+}
+
+.confirm-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.625rem;
+  padding: 0 1.5rem 1.5rem;
+}
+
+.confirm-dialog-button {
+  min-height: 2.5rem;
+  padding: 0.6rem 1rem;
+  border-radius: var(--flow-radius-md, 0.6rem);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.confirm-dialog-button.secondary {
+  border: 1px solid var(--flow-border);
+  background: var(--flow-surface);
+  color: var(--flow-text);
+}
+
+.confirm-dialog-button.secondary:hover {
+  background: var(--flow-surface-muted);
+}
+
+.confirm-dialog-button.primary {
+  border: 0;
+  background: linear-gradient(135deg, var(--flow-accent), var(--flow-accent-secondary, #8b5cf6));
+  color: #fff;
+}
+
+.confirm-dialog-button.danger {
+  border: 0;
+  background: var(--flow-danger, #dc2626);
+  color: #fff;
+}
+
+.confirm-dialog-button.danger:hover,
+.confirm-dialog-button.primary:hover {
+  filter: brightness(1.05);
+}
+
+@media (max-width: 520px) {
+  .confirm-dialog-footer {
+    flex-direction: column-reverse;
+  }
+}
+
+@keyframes confirm-dialog-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes confirm-dialog-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}

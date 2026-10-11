@@ -639,12 +639,14 @@
 }
 
 /* The instruction leads; an image sits beside it as a modest thumbnail, never the other way round. */
+/* The step's image sits on the left (above the text on narrow screens). */
 .rp-step-card.has-image {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(160px, 26%, 240px);
+  grid-template-columns: clamp(160px, 26%, 240px) minmax(0, 1fr);
 }
 
 .rp-step-media {
+  order: -1;
   position: relative;
   min-height: 160px;
   overflow: hidden;

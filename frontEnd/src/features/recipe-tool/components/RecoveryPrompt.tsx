@@ -1,4 +1,5 @@
 import '../styles/recipe-tool.css'
+import { useConfirm } from '../../../shared/components/confirm/confirmContext'
 
 type RecoveryPromptProps = {
   /** When the unsaved changes were last written locally (epoch ms). */
@@ -23,6 +24,16 @@ const formatWhen = (writtenAt: number) => {
  * user decides, so nothing is silently overwritten either way.
  */
 export default function RecoveryPrompt({ writtenAt, backendChanged, onRecover, onDiscard }: RecoveryPromptProps) {
+  const confirm = useConfirm()
+  const handleDiscard = async () => {
+    if (await confirm({
+      eyebrow: 'Discard changes',
+      title: 'Discard your unsaved changes?',
+      message: `The changes you made ${formatWhen(writtenAt)} will be deleted from this device, and the recipe stays as it was last saved. This can't be undone.`,
+      confirmLabel: 'Discard changes',
+    })) onDiscard()
+  }
+
   return (
     <div className="flow-canvas-export-modal-overlay" role="presentation">
       <div
@@ -51,7 +62,7 @@ export default function RecoveryPrompt({ writtenAt, backendChanged, onRecover, o
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
           <button
             type="button"
-            onClick={onDiscard}
+            onClick={() => void handleDiscard()}
             style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text-muted)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
           >
             Discard changes

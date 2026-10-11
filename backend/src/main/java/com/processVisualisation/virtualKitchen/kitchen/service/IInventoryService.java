@@ -25,6 +25,14 @@ public interface IInventoryService {
     InventoryResponseDTO addOrUpdate(InventoryRequestDTO dto);
 
     /**
+     * Checks that {@link #addOrUpdate} can apply {@code dto} — in particular that its quantity can be
+     * converted into the unit of the inventory row it would add to — without changing anything.
+     *
+     * @throws com.processVisualisation.virtualKitchen.store.units.UnitConversionException when it cannot
+     */
+    void validateAdd(InventoryRequestDTO dto);
+
+    /**
      * Fetches all inventory items owned directly by the given user.
      *
      * @param userId id of the owning user

@@ -15,6 +15,42 @@
   margin: 0 auto;
 }
 
+/* Shown while shopping for a recipe order's missing ingredients. */
+.shop-resume-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--flow-accent-soft-border);
+  border-radius: var(--flow-radius-lg);
+  background: var(--flow-surface);
+  box-shadow: var(--flow-shadow-card);
+  color: var(--flow-text);
+  font-size: 0.9rem;
+}
+
+.shop-resume-text {
+  flex: 1;
+  min-width: 200px;
+}
+
+.shop-resume-link {
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--flow-accent), var(--flow-accent-secondary));
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.shop-resume-link:hover {
+  filter: brightness(1.05);
+}
+
 
 /* =========================================================
    Header
@@ -102,6 +138,82 @@
   color: white;
   font-size: 11px;
   font-weight: 800;
+  /* Re-mounted on every count change, so this plays each time an item is added. */
+  animation: shop-cart-bump 0.35s ease-out;
+}
+
+/* Floating cart: appears once the header's cart button has scrolled out of view. */
+.shop-cart-fab {
+  position: fixed;
+  z-index: 60;
+  right: 28px;
+  bottom: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--flow-accent), var(--flow-accent-secondary, #8b5cf6));
+  color: #fff;
+  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.35);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(16px) scale(0.92);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.shop-cart-fab.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.shop-cart-fab.visible:hover {
+  box-shadow: 0 16px 36px rgba(99, 102, 241, 0.45);
+  transform: translateY(-2px);
+}
+
+.shop-cart-fab .shop-cart-icon {
+  font-size: 20px;
+}
+
+.shop-cart-fab .shop-cart-badge {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  border: 2px solid var(--flow-surface);
+  background: var(--flow-danger, #dc2626);
+}
+
+@keyframes shop-cart-bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.45); }
+  100% { transform: scale(1); }
+}
+
+@media (max-width: 640px) {
+  .shop-cart-fab {
+    right: 16px;
+    bottom: 16px;
+  }
+
+  .shop-cart-fab-total {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shop-cart-badge {
+    animation: none;
+  }
 }
 
 

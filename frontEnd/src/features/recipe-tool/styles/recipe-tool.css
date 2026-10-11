@@ -194,8 +194,11 @@
   gap: 1.25rem;
 }
 
+/* Not overflow: hidden — the "⋯" menu opens outside the card; the image clips itself instead. */
 .recipe-card {
-  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--flow-border);
   border-radius: var(--flow-radius-lg);
   background: var(--flow-surface);
@@ -229,8 +232,17 @@
   }
 }
 
+/* The card's menu sits above its neighbours while open. */
+.recipe-card:has(.action-menu.open) {
+  z-index: 5;
+}
+
+/* A <button> centres its content vertically when stretched; a top-aligned column keeps titles in line. */
 .recipe-card-content {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  flex: 1;
   width: 100%;
   padding: 0;
   border: 0;
@@ -241,8 +253,10 @@
 }
 
 .recipe-card-image {
-  height: 150px;
+  position: relative;
+  aspect-ratio: 4 / 3;
   overflow: hidden;
+  border-radius: var(--flow-radius-lg) var(--flow-radius-lg) 0 0;
   background:
     linear-gradient(
       135deg,
@@ -286,12 +300,200 @@
 }
 
 .recipe-card-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
   padding: 1rem 1rem 0.75rem;
+}
+
+.recipe-card-meta {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  color: var(--flow-text-muted);
+  font-size: 0.72rem;
+}
+
+/* Visibility of one of your recipes: an icon on the image's top-left corner. Hover says what it
+   means; clicking it offers to switch (via the public/private confirmation). */
+.recipe-card-visibility {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  z-index: 2;
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid var(--flow-border);
+  border-radius: 999px;
+  background: var(--flow-surface);
+  box-shadow: var(--flow-shadow-card);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.recipe-card-visibility:hover,
+.recipe-card-visibility:focus-visible {
+  border-color: var(--flow-accent);
+  transform: scale(1.06);
+}
+
+.recipe-card-visibility::after {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 0.45rem);
+  padding: 0.3rem 0.55rem;
+  border-radius: 0.45rem;
+  background: var(--flow-text);
+  color: var(--flow-surface);
+  content: attr(data-tooltip);
+  font-size: 0.7rem;
+  font-weight: 700;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%) translateX(-4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.recipe-card-visibility:hover::after,
+.recipe-card-visibility:focus-visible::after {
+  opacity: 1;
+  transform: translateY(-50%);
+}
+
+/* The card's "⋯" menu, on the image's top-right corner (qualified to win over .action-menu's own position). */
+.recipe-card .recipe-card-actions {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  z-index: 2;
+}
+
+.recipe-card-actions .action-menu-trigger {
+  box-shadow: var(--flow-shadow-card);
+}
+
+/* The page header's "Order recipe" (next to "Create recipe"). */
+.recipe-order-cta {
+  border-color: var(--flow-accent);
+  color: var(--flow-accent-strong);
+}
+
+.recipe-order-cta:hover:not(:disabled) {
+  background: var(--flow-accent-soft);
+}
+
+/* Order recipe: the recipe picker */
+.order-recipe-modal {
+  width: min(100%, 560px);
+}
+
+.order-recipe-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.recipe-search-input.order-recipe-search {
+  padding-left: 0.9rem;
+}
+
+.order-recipe-list {
+  display: flex;
+  max-height: min(52vh, 420px);
+  flex-direction: column;
+  gap: 0.4rem;
+  overflow-y: auto;
+  padding-right: 0.15rem;
+}
+
+.order-recipe-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-md);
+  background: var(--flow-surface);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.order-recipe-option:hover {
+  border-color: var(--flow-border-strong);
+}
+
+.order-recipe-option.selected {
+  border-color: var(--flow-accent);
+  background: var(--flow-accent-soft);
+}
+
+.order-recipe-option input {
+  flex-shrink: 0;
+  accent-color: var(--flow-accent);
+}
+
+.order-recipe-thumb {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex-shrink: 0;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 0.55rem;
+  background: var(--flow-surface-muted);
+}
+
+.order-recipe-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.order-recipe-thumb .order-recipe-thumb-icon {
+  width: 1.9rem;
+  height: 1.9rem;
+  object-fit: contain;
+}
+
+.order-recipe-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.order-recipe-name {
+  overflow: hidden;
+  color: var(--flow-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-recipe-description {
+  overflow: hidden;
+  color: var(--flow-text-muted);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-recipe-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  color: var(--flow-text-muted);
+  font-size: 0.875rem;
 }
 
 .recipe-card-description {
   display: -webkit-box;
-  min-height: 2.5rem;
   margin: 0;
   overflow: hidden;
   color: var(--flow-text-muted);
@@ -301,70 +503,40 @@
   -webkit-line-clamp: 2;
 }
 
+/* Global Recipes only: the card's main action ("Add to My Recipes"). */
 .recipe-card-footer {
   display: flex;
+  min-height: 3.6rem;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 0.75rem;
   padding: 0.75rem 1rem 1rem;
+  border-top: 1px solid var(--flow-border);
 }
 
-.recipe-card-open-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  border: 0;
-  background: transparent;
-  color: var(--flow-accent-strong);
-  font-size: 0.8rem;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.recipe-card-open-button:hover {
-  color: var(--flow-accent);
-}
-
-.recipe-card-delete-button {
-  display: flex;
-  width: 2rem;
-  height: 2rem;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid transparent;
-  border-radius: 0.5rem;
-  background: var(--flow-danger-soft);
-  color: var(--flow-danger);
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.recipe-card-delete-button:hover {
-  border-color: #fecaca;
-  background: #fee2e2;
-}
-
-.recipe-card-visibility-button {
+/* A card's main action ("Add to My Recipes" on Global Recipes). */
+.recipe-card-order-button {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  border: 1px solid var(--flow-border, #e2e8f0);
+  padding: 0.3rem 0.7rem;
+  border: 0;
   border-radius: 999px;
-  background: transparent;
-  color: var(--flow-text-muted);
-  font-size: 0.7rem;
+  background: linear-gradient(135deg, var(--flow-accent), var(--flow-accent-secondary));
+  color: #fff;
+  font-size: 0.75rem;
   font-weight: 700;
-  padding: 0.3rem 0.6rem;
+  white-space: nowrap;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.recipe-card-visibility-button:hover {
-  color: var(--flow-accent-strong);
-  border-color: var(--flow-accent);
+.recipe-card-order-button:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.recipe-card-order-button:disabled {
+  cursor: progress;
+  opacity: 0.7;
 }
 
 /* =========================================================
@@ -648,10 +820,6 @@
 @media (max-width: 640px) {
   .recipe-grid {
     grid-template-columns: 1fr;
-  }
-
-  .recipe-card-image {
-    height: 170px;
   }
 
   .recipe-modal-header {

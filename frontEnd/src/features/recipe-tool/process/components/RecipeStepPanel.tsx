@@ -2,6 +2,7 @@ import { useState } from 'react'
 import '../styles/RecipePropertiesPanel.css'
 import '../../styles/recipe-tool.css'
 import SearchableSelect, { type SearchableSelectOption } from '../../../../shared/components/SearchableSelect'
+import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
 import IngredientSelector from '../../components/IngredientSelector'
 import { draftKeys } from '../../../../shared/drafts/draftStore'
 import type { Process } from '../../../../types/process'
@@ -58,6 +59,12 @@ type RecipeStepPanelProps = {
 
 type ActionOnTab = 'INGREDIENTS' | 'PROCESSES' | 'STEPS'
 
+/** The one Action On entry being edited: an ingredient by its row index, a subprocess by id, a step output by step id. */
+type ActionOnEdit =
+  | { nodeId: string; kind: 'INGREDIENT'; index: number }
+  | { nodeId: string; kind: 'PROCESS'; processId: number }
+  | { nodeId: string; kind: 'STEP'; stepId: string }
+
 const actionOptions: SearchableSelectOption[] = ACTION_CATEGORY_ORDER.flatMap((category) =>
   ACTIONS_BY_CATEGORY[category].map((action) => ({
     value: action.id,
@@ -94,6 +101,11 @@ export default function RecipeStepPanel({
 }: RecipeStepPanelProps) {
   const [actionOnTab, setActionOnTab] = useState<ActionOnTab>('INGREDIENTS')
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const confirm = useConfirm()
+  // Tied to the step it was opened on, so selecting another step never shows a stale editor.
+  const [actionOnEdit, setActionOnEdit] = useState<ActionOnEdit | null>(null)
+  const currentEdit = actionOnEdit?.nodeId === node.id ? actionOnEdit : null
+  const closeEdit = () => setActionOnEdit(null)
   const normalized = normalizeRecipeStepNodeData(node.data)
   const step = normalized.step
   const visualization = normalized.visualization
@@ -118,23 +130,48 @@ export default function RecipeStepPanel({
   const ingredientIds = step.actionOn.ingredients.map((entry) => entry.ingredientId)
   const selectedProcessIds = step.actionOn.processes.map((entry) => entry.processId)
   const selectedStepIds = step.actionOn.steps.map((entry) => entry.stepId)
-  const unselectedStepOutputs = getAvailableStepOutputs(stepOutputGraph, node.id).filter((source) => !selectedStepIds.includes(source.stepId))
+  const availableStepOutputs = getAvailableStepOutputs(stepOutputGraph, node.id)
+  const unselectedStepOutputs = availableStepOutputs.filter((source) => !selectedStepIds.includes(source.stepId))
   const stepsMissingOutput = getStepsMissingOutput(stepOutputGraph, node.id)
+
+  // Every removal is confirmed first (the shared dialog is modal, so the step doesn't change meanwhile).
+  const confirmRemoval = (title: string, message: string) =>
+    confirm({ eyebrow: 'Remove from step', title, message, confirmLabel: 'Remove' })
 
   const addActionOnStep = (stepId: string) => {
     if (selectedStepIds.includes(stepId)) return
     updateActionOnSteps(node.id, [...selectedStepIds, stepId])
   }
 
-  const removeActionOnStep = (stepId: string) => {
+  const removeActionOnStep = async (stepId: string) => {
+    const label = getStepOutputLabel(stepOutputGraph, stepId)
+    if (!(await confirmRemoval(
+      label ? `Remove “${label}” from this step?` : 'Remove this step output from this step?',
+      'This step will no longer use that earlier step\'s output. The earlier step itself is kept.',
+    ))) return
+    if (currentEdit?.kind === 'STEP') closeEdit()
     updateActionOnSteps(node.id, selectedStepIds.filter((id) => id !== stepId))
+  }
+
+  /** Swaps one step-output reference for another in place, keeping the list's order. */
+  const replaceActionOnStep = (stepId: string, nextStepId: string) => {
+    closeEdit()
+    if (stepId === nextStepId || selectedStepIds.includes(nextStepId)) return
+    updateActionOnSteps(node.id, selectedStepIds.map((id) => (id === stepId ? nextStepId : id)))
   }
 
   const addActionOnIngredient = (ingredient: ActionOnIngredient) => {
     updateActionOnIngredients(node.id, [...step.actionOn.ingredients, ingredient])
   }
 
-  const removeActionOnIngredient = (index: number) => {
+  const removeActionOnIngredient = async (index: number) => {
+    const entry = step.actionOn.ingredients[index]
+    if (!entry) return
+    if (!(await confirmRemoval(
+      `Remove ${getActionOnIngredientDisplayName(entry) || 'this ingredient'} from this step?`,
+      'Its quantity, unit, preparation style and notes for this step will be lost.',
+    ))) return
+    if (currentEdit?.kind === 'INGREDIENT') closeEdit()
     updateActionOnIngredients(node.id, step.actionOn.ingredients.filter((_, i) => i !== index))
   }
 
@@ -142,16 +179,55 @@ export default function RecipeStepPanel({
     updateActionOnIngredients(node.id, step.actionOn.ingredients.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)))
   }
 
+  /** Saves the edit form's entry over the one at `index` (the whole entry: ingredient, amount, preparation, notes). */
+  const replaceActionOnIngredientAt = (index: number, ingredient: ActionOnIngredient) => {
+    closeEdit()
+    updateActionOnIngredients(node.id, step.actionOn.ingredients.map((entry, i) => (i === index ? ingredient : entry)))
+  }
+
   const addActionOnProcess = (processId: number) => {
     if (selectedProcessIds.includes(processId)) return
     updateActionOnProcesses(node.id, [...selectedProcessIds, processId])
   }
 
-  const removeActionOnProcess = (processId: number) => {
+  const removeActionOnProcess = async (processId: number) => {
+    const process = availableSubprocesses.find((candidate) => candidate.id === processId)
+    if (!(await confirmRemoval(
+      `Remove “${process ? process.name : `Process #${processId}`}” from this step?`,
+      'This step will no longer use that subprocess\'s output. The subprocess itself is kept.',
+    ))) return
+    if (currentEdit?.kind === 'PROCESS') closeEdit()
     updateActionOnProcesses(node.id, selectedProcessIds.filter((id) => id !== processId))
   }
 
+  /** Swaps one subprocess reference for another in place, keeping the list's order. */
+  const replaceActionOnProcess = (processId: number, nextProcessId: number) => {
+    closeEdit()
+    if (processId === nextProcessId || selectedProcessIds.includes(nextProcessId)) return
+    updateActionOnProcesses(node.id, selectedProcessIds.map((id) => (id === processId ? nextProcessId : id)))
+  }
+
   const unselectedSubprocesses = availableSubprocesses.filter((process) => !selectedProcessIds.includes(process.id))
+
+  const editButton = (title: string, onClick: () => void) => (
+    <button type="button" className="flow-action-on-entry-btn" onClick={onClick} title={title} aria-label={title}>
+      ✏️
+    </button>
+  )
+  const removeButton = (onClick: () => void) => (
+    <button type="button" className="flow-action-on-entry-btn is-danger" onClick={onClick} title="Remove" aria-label="Remove">
+      🗑
+    </button>
+  )
+  const cancelEditButton = (
+    <button
+      type="button"
+      onClick={closeEdit}
+      style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 7, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text-muted)', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+    >
+      Cancel
+    </button>
+  )
 
   const renderAmountWithUnit = (
     key: string,
@@ -321,6 +397,20 @@ export default function RecipeStepPanel({
               step.actionOn.ingredients.map((entry, index) => {
                 const catalogEntry = getIngredientById(entry.ingredientId)
                 const quantifiable = isQuantifiableUnit(entry.unit)
+                if (currentEdit?.kind === 'INGREDIENT' && currentEdit.index === index) {
+                  // The add form, filled in with this entry: changes which ingredient it is (or its
+                  // custom name) and its notes too, not only the amount/preparation editable on the row.
+                  return (
+                    <IngredientSelector
+                      key={`edit-${entry.ingredientId}-${index}`}
+                      excludeIngredientIds={ingredientIds.filter((_, i) => i !== index)}
+                      action={step.action}
+                      editing={entry}
+                      onAdd={(ingredient) => replaceActionOnIngredientAt(index, ingredient)}
+                      onCancel={closeEdit}
+                    />
+                  )
+                }
                 return (
                   <div
                     key={`${entry.ingredientId}-${index}`}
@@ -329,6 +419,9 @@ export default function RecipeStepPanel({
                   >
                     <div style={{ minWidth: 80, fontWeight: 700, fontSize: 12, color: 'var(--flow-text)' }}>
                       {catalogEntry.icon} {getActionOnIngredientDisplayName(entry)}
+                      {entry.notes && (
+                        <div style={{ fontSize: 10.5, fontWeight: 500, color: 'var(--flow-text-subtle)' }}>{entry.notes}</div>
+                      )}
                     </div>
                     {quantityRelevant && (
                       <>
@@ -361,14 +454,10 @@ export default function RecipeStepPanel({
                       onChange={(preparationStyleId, customPreparationStyle) =>
                         updateActionOnIngredientAt(index, { preparationStyleId, customPreparationStyle: customPreparationStyle || undefined })}
                     />
-                    <button
-                      type="button"
-                      onClick={() => removeActionOnIngredient(index)}
-                      title="Remove"
-                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, color: '#dc2626' }}
-                    >
-                      🗑
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginLeft: 'auto' }}>
+                      {actionAllowsIngredients(step.action) && editButton('Edit ingredient', () => setActionOnEdit({ nodeId: node.id, kind: 'INGREDIENT', index }))}
+                      {removeButton(() => void removeActionOnIngredient(index))}
+                    </div>
                   </div>
                 )
               })
@@ -389,6 +478,28 @@ export default function RecipeStepPanel({
             ) : (
               step.actionOn.processes.map((entry) => {
                 const process = availableSubprocesses.find((candidate) => candidate.id === entry.processId)
+                if (currentEdit?.kind === 'PROCESS' && currentEdit.processId === entry.processId) {
+                  // Same choices as adding (this recipe's other SUBPROCESSes not already used), plus this entry's own.
+                  const choices = availableSubprocesses.filter((candidate) => candidate.id === entry.processId || !selectedProcessIds.includes(candidate.id))
+                  return (
+                    <div
+                      key={entry.processId}
+                      className="flex items-center gap-2 rounded-lg border p-2"
+                      style={{ border: '1px solid var(--flow-accent)', background: 'var(--flow-surface)' }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <SearchableSelect
+                          value={process ? String(entry.processId) : ''}
+                          onChange={(value) => value && replaceActionOnProcess(entry.processId, Number(value))}
+                          options={choices.map((candidate) => ({ value: String(candidate.id), label: candidate.name }))}
+                          placeholder="Switch to another subprocess"
+                          emptyLabel="No matching subprocesses"
+                        />
+                      </div>
+                      {cancelEditButton}
+                    </div>
+                  )
+                }
                 return (
                   <div
                     key={entry.processId}
@@ -400,25 +511,19 @@ export default function RecipeStepPanel({
                         🔗 {process ? process.name : `Process #${entry.processId}`}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
                       {process && onOpenSubprocess && (
                         <button
                           type="button"
                           onClick={() => onOpenSubprocess(process.id)}
                           title="Open this subprocess"
-                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#4338ca' }}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#4338ca', marginRight: 4 }}
                         >
                           Open →
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => removeActionOnProcess(entry.processId)}
-                        title="Remove"
-                        style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, color: '#dc2626' }}
-                      >
-                        🗑
-                      </button>
+                      {actionAllowsProcesses(step.action) && editButton('Switch to another subprocess', () => setActionOnEdit({ nodeId: node.id, kind: 'PROCESS', processId: entry.processId }))}
+                      {removeButton(() => void removeActionOnProcess(entry.processId))}
                     </div>
                   </div>
                 )
@@ -462,6 +567,34 @@ export default function RecipeStepPanel({
                 // Always the referenced step's *current* Expected Output — edits there show up here.
                 const label = getStepOutputLabel(stepOutputGraph, entry.stepId)
                 const problem = getStepOutputReferenceProblem(stepOutputGraph, entry.stepId, node.id)
+                if (currentEdit?.kind === 'STEP' && currentEdit.stepId === entry.stepId) {
+                  // Same choices as adding (earlier steps with an Expected Output, not already used), plus this
+                  // entry's own while it's still valid — so an unavailable reference can be repointed too.
+                  const choices = availableStepOutputs.filter((source) => source.stepId === entry.stepId || !selectedStepIds.includes(source.stepId))
+                  return (
+                    <div
+                      key={entry.stepId}
+                      className="flex items-center gap-2 rounded-lg border p-2"
+                      style={{ border: '1px solid var(--flow-accent)', background: 'var(--flow-surface)' }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <SearchableSelect
+                          value={problem ? '' : entry.stepId}
+                          onChange={(value) => value && replaceActionOnStep(entry.stepId, value)}
+                          options={choices.map((source) => ({
+                            value: source.stepId,
+                            label: source.label,
+                            category: 'Step Outputs',
+                            description: `From step ${source.stepNumber}`,
+                          }))}
+                          placeholder={choices.length ? 'Switch to another earlier step output' : 'No earlier step outputs available'}
+                          emptyLabel="No matching step outputs"
+                        />
+                      </div>
+                      {cancelEditButton}
+                    </div>
+                  )
+                }
                 return (
                   <div
                     key={entry.stepId}
@@ -476,14 +609,10 @@ export default function RecipeStepPanel({
                         <div style={{ fontSize: 10.5, color: '#b91c1c' }}>Unavailable — {STEP_OUTPUT_PROBLEM_LABELS[problem]}. Remove it or reconnect the steps before saving.</div>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => removeActionOnStep(entry.stepId)}
-                      title="Remove"
-                      style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 13, color: '#dc2626', flexShrink: 0 }}
-                    >
-                      🗑
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                      {actionAllowsProcesses(step.action) && editButton('Switch to another step output', () => setActionOnEdit({ nodeId: node.id, kind: 'STEP', stepId: entry.stepId }))}
+                      {removeButton(() => void removeActionOnStep(entry.stepId))}
+                    </div>
                   </div>
                 )
               })

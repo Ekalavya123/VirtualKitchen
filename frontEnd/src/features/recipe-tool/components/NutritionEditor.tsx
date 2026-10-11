@@ -7,6 +7,7 @@ import { useNotifications } from '../../../shared/components/notifications/Notif
 import { draftKeys } from '../../../shared/drafts/draftStore'
 import { useDraft } from '../../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../../shared/drafts/DraftRestoredNote'
+import { useConfirmDiscard } from './useConfirmDiscard'
 
 type NutritionEditorProps = {
   recipeId: number
@@ -74,9 +75,16 @@ export default function NutritionEditor({ recipeId, nutrition, onSaved, onCancel
     draft.setValue((current) => ({ ...(current ?? toFormState(nutrition)), [key]: value }))
   }
 
+  const confirmDiscard = useConfirmDiscard()
   const handleCancel = () => {
-    draft.clear()
-    onCancel()
+    if (!dirty) {
+      onCancel()
+      return
+    }
+    void confirmDiscard('nutrition changes', () => {
+      draft.clear()
+      onCancel()
+    })
   }
 
   const handleSave = async () => {
@@ -98,7 +106,7 @@ export default function NutritionEditor({ recipeId, nutrition, onSaved, onCancel
 
   return (
     <div className="flex flex-col gap-3">
-      {draft.restored && <DraftRestoredNote label="Restored your unsaved nutrition changes." onDiscard={draft.clear} />}
+      {draft.restored && <DraftRestoredNote label="Restored your unsaved nutrition changes." onDiscard={() => void confirmDiscard('nutrition changes', draft.clear)} />}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {FIELDS.map(({ key, label, unit }) => (
           <div key={key} className="flow-properties-field">

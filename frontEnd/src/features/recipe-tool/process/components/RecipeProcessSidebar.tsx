@@ -7,6 +7,7 @@ import { useDraft } from '../../../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
 import AddNodeMenu from './AddNodeMenu'
 import { useProcessSidebarActions } from '../context/ProcessSidebarActionsContext'
+import { useConfirmDiscard } from '../../components/useConfirmDiscard'
 
 type RecipeProcessSidebarProps = {
   processes: Process[]
@@ -16,6 +17,8 @@ type RecipeProcessSidebarProps = {
   onCreateMainProcess: () => void
   creatingMainProcess: boolean
   onCreateSubprocess: (name: string, description: string) => Promise<void>
+  /** Deletes a SUBPROCESS (asking first — see RecipeEditorView); omitted for readers. Never offered for MAIN. */
+  onDeleteSubprocess?: (processId: number) => void
   /** Where the new-subprocess form keeps its draft (see shared/drafts). */
   newSubprocessDraftKey?: string
 }
@@ -38,6 +41,7 @@ export default function RecipeProcessSidebar({
   onCreateMainProcess,
   creatingMainProcess,
   onCreateSubprocess,
+  onDeleteSubprocess,
   newSubprocessDraftKey,
 }: RecipeProcessSidebarProps) {
   // Adding a step/condition and collapsing come from the canvas hosting this sidebar (none without one).
@@ -52,6 +56,7 @@ export default function RecipeProcessSidebar({
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const nameInputRef = useRef<HTMLInputElement | null>(null)
+  const confirmDiscard = useConfirmDiscard()
 
   const mainProcess = processes.find((process) => process.type === 'MAIN') ?? null
   const subprocesses = processes.filter((process) => process.type === 'SUBPROCESS')
@@ -83,43 +88,57 @@ export default function RecipeProcessSidebar({
   const renderCard = (process: Process) => {
     const selected = process.id === selectedProcessId
     const stepCount = process.nodes.filter((node) => node.kind === 'STEP').length
+    // Only a SUBPROCESS can be deleted — the MAIN process is the recipe's own and stays.
+    const deletable = onDeleteSubprocess != null && process.type === 'SUBPROCESS'
     return (
-      <button
-        key={process.id}
-        type="button"
-        onClick={() => onSelect(process.id)}
-        aria-current={selected ? 'true' : undefined}
-        style={{
-          width: '100%',
-          textAlign: 'left',
-          padding: '10px 12px',
-          borderRadius: 10,
-          border: `1px solid ${selected ? 'var(--flow-accent)' : 'var(--flow-border)'}`,
-          background: selected ? 'var(--flow-accent-soft)' : 'var(--flow-surface)',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-        }}
-      >
-        <span aria-hidden style={{ fontSize: 14, flexShrink: 0 }}>{process.type === 'MAIN' ? '👑' : '🧩'}</span>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--flow-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {process.name}
+      <div key={process.id} className="recipe-sidebar-process">
+        <button
+          type="button"
+          onClick={() => onSelect(process.id)}
+          aria-current={selected ? 'true' : undefined}
+          style={{
+            width: '100%',
+            textAlign: 'left',
+            padding: deletable ? '10px 40px 10px 12px' : '10px 12px',
+            borderRadius: 10,
+            border: `1px solid ${selected ? 'var(--flow-accent)' : 'var(--flow-border)'}`,
+            background: selected ? 'var(--flow-accent-soft)' : 'var(--flow-surface)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span aria-hidden style={{ fontSize: 14, flexShrink: 0 }}>{process.type === 'MAIN' ? '👑' : '🧩'}</span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--flow-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {process.name}
+            </div>
+            <div style={{ fontSize: 10.5, color: 'var(--flow-text-muted)' }}>
+              {process.type === 'MAIN' ? 'Main Process' : 'Subprocess'} · {stepCount} step{stepCount === 1 ? '' : 's'}
+            </div>
           </div>
-          <div style={{ fontSize: 10.5, color: 'var(--flow-text-muted)' }}>
-            {process.type === 'MAIN' ? 'Main Process' : 'Subprocess'} · {stepCount} step{stepCount === 1 ? '' : 's'}
-          </div>
-        </div>
-        {isPendingProcessId(process.id) && (
-          <span
-            title="Generated — not saved yet"
-            style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 999, background: 'var(--flow-magic-soft)', border: '1px solid var(--flow-magic-border)', color: 'var(--flow-magic)' }}
+          {isPendingProcessId(process.id) && (
+            <span
+              title="Generated — not saved yet"
+              style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 700, padding: '2px 6px', borderRadius: 999, background: 'var(--flow-magic-soft)', border: '1px solid var(--flow-magic-border)', color: 'var(--flow-magic)' }}
+            >
+              NEW
+            </span>
+          )}
+        </button>
+        {deletable && (
+          <button
+            type="button"
+            className="recipe-sidebar-process-delete"
+            onClick={() => onDeleteSubprocess(process.id)}
+            aria-label={`Delete subprocess ${process.name}`}
+            title="Delete subprocess"
           >
-            NEW
-          </span>
+            🗑
+          </button>
         )}
-      </button>
+      </div>
     )
   }
 
@@ -156,7 +175,7 @@ export default function RecipeProcessSidebar({
       {isOwner && showCreateForm && (
         <div className="flex flex-shrink-0 flex-col gap-2 border-b border-[var(--flow-border)] p-3" role="group" aria-label="New subprocess">
           <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--flow-text)' }}>New subprocess</div>
-          {draft.restored && (name.trim() || description.trim()) && <DraftRestoredNote onDiscard={draft.clear} />}
+          {draft.restored && (name.trim() || description.trim()) && <DraftRestoredNote onDiscard={() => void confirmDiscard('subprocess name and description', draft.clear)} />}
           <input
             ref={nameInputRef}
             className="flow-properties-input"

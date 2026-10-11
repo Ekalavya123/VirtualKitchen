@@ -30,6 +30,8 @@ import { useRecipeAiWorkflow } from '../useRecipeAiWorkflow'
 import { draftKeys } from '../../../../shared/drafts/draftStore'
 import { useDraft } from '../../../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
+import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
+import { useConfirmDiscard } from '../../components/useConfirmDiscard'
 import '../../process/styles/RecipeProcessCanvas.css'
 
 type AiRecipeCreationDraft = { selection: WorkflowTaskSelection; recipeText: string }
@@ -161,6 +163,7 @@ function TaskSelectionStep({ recipeId, willReplaceMain, initialTasks, busy, erro
   const [estimate, setEstimate] = useState<RecipeAiWorkflowEstimate | null>(null)
   const [estimateError, setEstimateError] = useState(false)
   const [touched, setTouched] = useState(false)
+  const confirmDiscard = useConfirmDiscard()
 
   const existingStepCount = useMemo(
     () => summarizeProcesses(session?.getProcesses() ?? []).steps,
@@ -233,7 +236,7 @@ function TaskSelectionStep({ recipeId, willReplaceMain, initialTasks, busy, erro
               ⚠ This recipe already has a MAIN process. Creating a new one will replace its content (existing subprocesses are kept). You can Undo it afterwards.
             </div>
           )}
-          {draft.restored && recipeText.trim() && <DraftRestoredNote onDiscard={draft.clear} />}
+          {draft.restored && recipeText.trim() && <DraftRestoredNote onDiscard={() => void confirmDiscard('recipe text and task selection', draft.clear)} />}
           <textarea
             value={recipeText}
             onChange={(event) => setRecipeText(event.target.value)}
@@ -422,6 +425,16 @@ function ApprovalCard({ recipeId, workflow, processSummary, ai, onReview }: {
   }, [recipeId, workflow.workflowId, ready, downstream.length])
 
   const busy = ai.busy === 'approve'
+  const confirm = useConfirm()
+  const handleDiscard = async () => {
+    const skipped = downstream.map((task) => WORKFLOW_TASK_LABELS[task].toLowerCase()).join(' and ')
+    if (await confirm({
+      eyebrow: 'Discard AI Recipe Creation',
+      title: 'Stop AI Recipe Creation here?',
+      message: `This AI Recipe Creation run is discarded${skipped ? ` — no ${skipped} will be created` : ''}. The recipe process stays as it is. This can't be undone; you'd have to start AI Recipe Creation again.`,
+      confirmLabel: 'Discard',
+    })) void ai.discard()
+  }
   return (
     <>
       <div className="recipe-ai-approval">
@@ -444,7 +457,7 @@ function ApprovalCard({ recipeId, workflow, processSummary, ai, onReview }: {
           {busy ? 'Saving & approving…' : downstream.length === 0 ? 'Approve' : 'Approve & Continue'}
         </button>
         {workflow.cancellable && (
-          <button type="button" onClick={() => void ai.discard()} disabled={ai.busy === 'discard'} style={{ ...secondaryButton, marginLeft: 'auto' }}
+          <button type="button" onClick={() => void handleDiscard()} disabled={ai.busy === 'discard'} style={{ ...secondaryButton, marginLeft: 'auto' }}
             title="Stop here: no visuals or narration are created. The recipe process stays as it is.">
             Discard
           </button>

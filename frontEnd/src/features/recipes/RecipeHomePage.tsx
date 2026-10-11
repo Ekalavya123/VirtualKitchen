@@ -7,6 +7,12 @@ import { browserStorage, clearRecovery } from '../recipe-tool/persistence/recove
 import { clearRecipeDrafts, draftKeys } from '../../shared/drafts/draftStore'
 import { useDraft } from '../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../shared/drafts/DraftRestoredNote'
+import { useStartRecipeOrder } from '../recipe-order/useStartRecipeOrder'
+import { useConfirm } from '../../shared/components/confirm/confirmContext'
+import { useIncrementalReveal } from '../../shared/hooks/useIncrementalReveal'
+import ListEnd from '../../shared/components/ListEnd'
+import ActionMenu, { type ActionMenuItem } from '../../shared/components/ActionMenu'
+import EditRecipeDetailsModal, { type RecipeDetailsDraft } from './EditRecipeDetailsModal'
 
 type RecipeTab = 'mine' | 'global'
 
@@ -24,6 +30,7 @@ type RecipeCardProps = {
   variant: RecipeTab
   highlighted?: boolean
   onOpen: () => void
+  onEditDetails?: () => void
   onDelete?: () => void
   onToggleVisibility?: () => void
   onAddToMyRecipes?: () => void
@@ -35,6 +42,7 @@ function RecipeCard({
   variant,
   highlighted,
   onOpen,
+  onEditDetails,
   onDelete,
   onToggleVisibility,
   onAddToMyRecipes,
@@ -43,9 +51,23 @@ function RecipeCard({
   // Falls back to the recipe icon when there is no thumbnail or it fails to load.
   const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null)
   const showThumbnail = Boolean(recipe.thumbnailUrl) && recipe.thumbnailUrl !== failedThumbnail
+  const isPublic = recipe.visibility === 'PUBLIC'
+  const visibilityHint = isPublic
+    ? 'Public: anyone can find it in Global Recipes. Click to make it private.'
+    : 'Private: only you can see it. Click to make it public.'
+
+  // My Recipes: the card's actions live in its "⋯" menu (visibility has its own icon).
+  const menuItems: ActionMenuItem[] = variant === 'mine'
+    ? [
+        ...(onEditDetails ? [{ label: '✏️ Edit name & description', onSelect: onEditDetails }] : []),
+        ...(onOpenRecipeTool ? [{ label: '🧰 Recipe Tool', onSelect: onOpenRecipeTool }] : []),
+        ...(onDelete ? [{ label: '🗑️ Delete recipe', onSelect: onDelete, danger: true }] : []),
+      ]
+    : []
 
   return (
     <article className={`recipe-card group${highlighted ? ' recipe-card-highlighted' : ''}`}>
+      {/* The whole card opens the recipe (Global Recipes: its preview). */}
       <button
         onClick={onOpen}
         className="recipe-card-content"
@@ -68,80 +90,209 @@ function RecipeCard({
         </div>
 
         <div className="recipe-card-body">
-          <div className="mb-1 flex items-start justify-between gap-3">
-            <h3 className="line-clamp-1 text-base font-bold text-[var(--flow-text)]">
-              {recipe.name}
-            </h3>
-          </div>
+          <h3 className="line-clamp-1 text-base font-bold text-[var(--flow-text)]">
+            {recipe.name}
+          </h3>
 
-          <p className="recipe-card-description">
-            {recipe.description || 'Open this recipe to edit the cooking flow.'}
-          </p>
+          {recipe.description?.trim() && (
+            <p className="recipe-card-description">
+              {recipe.description}
+            </p>
+          )}
 
-          <div className="mt-4 flex items-center justify-between">
-            <span className="text-xs font-medium text-[var(--flow-text-muted)]">
-              Recipe
+          {recipe.createdAt && (
+            <span className="recipe-card-meta">
+              {formatDate(recipe.createdAt)}
             </span>
-
-            {recipe.createdAt && (
-              <span className="text-xs text-[var(--flow-text-muted)]">
-                {formatDate(recipe.createdAt)}
-              </span>
-            )}
-          </div>
+          )}
         </div>
       </button>
 
-      <div className="recipe-card-footer">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onOpen}
-            className="recipe-card-open-button"
-          >
-            {variant === 'mine' ? 'Open recipe' : 'View recipe'}
-            <span aria-hidden="true">→</span>
-          </button>
+      {/* Overlays on the image corners — siblings of the open-button, so they never open the recipe. */}
+      {variant === 'mine' && onToggleVisibility && (
+        <button
+          type="button"
+          onClick={onToggleVisibility}
+          className="recipe-card-visibility"
+          aria-label={visibilityHint}
+          data-tooltip={isPublic ? 'Public · click to make private' : 'Private · click to make public'}
+        >
+          {isPublic ? '🌐' : '🔒'}
+        </button>
+      )}
 
-          {onOpenRecipeTool && (
-            <button
-              onClick={onOpenRecipeTool}
-              title="Open the Recipe Tool (ingredients, nutrition, process)"
-              className="recipe-card-open-button"
-            >
-              🧰 Recipe Tool
-            </button>
-          )}
-        </div>
+      {menuItems.length > 0 && (
+        <ActionMenu
+          items={menuItems}
+          label={`More actions for ${recipe.name}`}
+          className="recipe-card-actions"
+        />
+      )}
 
-        {variant === 'mine' ? (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onToggleVisibility}
-              title={recipe.visibility === 'PUBLIC' ? 'Make private' : 'Make public'}
-              className="recipe-card-visibility-button"
-            >
-              {recipe.visibility === 'PUBLIC' ? '🌐 Public' : '🔒 Private'}
-            </button>
-
-            <button
-              onClick={onDelete}
-              title="Delete recipe"
-              aria-label={`Delete ${recipe.name}`}
-              className="recipe-card-delete-button"
-            >
-              🗑️
-            </button>
-          </div>
-        ) : (
+      {variant === 'global' && (
+        <div className="recipe-card-footer">
           <button
             onClick={onAddToMyRecipes}
-            className="recipe-card-open-button"
+            className="recipe-card-order-button"
           >
             + Add to My Recipes
           </button>
+        </div>
+      )}
+    </article>
+  )
+}
+
+type OrderRecipeModalProps = {
+  open: boolean
+  recipes: Recipe[]
+  loading: boolean
+  /** The recipe whose order is being created. */
+  orderingRecipeId: number | null
+  onOrder: (recipe: Recipe) => void
+  onCreateRecipe: () => void
+  onClose: () => void
+}
+
+/** "Order recipe": choose one of your recipes, then continue to its order's confirm page. */
+function OrderRecipeModal({
+  open,
+  recipes,
+  loading,
+  orderingRecipeId,
+  onOrder,
+  onCreateRecipe,
+  onClose,
+}: OrderRecipeModalProps) {
+  const [query, setQuery] = useState('')
+  const [selectedId, setSelectedId] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && orderingRecipeId == null) onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [open, orderingRecipeId, onClose])
+
+  if (!open) return null
+
+  const busy = orderingRecipeId != null
+  const search = query.trim().toLowerCase()
+  const matches = search
+    ? recipes.filter(recipe =>
+        recipe.name.toLowerCase().includes(search) || recipe.description?.toLowerCase().includes(search))
+    : recipes
+  const selected = recipes.find(recipe => recipe.id === selectedId) ?? null
+
+  const close = () => {
+    if (busy) return
+    setQuery('')
+    setSelectedId(null)
+    onClose()
+  }
+
+  return (
+    <div
+      className="recipe-modal-backdrop"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) close()
+      }}
+    >
+      <div className="recipe-modal order-recipe-modal" role="dialog" aria-modal="true" aria-labelledby="order-recipe-title">
+        <div className="recipe-modal-header">
+          <div>
+            <div className="mb-1 text-[0.7rem] font-bold uppercase tracking-[0.14em] text-[var(--flow-accent)]">
+              Order recipe
+            </div>
+            <h2 id="order-recipe-title" className="text-xl font-bold text-[var(--flow-text)]">
+              Which recipe would you like prepared?
+            </h2>
+            <p className="mt-1 text-sm text-[var(--flow-text-muted)]">
+              Pick one of your recipes. Next you'll confirm servings and the delivery address.
+            </p>
+          </div>
+
+          <button onClick={close} disabled={busy} className="recipe-modal-close" aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        <div className="recipe-modal-body order-recipe-body">
+          {loading ? (
+            <p className="text-sm text-[var(--flow-text-muted)]">Loading your recipes…</p>
+          ) : recipes.length === 0 ? (
+            <div className="order-recipe-empty">
+              <p>You don't have any recipes to order yet.</p>
+              <button type="button" className="recipe-primary-button" onClick={() => { close(); onCreateRecipe() }}>
+                + Create recipe
+              </button>
+            </div>
+          ) : (
+            <>
+              <input
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="Search your recipes..."
+                className="recipe-search-input order-recipe-search"
+                aria-label="Search your recipes"
+                autoFocus
+              />
+
+              <div className="order-recipe-list" role="radiogroup" aria-label="Your recipes">
+                {matches.length === 0 ? (
+                  <p className="text-sm text-[var(--flow-text-muted)]">No recipes match "{query}".</p>
+                ) : (
+                  matches.map(recipe => (
+                    <label
+                      key={recipe.id}
+                      className={`order-recipe-option${recipe.id === selectedId ? ' selected' : ''}`}
+                    >
+                      <input
+                        type="radio"
+                        name="order-recipe"
+                        checked={recipe.id === selectedId}
+                        onChange={() => setSelectedId(recipe.id)}
+                        disabled={busy}
+                      />
+                      <span className="order-recipe-thumb" aria-hidden="true">
+                        {recipe.thumbnailUrl ? (
+                          <img src={recipe.thumbnailUrl} alt="" loading="lazy" />
+                        ) : (
+                          <img src={recipeIcon} alt="" className="order-recipe-thumb-icon" />
+                        )}
+                      </span>
+                      <span className="order-recipe-text">
+                        <span className="order-recipe-name">{recipe.name}</span>
+                        {recipe.description?.trim() && (
+                          <span className="order-recipe-description">{recipe.description}</span>
+                        )}
+                      </span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {recipes.length > 0 && (
+          <div className="recipe-modal-footer">
+            <button onClick={close} disabled={busy} className="recipe-secondary-button">
+              Cancel
+            </button>
+            <button
+              onClick={() => selected && onOrder(selected)}
+              disabled={!selected || busy}
+              className="recipe-primary-button"
+            >
+              {busy ? 'Starting order…' : 'Continue to order →'}
+            </button>
+          </div>
         )}
       </div>
-    </article>
+    </div>
   )
 }
 
@@ -576,6 +727,8 @@ export default function RecipeHomePage({
     onCreateRecipe || onOpenRecipies
 
   const { notifySuccess, notifyError } = useNotifications()
+  const confirm = useConfirm()
+  const { startOrder, orderingRecipeId } = useStartRecipeOrder()
 
   const [activeTab, setActiveTab] = useState<RecipeTab>('mine')
 
@@ -598,6 +751,8 @@ export default function RecipeHomePage({
   const [search, setSearch] = useState('')
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [viewRecipe, setViewRecipe] = useState<Recipe | null>(null)
+  const [orderModalOpen, setOrderModalOpen] = useState(false)
+  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
 
   const [visibilityRecipe, setVisibilityRecipe] = useState<Recipe | null>(null)
   const [visibilityLoading, setVisibilityLoading] = useState(false)
@@ -677,6 +832,14 @@ export default function RecipeHomePage({
     })
   }, [recipes, globalRecipes, activeTab, search])
 
+  // Long lists render a page at a time, revealing more as the user scrolls.
+  const {
+    visible: visibleRecipes,
+    hasMore: hasMoreRecipes,
+    sentinelRef: recipesSentinelRef,
+    showMore: showMoreRecipes,
+  } = useIncrementalReveal(filteredRecipes, `${activeTab}|${search.trim().toLowerCase()}`)
+
   const openCreateModal = () => {
     setError(null)
     setCreateModalOpen(true)
@@ -728,7 +891,16 @@ export default function RecipeHomePage({
     }
   }
 
-  const handleDeleteRecipe = async (recipeId: number) => {
+  const handleDeleteRecipe = async (recipe: Recipe) => {
+    const confirmed = await confirm({
+      eyebrow: 'Delete recipe',
+      title: `Delete "${recipe.name}"?`,
+      message:
+        'The recipe, its processes and step images will be permanently removed from your kitchen. Orders already placed keep their own copy. This cannot be undone.',
+      confirmLabel: 'Delete recipe',
+    })
+    if (!confirmed) return
+    const recipeId = recipe.id
     try {
       await RecipeApi.deleteRecipe(recipeId, userId)
       // Unsaved Recipe Tool changes left on this device for a deleted recipe can never be recovered.
@@ -748,6 +920,17 @@ export default function RecipeHomePage({
           : 'Unable to delete recipe',
       )
     }
+  }
+
+  const saveRecipeDetails = async (details: RecipeDetailsDraft) => {
+    if (!editingRecipe) return
+    const updated = await RecipeApi.updateRecipe(editingRecipe.id, userId, details)
+    setRecipes(current =>
+      // The update endpoint doesn't resolve thumbnails, so keep the one already shown.
+      current.map(item => (item.id === updated.id ? { ...item, ...updated, thumbnailUrl: item.thumbnailUrl } : item)),
+    )
+    setEditingRecipe(null)
+    notifySuccess('Recipe details saved.')
   }
 
   const requestToggleVisibility = (recipe: Recipe) => {
@@ -844,15 +1027,25 @@ export default function RecipeHomePage({
             </p>
           </div>
 
-          {activeTab === 'mine' && (
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
             <button
-              onClick={openCreateModal}
-              className="recipe-primary-button self-start sm:self-auto"
+              onClick={() => setOrderModalOpen(true)}
+              className="recipe-secondary-button recipe-order-cta"
+              title="Have one of your recipes prepared and delivered (simulated)"
             >
-              <span className="text-base leading-none">+</span>
-              Create recipe
+              🛒 Order recipe
             </button>
-          )}
+
+            {activeTab === 'mine' && (
+              <button
+                onClick={openCreateModal}
+                className="recipe-primary-button"
+              >
+                <span className="text-base leading-none">+</span>
+                Create recipe
+              </button>
+            )}
+          </div>
         </header>
 
         {/* Tabs */}
@@ -904,8 +1097,9 @@ export default function RecipeHomePage({
             onCreate={openCreateModal}
           />
         ) : (
+          <>
           <div className="recipe-grid">
-            {filteredRecipes.map(recipe => (
+            {visibleRecipes.map(recipe => (
               <RecipeCard
                 key={recipe.id}
                 recipe={recipe}
@@ -916,8 +1110,9 @@ export default function RecipeHomePage({
                     ? handleOpenRecipe?.(recipe.id, recipe.name)
                     : setViewRecipe(recipe)
                 }
+                onEditDetails={() => setEditingRecipe(recipe)}
                 onDelete={() =>
-                  void handleDeleteRecipe(recipe.id)
+                  void handleDeleteRecipe(recipe)
                 }
                 onToggleVisibility={() =>
                   requestToggleVisibility(recipe)
@@ -933,6 +1128,15 @@ export default function RecipeHomePage({
               />
             ))}
           </div>
+          <ListEnd
+            hasMore={hasMoreRecipes}
+            shown={visibleRecipes.length}
+            total={filteredRecipes.length}
+            noun="recipes"
+            sentinelRef={recipesSentinelRef}
+            onShowMore={showMoreRecipes}
+          />
+          </>
         )}
       </div>
 
@@ -949,6 +1153,24 @@ export default function RecipeHomePage({
         onClose={closeCreateModal}
         draftRestored={createDraft.restored}
         onClearDraft={createDraft.clear}
+      />
+
+      {/* Edit a recipe's name and description */}
+      <EditRecipeDetailsModal
+        recipe={editingRecipe}
+        onSave={saveRecipeDetails}
+        onClose={() => setEditingRecipe(null)}
+      />
+
+      {/* Order Recipe: pick one of your recipes */}
+      <OrderRecipeModal
+        open={orderModalOpen}
+        recipes={recipes}
+        loading={recipesLoading}
+        orderingRecipeId={orderingRecipeId}
+        onOrder={recipe => void startOrder(recipe.id)}
+        onCreateRecipe={openCreateModal}
+        onClose={() => setOrderModalOpen(false)}
       />
 
       {/* View Recipe Modal (Global Recipes) */}

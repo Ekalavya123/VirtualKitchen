@@ -1,6 +1,8 @@
 package com.processVisualisation.virtualKitchen.common.exception;
 
 import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
+import com.processVisualisation.virtualKitchen.recipeorder.RecipeOrderException;
+import com.processVisualisation.virtualKitchen.store.units.UnitConversionException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -281,6 +283,48 @@ public class GlobalExceptionHandler {
                 ex.getMessage()
         );
         return new ResponseEntity<>(error, ex.getStatus());
+    }
+
+    /**
+     * Handles a recipe-order request the order's lifecycle or ownership rules reject (not found,
+     * invalid details, a status that doesn't allow the action, a recipe that can't be ordered).
+     *
+     * @param ex the recipe-order exception, carrying its own intended HTTP status
+     * @return an {@link ErrorResponse} with {@code ex}'s message, sent with {@code ex.getStatus()}
+     */
+    @ExceptionHandler(RecipeOrderException.class)
+    public ResponseEntity<ErrorResponse> handleRecipeOrder(RecipeOrderException ex) {
+        if (ex.getStatus() == HttpStatus.CONFLICT) {
+            logRejected(ex);
+        } else {
+            logClientError(ex);
+        }
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                ex.getStatus().value(),
+                ex.getStatus().getReasonPhrase(),
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, ex.getStatus());
+    }
+
+    /**
+     * Handles a quantity that cannot be converted between units (an unknown unit, or a missing
+     * quantity) — e.g. a shop purchase whose unit can't be added to the existing inventory row.
+     *
+     * @param ex the conversion exception
+     * @return an {@link ErrorResponse} with {@code ex}'s message, at HTTP 422 Unprocessable Entity
+     */
+    @ExceptionHandler(UnitConversionException.class)
+    public ResponseEntity<ErrorResponse> handleUnitConversion(UnitConversionException ex) {
+        logClientError(ex);
+        ErrorResponse error = new ErrorResponse(
+                LocalDateTime.now(),
+                HttpStatus.UNPROCESSABLE_ENTITY.value(),
+                HttpStatus.UNPROCESSABLE_ENTITY.getReasonPhrase(),
+                ex.getMessage()
+        );
+        return new ResponseEntity<>(error, HttpStatus.UNPROCESSABLE_ENTITY);
     }
 
     /**

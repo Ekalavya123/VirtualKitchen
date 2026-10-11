@@ -23,8 +23,15 @@
   overflow: hidden;
 }
 
+/* Grows to fill short pages but never shrinks below its content, so on long pages the footer
+   comes after everything instead of sitting mid-page at the bottom of the first screen. */
 .kitchen-content {
-  flex: 1;
+  flex: 1 0 auto;
+}
+
+/* The editor is the exception: it fills exactly the space below the navbar and scrolls itself. */
+.kitchen-body:has(.flow-canvas-container) .kitchen-content {
+  flex: 1 1 0;
   min-height: 0;
 }
 

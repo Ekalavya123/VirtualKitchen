@@ -7,6 +7,10 @@ import RecipeProcessSummaryCard from './RecipeProcessSummaryCard'
 import { draftKeys } from '../../../../shared/drafts/draftStore'
 import { useDraft } from '../../../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
+import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
+import { useConfirmDiscard } from '../../components/useConfirmDiscard'
+import { toBatchItems } from '../../persistence/snapshotPersistence'
+import { countSubprocessReferences, withoutSubprocessReferences } from '../model/subprocessReferences'
 
 type RecipeProcessListPageProps = {
   recipeId: number
@@ -40,6 +44,9 @@ export default function RecipeProcessListPage({ recipeId, currentUserId, onOpenP
   const [showCreateForm, setShowCreateForm] = useState(() => draft.restored)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const confirm = useConfirm()
+  const confirmDiscard = useConfirmDiscard()
 
   const loadProcesses = useCallback(() => {
     Promise.all([ProcessApi.listByRecipe(recipeId), RecipeDetailApi.getRecipeDetail(recipeId)])
@@ -71,6 +78,48 @@ export default function RecipeProcessListPage({ recipeId, currentUserId, onOpenP
       notifyError(error instanceof Error ? error.message : 'Unable to create the main process')
     } finally {
       setCreatingMain(false)
+    }
+  }
+
+  /**
+   * Deletes a SUBPROCESS after confirming. This page has no editing session, so it saves directly,
+   * in the same order the editor's save does (persistence/snapshotPersistence.ts): first every
+   * step that references the subprocess (in any process) is saved without that reference — against
+   * the recipe's current process revision — then the subprocess itself is deleted. The MAIN process
+   * is never offered for deletion.
+   */
+  const handleDeleteSubprocess = async (process: Process) => {
+    const stepCount = process.nodes.filter((node) => node.kind === 'STEP').length
+    const references = countSubprocessReferences(processes, process.id)
+    if (!(await confirm({
+      eyebrow: 'Delete subprocess',
+      title: `Delete “${process.name}”?`,
+      message: `The subprocess and its ${stepCount} step${stepCount === 1 ? '' : 's'} will be permanently deleted. `
+        + (references > 0
+          ? `${references} step${references === 1 ? ' uses' : 's use'} its output — ${references === 1 ? 'that reference' : 'those references'} will be removed too. `
+          : 'No step uses its output. ')
+        + 'This can\'t be undone.',
+      confirmLabel: 'Delete subprocess',
+    }))) return
+
+    setDeletingId(process.id)
+    try {
+      // The revision is read before the processes, as the editor does on load.
+      const revision = (await RecipeDetailApi.getRecipeDetail(recipeId)).processRevision ?? 0
+      const latest = await ProcessApi.listByRecipe(recipeId)
+      const changed = latest
+        .filter((candidate) => candidate.id !== process.id)
+        .map((candidate) => ({ original: candidate, stripped: withoutSubprocessReferences(candidate, process.id) }))
+        .filter(({ original, stripped }) => stripped !== original)
+        .map(({ stripped }) => stripped)
+      if (changed.length > 0) await ProcessApi.updateAll(recipeId, toBatchItems(changed), revision)
+      await ProcessApi.delete(recipeId, process.id)
+      notifySuccess(`Subprocess “${process.name}” deleted`)
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : 'Unable to delete this subprocess')
+    } finally {
+      setDeletingId(null)
+      loadProcesses()
     }
   }
 
@@ -167,7 +216,7 @@ export default function RecipeProcessListPage({ recipeId, currentUserId, onOpenP
 
         {isOwner && showCreateForm && (
           <div className="mb-4 flex flex-col gap-2 rounded-xl border p-3" style={{ border: '1px solid var(--flow-border)', background: 'var(--flow-surface)' }}>
-            {draft.restored && (newName.trim() || newDescription.trim()) && <DraftRestoredNote onDiscard={draft.clear} />}
+            {draft.restored && (newName.trim() || newDescription.trim()) && <DraftRestoredNote onDiscard={() => void confirmDiscard('subprocess name and description', draft.clear)} />}
             <input
               className="flow-properties-input"
               value={newName}
@@ -198,7 +247,13 @@ export default function RecipeProcessListPage({ recipeId, currentUserId, onOpenP
         ) : (
           <div className="flex flex-col gap-3">
             {subprocesses.map((process) => (
-              <RecipeProcessSummaryCard key={process.id} process={process} onOpen={() => onOpenProcess(process.id)} />
+              <RecipeProcessSummaryCard
+                key={process.id}
+                process={process}
+                onOpen={() => onOpenProcess(process.id)}
+                onDelete={isOwner ? () => void handleDeleteSubprocess(process) : undefined}
+                deleting={deletingId === process.id}
+              />
             ))}
           </div>
         )}

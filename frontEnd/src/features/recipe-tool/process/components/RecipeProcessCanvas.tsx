@@ -64,6 +64,7 @@ import { useRecipeSession, type RecipeSessionContextValue } from '../../context/
 import type { Process } from '../../../../types/process'
 import type { RecipeProcessBreadcrumbEntry, RecipeProcessVisualizationStepResult } from '../../../../types/recipe'
 import { useNotifications } from '../../../../shared/components/notifications/NotificationProvider'
+import { useConfirm, type ConfirmOptions } from '../../../../shared/components/confirm/confirmContext'
 import { isTrackedJobActive, visualsJobKey } from '../../context/jobTracker'
 import { useJobTracker, useTrackedJob } from '../../context/useJobTracker'
 import RecipeConditionPanel from './RecipeConditionPanel'
@@ -638,16 +639,66 @@ function RecipeProcessCanvasContent({
     setSelectedNodeId((current) => (current === id ? null : current))
   }, [setNodes, setEdges, pushHistorySnapshot])
 
+  /**
+   * Every way of deleting a node (the panels' Delete, the top bar's 🗑, the Delete/Backspace keys)
+   * asks first, saying what goes with it. A second request while the dialog is open (e.g. holding
+   * Delete) is ignored rather than stacking dialogs.
+   */
+  const confirm = useConfirm()
+  const confirmingDeleteRef = useRef(false)
+  const requestDeleteNode = useCallback(async (id: string) => {
+    if (confirmingDeleteRef.current) return
+    const current = nodesRef.current
+    const node = current.find((candidate) => candidate.id === id)
+    if (!node) return
+    const connections = edgesRef.current.filter((edge) => edge.source === id || edge.target === id).length
+    const connectionsText = connections > 0 ? ` and its ${connections} connection${connections === 1 ? '' : 's'}` : ''
+
+    let options: ConfirmOptions
+    if (isRecipeStepNode(node)) {
+      const stepNumber = current.filter(isRecipeStepNode).indexOf(node) + 1
+      const title = normalizeRecipeStepNodeData(node.data).title || 'Untitled step'
+      // Other steps using this step's output lose that reference (see deleteNode).
+      const usedBy = current.filter((other) => other.id !== id && isRecipeStepNode(other)
+        && normalizeRecipeStepNodeData(other.data).step.actionOn.steps.some((entry) => entry.stepId === id)).length
+      options = {
+        eyebrow: 'Delete step',
+        title: `Delete step ${stepNumber} · ${title}?`,
+        message: `This step${connectionsText} will be removed from the process, with its Action On, settings and visualization.`
+          + (usedBy > 0 ? ` ${usedBy} other step${usedBy === 1 ? ' uses' : 's use'} its output — that reference will be removed too.` : '')
+          + ' You can Undo this.',
+        confirmLabel: 'Delete step',
+      }
+    } else {
+      const title = normalizeConditionNodeData(node.data).title || 'Untitled condition'
+      options = {
+        eyebrow: 'Delete condition',
+        title: `Delete condition “${title}”?`,
+        message: `This condition${connectionsText} (its Yes/No branches) will be removed from the process. You can Undo this.`,
+        confirmLabel: 'Delete condition',
+      }
+    }
+
+    confirmingDeleteRef.current = true
+    try {
+      if (await confirm(options)) deleteNode(id)
+    } finally {
+      confirmingDeleteRef.current = false
+    }
+  }, [confirm, deleteNode])
+
   const deleteEdge = useCallback((id: string) => {
     pushHistorySnapshot()
     setEdges((eds) => eds.filter((edge) => edge.id !== id))
     setSelectedEdgeId((current) => (current === id ? null : current))
   }, [setEdges, pushHistorySnapshot])
 
+  // A connection is deleted without asking: it carries no content of its own, is redrawn with one
+  // drag, and Undo brings it back.
   const deleteSelected = useCallback(() => {
-    if (selectedNodeId) deleteNode(selectedNodeId)
+    if (selectedNodeId) void requestDeleteNode(selectedNodeId)
     else if (selectedEdgeId) deleteEdge(selectedEdgeId)
-  }, [selectedNodeId, selectedEdgeId, deleteNode, deleteEdge])
+  }, [selectedNodeId, selectedEdgeId, requestDeleteNode, deleteEdge])
 
   // Keyboard shortcuts (Delete/Backspace, Ctrl/Cmd+Z, Ctrl/Cmd+Y) — a global listener so shortcuts
   // work regardless of which element inside the canvas currently has focus,
@@ -954,12 +1005,17 @@ function RecipeProcessCanvasContent({
     else notifyError(error ?? 'Unable to save this recipe right now')
   }, [session, notifySuccess, notifyError])
 
-  const handleResolveConflict = useCallback((choice: 'reload' | 'keepMine') => {
-    if (choice === 'reload' && !window.confirm('Discard the changes made here and load the latest saved version of this recipe?')) return
+  const handleResolveConflict = useCallback(async (choice: 'reload' | 'keepMine') => {
+    if (choice === 'reload' && !(await confirm({
+      eyebrow: 'Discard changes',
+      title: 'Discard your unsaved changes?',
+      message: 'Every change made here since the last save will be lost, and the latest saved version of this recipe is loaded instead. This can\'t be undone.',
+      confirmLabel: 'Discard & reload',
+    }))) return
     session.resolveConflict(choice).catch((error) => {
       notifyError(error instanceof Error ? error.message : 'Unable to resolve the conflict right now')
     })
-  }, [session, notifyError])
+  }, [session, notifyError, confirm])
 
   const handleBack = useCallback(() => {
     if (!confirmNavigatingAway()) return
@@ -1243,7 +1299,7 @@ function RecipeProcessCanvasContent({
                   updateActionOnProcesses={updateActionOnProcesses}
                   updateActionOnSteps={updateActionOnSteps}
                   stepOutputGraph={stepOutputGraph}
-                  onDeleteNode={deleteNode}
+                  onDeleteNode={(id) => void requestDeleteNode(id)}
                   onDuplicateNode={duplicateNode}
                   onOpenSubprocess={handleOpenSubprocess}
                   onGenerateVisuals={() => void generateVisuals()}
@@ -1258,7 +1314,7 @@ function RecipeProcessCanvasContent({
                       : undefined
                   }
                   updateNodeField={updateNodeField}
-                  onDeleteNode={deleteNode}
+                  onDeleteNode={(id) => void requestDeleteNode(id)}
                   onDuplicateNode={duplicateNode}
                 />
               )}

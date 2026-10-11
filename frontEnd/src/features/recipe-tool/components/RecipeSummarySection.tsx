@@ -1,5 +1,8 @@
+import { useMemo } from 'react'
 import '../styles/recipe-tool.css'
 import type { RecipeDetail } from '../../../types/recipe'
+import { useRecipeSession } from '../context/RecipeSessionContext'
+import { buildRecipePresentation } from '../presentation/model/recipePresentation'
 
 type RecipeSummarySectionProps = {
   recipe: RecipeDetail
@@ -16,7 +19,16 @@ type RecipeSummarySectionProps = {
  * information used to just link out to.
  */
 export default function RecipeSummarySection({ recipe }: RecipeSummarySectionProps) {
-  const ingredientCount = recipe.ingredients.length
+  // The ingredients are the ones the recipe's steps use (as in the Recipe Process view's list) —
+  // recipe.ingredients is a recipe-level list the editor doesn't fill. The session value changes on
+  // every edit, so the count follows unsaved changes too.
+  const session = useRecipeSession()
+  const ingredientCount = useMemo(
+    () => (session && !session.loading
+      ? buildRecipePresentation(session.getProcesses()).ingredients.length
+      : recipe.ingredients.length),
+    [session, recipe.ingredients.length],
+  )
   const hasNutrition = recipe.nutrition != null
 
   return (
