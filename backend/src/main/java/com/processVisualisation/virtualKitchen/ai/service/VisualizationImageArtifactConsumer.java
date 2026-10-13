@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.service;
 
+import com.processVisualisation.virtualKitchen.ai.analytics.AiAnalyticsRecorder;
 import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifact;
 import com.processVisualisation.virtualKitchen.ai.artifact.consumer.AiArtifactConsumer;
 import com.processVisualisation.virtualKitchen.ai.model.VisualizationAsset;
@@ -8,6 +9,7 @@ import com.processVisualisation.virtualKitchen.restclient.client.ImageGeneration
 import com.processVisualisation.virtualKitchen.restclient.client.ImageStorageClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
@@ -41,6 +43,14 @@ public class VisualizationImageArtifactConsumer implements AiArtifactConsumer {
     private final ImageStorageClient imageStorageClient;
     private final AIVisualizationAssetRepository assetRepository;
     private final MongoTemplate mongoTemplate;
+
+    private AiAnalyticsRecorder analytics = AiAnalyticsRecorder.disabled();
+
+    /** Optional, so tests can construct this without analytics. */
+    @Autowired(required = false)
+    public void setAnalyticsRecorder(AiAnalyticsRecorder analytics) {
+        this.analytics = analytics;
+    }
 
     public VisualizationImageArtifactConsumer(
             ImageStorageClient imageStorageClient,
@@ -97,6 +107,8 @@ public class VisualizationImageArtifactConsumer implements AiArtifactConsumer {
                         .set("updatedAt", LocalDateTime.now()),
                 VisualizationAsset.class);
 
+        analytics.outputStored(artifact.getProducingJobId(), "IMAGE", "visualization_asset", String.valueOf(asset.getId()),
+                imageUrl, image.mimeType(), (long) image.data().length);
         logger.debug("event=image_upload_completed visualizationKey={} artifactId={} bytes={}",
                 visualizationKey, artifact.getId(), artifact.getPayloadSize());
         return imageUrl;

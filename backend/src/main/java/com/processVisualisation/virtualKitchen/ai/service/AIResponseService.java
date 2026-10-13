@@ -5,7 +5,9 @@ import com.processVisualisation.virtualKitchen.ai.model.AIResponseDocument;
 import com.processVisualisation.virtualKitchen.ai.repository.AIResponseRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -35,7 +37,28 @@ public class AIResponseService implements IAIResponseService {
         doc.setInput(dto.getInput());
         doc.setSuccess(dto.getSuccess());
         doc.setResponseData(dto.getResponseData());
+        LocalDateTime now = LocalDateTime.now();
+        doc.setCreatedAt(now);
+        doc.setUpdatedAt(now);
         return repository.save(doc);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Optional<AIResponseDocument> annotate(String id, String context, Boolean success, Map<String, Object> extraResponseData) {
+        return repository.findById(id).map(doc -> {
+            doc.setContext(context);
+            doc.setSuccess(success);
+            if (extraResponseData != null) {
+                extraResponseData.forEach((key, value) -> {
+                    if (value != null) doc.getResponseData().put(key, value);
+                });
+            }
+            doc.setUpdatedAt(LocalDateTime.now());
+            return repository.save(doc);
+        });
     }
 
     /**

@@ -1,0 +1,257 @@
+/* AI analytics admin. Built on the app's --flow-* tokens; the one data color is validated per theme. */
+.aia-root {
+  --aia-series: #2a78d6;
+  --aia-series-soft: rgba(42, 120, 214, 0.14);
+  --aia-grid: var(--flow-border);
+  color-scheme: light;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+  color: var(--flow-text);
+  font-family: var(--flow-font);
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme='light'])) .aia-root {
+    --aia-series: #3987e5;
+    --aia-series-soft: rgba(57, 135, 229, 0.2);
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] .aia-root {
+  --aia-series: #3987e5;
+  --aia-series-soft: rgba(57, 135, 229, 0.2);
+  color-scheme: dark;
+}
+
+.aia-header h1 { margin: 0; font-size: 1.5rem; }
+.aia-header p { margin: 0.25rem 0 0; }
+.aia-muted { color: var(--flow-text-muted); }
+.aia-small { font-size: 0.8rem; }
+.aia-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.85em; }
+.aia-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.aia-page { display: flex; flex-direction: column; gap: 1rem; }
+
+/* Tabs */
+.aia-tabs { display: flex; gap: 0.25rem; margin: 1rem 0; border-bottom: 1px solid var(--flow-border); overflow-x: auto; }
+.aia-tab {
+  padding: 0.6rem 0.9rem; color: var(--flow-text-muted); text-decoration: none; white-space: nowrap;
+  border-bottom: 2px solid transparent; font-weight: 500;
+}
+.aia-tab:hover { color: var(--flow-text); }
+.aia-tab.is-active { color: var(--flow-accent-strong); border-bottom-color: var(--flow-accent); }
+
+/* Buttons and controls */
+.aia-button {
+  border: 1px solid var(--flow-border-strong); background: var(--flow-surface); color: var(--flow-text);
+  border-radius: var(--flow-radius-sm); padding: 0.4rem 0.8rem; font: inherit; font-size: 0.875rem; cursor: pointer;
+}
+.aia-button:hover:not(:disabled) { border-color: var(--flow-accent); }
+.aia-button:disabled { opacity: 0.5; cursor: not-allowed; }
+.aia-button--primary { background: var(--flow-accent); border-color: var(--flow-accent); color: #fff; }
+.aia-button--primary:hover:not(:disabled) { background: var(--flow-accent-strong); }
+.aia-link {
+  background: none; border: none; padding: 0 0.25rem; color: var(--flow-accent-strong); cursor: pointer; font: inherit; font-size: 0.875rem;
+}
+.aia-link:hover { text-decoration: underline; }
+.aia-icon-button {
+  background: none; border: none; font-size: 1.6rem; line-height: 1; color: var(--flow-text-muted); cursor: pointer; padding: 0.25rem 0.5rem;
+}
+.aia-icon-button:hover { color: var(--flow-text); }
+.aia-inline-field { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.875rem; }
+.aia-root select, .aia-root input[type='text'], .aia-root input[type='number'], .aia-root input[type='date'] {
+  border: 1px solid var(--flow-border-strong); border-radius: var(--flow-radius-sm); padding: 0.35rem 0.5rem;
+  background: var(--flow-surface); color: var(--flow-text); font: inherit; font-size: 0.875rem; min-width: 0;
+}
+
+/* Filters */
+.aia-filters { margin-bottom: 1rem; }
+.aia-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.aia-segmented { display: inline-flex; border: 1px solid var(--flow-border-strong); border-radius: var(--flow-radius-sm); overflow: hidden; flex-wrap: wrap; }
+.aia-segmented button {
+  border: none; background: var(--flow-surface); color: var(--flow-text-muted); padding: 0.4rem 0.7rem; font: inherit; font-size: 0.85rem; cursor: pointer;
+}
+.aia-segmented button + button { border-left: 1px solid var(--flow-border); }
+.aia-segmented button.is-active { background: var(--flow-accent-soft); color: var(--flow-accent-strong); font-weight: 600; }
+.aia-date-range { display: inline-flex; align-items: center; gap: 0.35rem; }
+.aia-filter-panel {
+  margin-top: 0.75rem; padding: 0.75rem; display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  background: var(--flow-surface); border: 1px solid var(--flow-border); border-radius: var(--flow-radius-md);
+}
+.aia-field { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.8rem; color: var(--flow-text); }
+.aia-filter-panel { grid-template-columns: 1fr; gap: 1rem; }
+.aia-filter-intro { margin: 0; font-size: 0.82rem; color: var(--flow-text-muted); }
+.aia-filter-section h4 { margin: 0 0 0.5rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--flow-text-muted); }
+.aia-filter-group { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 0.5rem 1rem; padding: 0.45rem 0; border-top: 1px solid var(--flow-border); }
+.aia-filter-label { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.85rem; font-weight: 600; }
+.aia-filter-hint { font-size: 0.74rem; font-weight: 400; color: var(--flow-text-muted); }
+.aia-chip-row { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: flex-start; }
+.aia-filter-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 0.75rem; }
+.aia-applied { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.6rem; }
+@media (max-width: 640px) {
+  .aia-filter-group { grid-template-columns: 1fr; }
+}
+
+/* Cards and stats */
+.aia-card {
+  background: var(--flow-surface); border: 1px solid var(--flow-border); border-radius: var(--flow-radius-lg);
+  padding: 1rem; box-shadow: var(--flow-shadow-card); min-width: 0;
+}
+.aia-card h3 { margin: 0 0 0.75rem; font-size: 1rem; font-weight: 600; }
+.aia-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 1rem; }
+.aia-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 0.75rem; }
+.aia-stat {
+  display: flex; flex-direction: column; gap: 0.15rem; padding: 0.85rem 1rem; background: var(--flow-surface);
+  border: 1px solid var(--flow-border); border-radius: var(--flow-radius-md);
+}
+.aia-stat-label { font-size: 0.78rem; color: var(--flow-text-muted); }
+.aia-stat-value { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+.aia-stat-note { font-size: 0.75rem; color: var(--flow-text-muted); }
+
+.aia-notes {
+  margin: 0; padding: 0.6rem 0.9rem 0.6rem 1.8rem; font-size: 0.82rem; background: var(--flow-warning-soft);
+  border: 1px solid var(--flow-warning-border); border-radius: var(--flow-radius-md); color: var(--flow-text);
+}
+.aia-alert {
+  padding: 0.6rem 0.85rem; border-radius: var(--flow-radius-md); background: var(--flow-surface-muted);
+  border: 1px solid var(--flow-border); font-size: 0.875rem; margin: 0;
+}
+.aia-alert p { margin: 0.2rem 0; }
+.aia-alert--bad { background: var(--flow-danger-soft); border-color: var(--flow-danger); }
+.aia-loading { color: var(--flow-text-muted); font-size: 0.875rem; padding: 0.5rem 0; }
+.aia-empty { color: var(--flow-text-muted); font-size: 0.875rem; margin: 0.5rem 0; }
+.aia-error-text { color: var(--flow-danger); font-size: 0.85rem; margin: 0.25rem 0; overflow-wrap: anywhere; }
+
+/* Tables */
+.aia-table-scroll { overflow-x: auto; max-width: 100%; }
+.aia-table-scroll.is-loading { opacity: 0.6; }
+.aia-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.aia-table th, .aia-table td { padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--flow-border); text-align: left; white-space: nowrap; }
+.aia-table th { font-weight: 600; color: var(--flow-text-muted); font-size: 0.78rem; position: sticky; top: 0; background: var(--flow-surface); }
+.aia-table--compact th, .aia-table--compact td { padding: 0.35rem 0.5rem; }
+.aia-num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.aia-clickable { cursor: pointer; }
+.aia-clickable:hover td { background: var(--flow-surface-muted); }
+.aia-sort { background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; font-weight: 600; }
+.aia-actions { display: flex; gap: 0.25rem; }
+.aia-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.aia-columns { position: relative; }
+.aia-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; display: flex; flex-direction: column; gap: 0.35rem;
+  padding: 0.6rem 0.8rem; background: var(--flow-surface); border: 1px solid var(--flow-border); border-radius: var(--flow-radius-md);
+  box-shadow: var(--flow-shadow-panel); min-width: 190px;
+}
+.aia-pager { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; font-size: 0.875rem; }
+
+/* Badges, tags, cost popover */
+.aia-badge {
+  display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.5rem; border-radius: 999px;
+  font-size: 0.75rem; font-weight: 600; border: 1px solid var(--flow-border); background: var(--flow-surface-muted); color: var(--flow-text);
+}
+.aia-badge--good { background: var(--flow-success-soft); border-color: var(--flow-success); }
+.aia-badge--bad { background: var(--flow-danger-soft); border-color: var(--flow-danger); }
+.aia-badge--warn { background: var(--flow-warning-soft); border-color: var(--flow-warning-border); }
+.aia-badge--info { background: var(--flow-accent-soft); border-color: var(--flow-accent); }
+.aia-tag {
+  display: inline-block; margin-left: 0.3rem; padding: 0 0.35rem; border-radius: 0.3rem; font-size: 0.7rem;
+  background: var(--flow-surface-muted); border: 1px solid var(--flow-border); color: var(--flow-text-muted);
+}
+.aia-tag--warn { background: var(--flow-warning-soft); border-color: var(--flow-warning-border); color: var(--flow-text); }
+.aia-cost { position: relative; display: inline-flex; align-items: center; outline: none; }
+.aia-popover {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; display: flex; flex-direction: column; gap: 0.2rem;
+  min-width: 240px; max-width: 360px; padding: 0.6rem 0.75rem; text-align: left; white-space: normal;
+  background: var(--flow-surface); border: 1px solid var(--flow-border-strong); border-radius: var(--flow-radius-md);
+  box-shadow: var(--flow-shadow-panel); font-size: 0.8rem; color: var(--flow-text);
+}
+.aia-popover-row { display: flex; justify-content: space-between; gap: 1rem; }
+.aia-popover-formula, .aia-formula {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.75rem; color: var(--flow-text-muted);
+  overflow-wrap: anywhere; margin: 0.3rem 0 0;
+}
+
+/* Charts */
+.aia-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+.aia-bar-row { display: grid; grid-template-columns: minmax(90px, 34%) 1fr auto; align-items: center; gap: 0.6rem; font-size: 0.82rem; }
+.aia-bar-row:hover .aia-bar-fill { filter: brightness(1.1); }
+.aia-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aia-bar-track { height: 12px; background: var(--aia-series-soft); border-radius: 0 4px 4px 0; overflow: hidden; }
+.aia-bar-fill { display: block; height: 100%; background: var(--aia-series); border-radius: 0 4px 4px 0; }
+.aia-bar-value { font-variant-numeric: tabular-nums; text-align: right; min-width: 4.5rem; }
+.aia-line-wrap { position: relative; }
+.aia-line { width: 100%; height: auto; display: block; overflow: visible; }
+.aia-grid { stroke: var(--aia-grid); stroke-width: 1; }
+.aia-axis { fill: var(--flow-text-muted); font-size: 11px; }
+.aia-line-path { fill: none; stroke: var(--aia-series); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.aia-line-dot { fill: var(--aia-series); stroke: var(--flow-surface); stroke-width: 2; }
+.aia-crosshair { stroke: var(--flow-border-strong); stroke-dasharray: 3 3; }
+.aia-tooltip {
+  position: absolute; top: 0; transform: translateX(-50%); pointer-events: none; display: flex; flex-direction: column;
+  padding: 0.35rem 0.55rem; font-size: 0.75rem; background: var(--flow-surface); border: 1px solid var(--flow-border-strong);
+  border-radius: var(--flow-radius-sm); box-shadow: var(--flow-shadow-card); white-space: nowrap;
+}
+
+/* Cost & efficiency choices */
+.aia-choice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem; }
+.aia-choice-label { font-size: 0.8rem; color: var(--flow-text-muted); margin-right: 0.25rem; }
+.aia-chip {
+  border: 1px solid var(--flow-border-strong); background: var(--flow-surface); color: var(--flow-text); border-radius: 999px;
+  padding: 0.2rem 0.65rem; font: inherit; font-size: 0.8rem; cursor: pointer;
+}
+.aia-chip.is-active { background: var(--flow-accent-soft); border-color: var(--flow-accent); color: var(--flow-accent-strong); font-weight: 600; }
+.aia-details summary { cursor: pointer; font-size: 0.85rem; color: var(--flow-text-muted); margin: 0.25rem 0 0.5rem; }
+
+/* Drawer and modal */
+.aia-drawer-backdrop, .aia-modal-backdrop {
+  position: fixed; inset: 0; z-index: 1000; background: var(--flow-overlay, rgba(15, 23, 42, 0.45));
+}
+.aia-drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: min(640px, 100vw); overflow-y: auto; background: var(--flow-surface);
+  color: var(--flow-text); box-shadow: var(--flow-shadow-panel); padding: 1rem 1.25rem 2rem; box-sizing: border-box;
+}
+.aia-modal-backdrop { display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.aia-modal {
+  width: min(1100px, 100%); max-height: calc(100vh - 2rem); overflow-y: auto; background: var(--flow-surface); color: var(--flow-text);
+  border-radius: var(--flow-radius-lg); box-shadow: var(--flow-shadow-panel); padding: 1rem 1.25rem 1.5rem; box-sizing: border-box;
+}
+.aia-modal-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 0.75rem; }
+.aia-modal-header h2 { margin: 0; font-size: 1.15rem; }
+.aia-modal-header p { margin: 0.2rem 0 0; overflow-wrap: anywhere; }
+.aia-modal h3, .aia-drawer h3 { font-size: 0.9rem; margin: 1rem 0 0.5rem; }
+.aia-drawer-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+.aia-kvs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 0.5rem 1rem; margin: 0; }
+.aia-kv dt { font-size: 0.72rem; color: var(--flow-text-muted); }
+.aia-kv dd { margin: 0; font-size: 0.875rem; overflow-wrap: anywhere; }
+.aia-attempts, .aia-history { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.6rem; font-size: 0.85rem; }
+.aia-attempt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.aia-attempt-body { display: flex; flex-wrap: wrap; gap: 0.25rem 0.9rem; color: var(--flow-text-muted); margin-top: 0.2rem; }
+.aia-validation { margin: 0.25rem 0 0; padding-left: 1rem; font-size: 0.8rem; color: var(--flow-text-muted); }
+.aia-efficiency {
+  display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; padding: 0.6rem 0.8rem; background: var(--flow-surface-muted);
+  border: 1px solid var(--flow-border); border-radius: var(--flow-radius-md); font-size: 0.85rem; align-items: center;
+}
+.aia-efficiency b { color: var(--flow-text-muted); font-weight: 500; margin-right: 0.2rem; }
+.aia-modal-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin: 0.75rem 0; }
+.aia-provenance { font-size: 0.8rem; color: var(--flow-text-muted); margin: 0 0 0.5rem; }
+.aia-provenance--warn { color: var(--flow-text); background: var(--flow-warning-soft); border: 1px solid var(--flow-warning-border); padding: 0.35rem 0.6rem; border-radius: var(--flow-radius-sm); }
+.aia-summary { font-size: 0.85rem; font-weight: 600; margin: 0 0 0.5rem; }
+.aia-pre {
+  margin: 0; padding: 0.75rem; max-height: 60vh; overflow: auto; background: var(--flow-surface-muted); border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-md); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.78rem; line-height: 1.45;
+}
+.aia-pre--wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.aia-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 1rem; }
+.aia-compare h3 { margin-top: 0; }
+.aia-media { margin: 0; display: flex; flex-direction: column; gap: 0.4rem; align-items: flex-start; }
+.aia-media img { max-width: 100%; max-height: 60vh; border-radius: var(--flow-radius-md); border: 1px solid var(--flow-border); }
+.aia-media audio { width: min(100%, 480px); }
+.aia-media figcaption { font-size: 0.8rem; }
+.aia-attempt-errors ul { margin: 0; padding-left: 1.2rem; font-size: 0.85rem; }
+
+@media (max-width: 640px) {
+  .aia-root { padding: 1rem 1rem 2rem; }
+  .aia-stat-value { font-size: 1.1rem; }
+  .aia-bar-row { grid-template-columns: minmax(70px, 38%) 1fr auto; }
+  .aia-bar-value { min-width: 3.5rem; }
+  .aia-drawer { padding: 1rem; }
+  .aia-modal { padding: 1rem; }
+}

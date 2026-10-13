@@ -1,6 +1,8 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset;
 
+import com.processVisualisation.virtualKitchen.ai.analytics.AiAnalyticsRecorder;
 import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifact;
+import org.springframework.beans.factory.annotation.Autowired;
 import com.processVisualisation.virtualKitchen.ai.artifact.consumer.AiArtifactConsumer;
 import com.processVisualisation.virtualKitchen.ai.model.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.restclient.client.ImageGenerationClient.GeneratedImage;
@@ -30,6 +32,14 @@ public class GlobalAssetImageArtifactConsumer implements AiArtifactConsumer {
     private final ImageStorageClient imageStorageClient;
     private final GlobalAssetStore assetStore;
     private final GlobalResourceResolver resourceResolver;
+
+    private AiAnalyticsRecorder analytics = AiAnalyticsRecorder.disabled();
+
+    /** Optional, so tests can construct this without analytics. */
+    @Autowired(required = false)
+    public void setAnalyticsRecorder(AiAnalyticsRecorder analytics) {
+        this.analytics = analytics;
+    }
 
     public GlobalAssetImageArtifactConsumer(
             ImageStorageClient imageStorageClient,
@@ -69,6 +79,8 @@ public class GlobalAssetImageArtifactConsumer implements AiArtifactConsumer {
                 artifact.getProducedByModelKey(), artifact.getProducedByTier(), artifact.isUsedFallback());
         resourceResolver.publishImage(asset.getResourceType(), asset.getResourceId(), imageUrl);
 
+        analytics.outputStored(artifact.getProducingJobId(), "IMAGE", "visualization_asset", String.valueOf(asset.getId()),
+                imageUrl, image.mimeType(), (long) image.data().length);
         logger.debug("event=global_asset_image_stored assetKey={} assetId={} artifactId={} bytes={}",
                 assetKey, asset.getId(), artifact.getId(), artifact.getPayloadSize());
         return imageUrl;

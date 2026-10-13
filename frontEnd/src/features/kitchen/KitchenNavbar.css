@@ -36,14 +36,13 @@
   align-items: center;
   justify-content: center;
 
-  border-radius: 10px;
+  overflow: hidden;
 
-  background:
-    linear-gradient(
-      135deg,
-      var(--flow-accent-soft),
-      var(--flow-bg)
-    );
+  /* The chef PNG is a black disc on a white square: clip it to the disc. */
+  border-radius: 50%;
+
+  background: #000;
+  box-shadow: 0 0 0 1px var(--flow-border-strong);
 
   font-size: 20px;
 }
@@ -574,8 +573,8 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border-radius: 10px;
-  background: var(--flow-accent-soft);
+  border-radius: 50%;
+  background: #000;
   }
 
 /* Ensure any logo image fills the logo box without distortion */
@@ -584,6 +583,8 @@
   height: 100%;
   object-fit: contain;
   display: block;
+  /* Scale past the PNG's thin white margin so no white shows at the edge of the circle. */
+  transform: scale(1.06);
 }
 
   .kitchen-logo img {

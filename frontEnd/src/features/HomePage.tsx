@@ -1,31 +1,67 @@
+import { useRef, type CSSProperties, type ReactNode } from 'react'
 import './HomePage.css'
 import chefLogo from '../assets/kitchen/blackShadowChef.png'
 import { isAuthenticated } from '../shared/auth/session'
+import AppFooter from '../shared/components/AppFooter'
 import { useTheme } from '../shared/theme/ThemeProvider'
+import AiDemo from './home/AiDemo'
+import HeroFlow from './home/HeroFlow'
+import { useReveal } from './home/useReveal'
 
 type Props = {
   onTryIt?: () => void
   onLogin?: () => void
 }
 
+const order = (i: number) => ({ '--i': i }) as CSSProperties
+
+const FEATURES = [
+  { icon: '🧩', title: 'Visual recipe editor', text: 'Lay out steps, conditions and subprocesses on a canvas. Auto Arrange keeps it tidy; autosave, undo and crash recovery keep it safe.' },
+  { icon: '✦', title: 'AI flow generation', text: 'Describe a dish in a sentence and get a structured flow, or ask AI to continue the one you already have.' },
+  { icon: '▶', title: 'Narrated walkthrough', text: 'Play any recipe as a slideshow with word-by-word captions and text-to-speech narration.' },
+  { icon: '🥕', title: 'Ingredients & nutrition', text: 'Pick quantities from a real ingredient catalog and see the nutrition of the whole recipe.' },
+  { icon: '🧺', title: 'Kitchen inventory & shop', text: 'Track what is in your pantry and shop for missing ingredients and equipment.' },
+  { icon: '📚', title: 'Recipe library', text: 'Keep your own recipes, browse the global library and copy any recipe to make it yours.' },
+]
+
+const STEPS = [
+  { title: 'Design', text: 'Add steps, ingredients, quantities and conditions on the canvas.' },
+  { title: 'Refine with AI', text: 'Generate a flow from a sentence or extend the one you have.' },
+  { title: 'Visualize', text: 'Play it back as a narrated, step-by-step walkthrough.' },
+  { title: 'Order & cook', text: 'Check your pantry, buy what is missing and track delivery.' },
+]
+
+const ORDER_STAGES = ['Confirm', 'Ingredients', 'Payment', 'Receipt', 'Tracking']
+
+const FAQS = [
+  { q: 'Do I need cooking or technical experience?', a: 'No. Start from a blank canvas, copy a recipe from the global library, or describe a dish and let AI draft the first flow for you.' },
+  { q: 'How do AI credits work?', a: 'Every account gets a monthly AI credit allowance, visible in the AI menu. Bigger AI workflows show an estimate and wait for your approval before they run.' },
+  { q: 'Who can see my recipes?', a: 'You choose. Keep a recipe in My recipes or publish it to the global library so others can view and copy it.' },
+  { q: 'Is ordering real?', a: 'The ordering flow checks your kitchen inventory, reserves what you already have and lets you shop for the rest. Payment is a demo today, so no real charges are made.' },
+  { q: 'What is the narrated walkthrough?', a: 'It turns your recipe flow into a step-by-step slideshow with captions that follow a spoken narration, so you can cook hands-free.' },
+]
+
 export default function HomePage({ onTryIt, onLogin }: Props) {
   const hideLogin = isAuthenticated()
   const { theme, toggleTheme } = useTheme()
+  const rootRef = useRef<HTMLDivElement>(null)
+  useReveal(rootRef)
+
   return (
-    <div className="home-page">
+    <div className="home-page" ref={rootRef}>
       <header className="home-nav">
-        <div className="brand">
-          <span className="logo">
-            <img src={chefLogo} alt="Virtual Kitchen Logo" className="logo-icon" />
-          </span> 
+        <a className="home-brand" href="#top">
+          <span className="home-logo"><img src={chefLogo} alt="" /></span>
           Virtual Kitchen
-        </div>
-        <nav>
-          <a href="#how-it-works">How it works</a>
+        </a>
+        <nav className="home-nav-links" aria-label="Home sections">
           <a href="#features">Features</a>
-          <a href="#vision">Our vision</a>
+          <a href="#how-it-works">How it works</a>
+          <a href="#ai">AI</a>
+          <a href="#ordering">Ordering</a>
+          <a href="#faq">FAQ</a>
         </nav>
-        <div className="nav-actions">
+        <div className="home-nav-actions">
           <button
             type="button"
             className="home-theme-toggle"
@@ -36,135 +72,169 @@ export default function HomePage({ onTryIt, onLogin }: Props) {
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
           {!hideLogin && (
-            <button className="login-btn" onClick={onLogin}>Log in</button>
+            <button type="button" className="home-btn home-btn-ghost" onClick={onLogin}>Log in</button>
           )}
-          <button className="primary-btn" onClick={onTryIt}>Try it</button>
+          <button type="button" className="home-btn home-btn-primary" onClick={onTryIt}>
+            {hideLogin ? 'Open kitchen' : 'Get started'}
+          </button>
         </div>
       </header>
 
-      <main>
-        <section className="hero">
-          <div className="hero-copy">
-            <span className="eyebrow">YOUR RECIPE. YOUR WAY.</span>
-            <h1>Cooking without <em>the abstraction.</em></h1>
+      <main id="top">
+        <section className="home-hero">
+          <div className="home-hero-glow" aria-hidden="true" />
+          <div className="home-hero-copy">
+            <span className="home-eyebrow">Visual recipe studio</span>
+            <h1>Design recipes as <em>living flows.</em></h1>
             <p>
-              Build your recipe exactly how you want it. Customize ingredients,
-              quantities and cooking steps, then see the process come to life.
+              Build every step, ingredient and condition on a visual canvas. Let AI draft
+              the flow, watch it play as a narrated walkthrough, then order exactly what
+              you need to cook it.
             </p>
-            <div className="actions">
-              <button className="primary-btn big" onClick={onTryIt}>Create your recipe →</button>
-              <a href="#how-it-works">See how it works</a>
+            <div className="home-hero-actions">
+              <button type="button" className="home-btn home-btn-primary home-btn-lg" onClick={onTryIt}>
+                Create your first recipe <span aria-hidden="true">→</span>
+              </button>
+              <a className="home-btn home-btn-secondary home-btn-lg" href="#how-it-works">See how it works</a>
             </div>
-            <div className="points">
-              <span>✓ You decide the recipe</span>
-              <span>✓ AI assists, not controls</span>
-              <span>✓ Visualize the process</span>
-            </div>
+            <ul className="home-ticks">
+              <li>You stay in control</li>
+              <li>AI drafts, you approve</li>
+              <li>From flow to doorstep</li>
+            </ul>
           </div>
-
-          {/* REPLACE THIS MOCK WITH YOUR REAL FLOW → VIDEO VISUAL */}
-          <div className="hero-visual">
-            <small>RECIPE → VISUALIZATION</small>
-            <FlowCard icon="🔪" title="Cut onions" detail="2 medium onions" />
-            <b className="arrow">↓</b>
-            <FlowCard icon="🔥" title="Heat oil" detail="Medium flame · 2 min" />
-            <b className="arrow">↓</b>
-            <FlowCard icon="🍚" title="Add rice" detail="250 g · cooked rice" />
-            <b className="arrow">↓</b>
-            <div className="dish">🍽️</div>
-            <p className="caption">Your recipe flow becomes a cooking experience.</p>
-          </div>
+          <HeroFlow />
         </section>
 
-        <section className="section white" id="how-it-works">
-          <SectionHeading eyebrow="THE IDEA" title="Cooking shouldn't be a black box.">
-            Most recipes tell you what to do. Virtual Kitchen is built around
-            showing how the complete process happens.
+        <section className="home-section" id="features">
+          <SectionHeading eyebrow="Features" title="Everything your recipe needs.">
+            One workspace to design, understand, share and shop for a recipe.
           </SectionHeading>
-          <div className="three-grid">
-            <Feature number="01" icon="✦" title="Create">Build your recipe as a flow. Choose ingredients, quantities and cooking operations.</Feature>
-            <Feature number="02" icon="◎" title="Visualize">Turn the recipe flow into a visual representation of the cooking process.</Feature>
-            <Feature number="03" icon="♨" title="Cook">Chef: Follow the process you designed instead of relying only on instructions.</Feature>
-          </div>
-        </section>
-
-        <section className="section dark" id="features">
-          <SectionHeading eyebrow="SEE IT COME TO LIFE" title="From an idea to a cooking process.">
-            This is the place for your real product animation.
-          </SectionHeading>
-          {/* REPLACE THIS ENTIRE BLOCK WITH YOUR 10–15 SECOND CLIP */}
-          <div className="pipeline">
-            <Stage n="01" title="Recipe text" text='"Make spicy egg fried rice..."' />
-            <span>→</span>
-            <Stage n="02" title="AI understands" text="Structured cooking steps" />
-            <span>→</span>
-            <Stage n="03" title="Recipe flow" text="Nodes + connections" />
-            <span>→</span>
-            <div className="video-placeholder"><div>▶</div><b>Your cooking clip</b><small>Replace with MP4</small></div>
-          </div>
-        </section>
-
-        <section className="section beige chef">
-          <div>
-            <span className="eyebrow">YOU ARE THE CHEF</span>
-            <h2>AI can suggest. You decide.</h2>
-            <p>Define the recipe. AI helps you understand it, improve it and visualize it.</p>
-            <div className="chef-line"><strong>YOU</strong><i /><span>AI ASSISTANT</span></div>
-          </div>
-          <div className="chat">
-            <div><small>You</small><p>Can I use less oil?</p></div>
-            <div className="ai"><small>AI suggestion</small><p>Yes. Reduce the oil and increase stirring slightly to maintain texture.</p></div>
-            <small className="muted">You choose whether to apply it.</small>
-          </div>
-        </section>
-
-        <section className="section white">
-          <SectionHeading eyebrow="YOUR FOOD. YOUR RULES." title="Cook however you want." />
-          <div className="four-grid">
-            <Rule icon="🥕" title="Ingredients">Choose what goes into your recipe.</Rule>
-            <Rule icon="⚖️" title="Quantity">Set the amount that works for you.</Rule>
-            <Rule icon="🔥" title="Process">Design the cooking process your way.</Rule>
-            <Rule icon="🧠" title="AI help">Get suggestions when you need them.</Rule>
-          </div>
-        </section>
-
-        <section className="section beige" id="vision">
-          <SectionHeading eyebrow="OUR VISION" title="From virtual kitchen to real cooking.">
-            The long-term idea goes beyond visualization: design, customize,
-            visualize, order and eventually have the recipe prepared for you.
-          </SectionHeading>
-          <div className="vision">
-            {['⌘ Design','✎ Customize','◉ Visualize','🛒 Order','♨ Cook'].map((x, i) => (
-              <span key={x}>{x}{i < 4 && ' →'}</span>
+          <div className="home-feature-grid">
+            {FEATURES.map((feature, i) => (
+              <article key={feature.title} className="home-card" data-reveal style={order(i)}>
+                <span className="home-card-icon" aria-hidden="true">{feature.icon}</span>
+                <h3>{feature.title}</h3>
+                <p>{feature.text}</p>
+              </article>
             ))}
           </div>
         </section>
 
-        <section className="cta">
-          <span className="eyebrow">READY?</span>
-          <h2>Cook your way.</h2>
-          <p>Create your first recipe and see where it takes you.</p>
-          <button className="primary-btn big light" onClick={onTryIt}>Try Virtual Kitchen →</button>
+        <section className="home-section home-band" id="how-it-works">
+          <SectionHeading eyebrow="How it works" title="From an idea to a cooking process.">
+            Four steps, and you decide what happens at every one of them.
+          </SectionHeading>
+          <ol className="home-steps" data-reveal>
+            {STEPS.map((step, i) => (
+              <li key={step.title} className="home-step" style={order(i)}>
+                <span className="home-step-number">{String(i + 1).padStart(2, '0')}</span>
+                <h3>{step.title}</h3>
+                <p>{step.text}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section className="home-section home-ai" id="ai">
+          <div className="home-split">
+            <div className="home-split-copy" data-reveal>
+              <span className="home-eyebrow">AI assistant</span>
+              <h2>AI assists. You decide.</h2>
+              <p>
+                Ask for a whole recipe, a tweak or the next few steps. AI proposes a plan,
+                and nothing changes in your recipe until you approve it.
+              </p>
+              <ul className="home-checklist">
+                <li><b>Approval checkpoint</b> Review the plan before any flow is built.</li>
+                <li><b>Continue, don’t restart</b> Extend an existing flow from a prompt.</li>
+                <li><b>Transparent credits</b> A monthly allowance you can always see.</li>
+              </ul>
+            </div>
+            <div data-reveal style={order(1)}>
+              <AiDemo />
+            </div>
+          </div>
+        </section>
+
+        <section className="home-section" id="ordering">
+          <div className="home-split is-reversed">
+            <div className="home-split-copy" data-reveal>
+              <span className="home-eyebrow">Recipe ordering</span>
+              <h2>From recipe to doorstep.</h2>
+              <p>
+                Pick your servings and Virtual Kitchen checks your inventory, reserves what you
+                already have and builds a cart for the rest. Then follow your order to the door.
+              </p>
+              <p className="home-roadmap">Next on the roadmap: recipes prepared for you, end to end.</p>
+            </div>
+            <div className="home-order-card" data-reveal style={order(1)}>
+              <ol className="home-order-track" aria-label="Recipe order stages">
+                {ORDER_STAGES.map((stage, i) => (
+                  <li key={stage} style={order(i)} className={i === 1 ? 'is-current' : i < 1 ? 'is-done' : ''}>
+                    <span className="home-order-dot">{i < 1 ? '✓' : i + 1}</span>
+                    {stage}
+                  </li>
+                ))}
+              </ol>
+              <div className="home-order-items">
+                <OrderItem name="Basmati rice" detail="250 g" status="In pantry" tone="success" />
+                <OrderItem name="Eggs" detail="2" status="Reserved" tone="info" />
+                <OrderItem name="Spring onions" detail="1 bunch" status="Add to cart" tone="warning" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="home-section home-band" id="faq">
+          <SectionHeading eyebrow="FAQ" title="Good questions." />
+          <div className="home-faq" data-reveal>
+            {FAQS.map((item) => (
+              <details key={item.q}>
+                <summary>{item.q}</summary>
+                <p>{item.a}</p>
+              </details>
+            ))}
+          </div>
+        </section>
+
+        <section className="home-cta">
+          <div className="home-cta-card" data-reveal>
+            <span className="home-eyebrow">Ready?</span>
+            <h2>Start designing your kitchen.</h2>
+            <p>Create your first recipe flow in minutes and see where it takes you.</p>
+            <button type="button" className="home-btn home-btn-primary home-btn-lg" onClick={onTryIt}>
+              Try Virtual Kitchen <span aria-hidden="true">→</span>
+            </button>
+          </div>
         </section>
       </main>
 
-      <footer><span>© 2026 Virtual Kitchen</span><div><a href="#privacy">Privacy</a><a href="#terms">Terms</a><a href="#contact">Contact</a></div></footer>
+      <AppFooter />
     </div>
   )
 }
 
-function FlowCard({ icon, title, detail }: { icon: string; title: string; detail: string }) {
-  return <div className="flow-card"><span>{icon}</span><div><b>{title}</b><small>{detail}</small></div></div>
+function SectionHeading({ eyebrow, title, children }: { eyebrow: string; title: string; children?: ReactNode }) {
+  return (
+    <div className="home-heading" data-reveal>
+      <span className="home-eyebrow">{eyebrow}</span>
+      <h2>{title}</h2>
+      {children && <p>{children}</p>}
+    </div>
+  )
 }
-function SectionHeading({ eyebrow, title, children }: { eyebrow: string; title: string; children?: React.ReactNode }) {
-  return <div className="heading"><span className="eyebrow">{eyebrow}</span><h2>{title}</h2>{children && <p>{children}</p>}</div>
-}
-function Feature({ number, icon, title, children }: { number: string; icon: string; title: string; children: string }) {
-  return <article className="feature"><div><span>{icon}</span><small>{number}</small></div><h3>{title}</h3><p>{children}</p></article>
-}
-function Stage({ n, title, text }: { n: string; title: string; text: string }) {
-  return <div className="stage"><small>{n}</small><b>{title}</b><span>{text}</span></div>
-}
-function Rule({ icon, title, children }: { icon: string; title: string; children: string }) {
-  return <article className="rule"><span>{icon}</span><h3>{title}</h3><p>{children}</p></article>
+
+function OrderItem({ name, detail, status, tone }: {
+  name: string
+  detail: string
+  status: string
+  tone: 'success' | 'info' | 'warning'
+}) {
+  return (
+    <div className="home-order-item">
+      <div><b>{name}</b><small>{detail}</small></div>
+      <span className={`home-pill is-${tone}`}>{status}</span>
+    </div>
+  )
 }

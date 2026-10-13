@@ -31,8 +31,10 @@ import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
 import com.processVisualisation.virtualKitchen.recipe.repository.ProcessRepository;
 import com.processVisualisation.virtualKitchen.recipe.repository.RecipeTemplateRepository;
+import com.processVisualisation.virtualKitchen.ai.analytics.AiAnalyticsRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
@@ -304,7 +306,7 @@ public class RecipeAiWorkflowService {
 
         // Both only submit work to their own pools and return: neither waits for the other.
         if (approved.isSelected(RecipeAiTaskType.VISUALS)) {
-            approved.setVisualizationJobs(startVisuals(userId, recipeId, approvedProcesses.stream()
+            approved.setVisualizationJobs(startVisuals(userId, recipeId, workflow.getId(), approvedProcesses.stream()
                     .map(ApprovedProcess::getProcessId).toList(), approved.getVisualizationJobs()));
             mongoTemplate.updateFirst(query(where("_id").is(workflowId)),
                     new Update().set("visualizationJobs", approved.getVisualizationJobs()).set("updatedAt", now()),
@@ -312,7 +314,7 @@ public class RecipeAiWorkflowService {
         }
         if (approved.isSelected(RecipeAiTaskType.NARRATION)) {
             for (ApprovedProcess process : approvedProcesses) {
-                startNarration(userId, recipeId, process.getProcessId(), process.getStepIds());
+                startNarration(userId, recipeId, workflow.getId(), process.getProcessId(), process.getStepIds());
             }
         }
         return toDto(approved, resolve(userId, approved), false, null);
@@ -354,7 +356,7 @@ public class RecipeAiWorkflowService {
                         .filter(ref -> needsVisualsRetry(jobs.get(ref.getJobId())))
                         .map(VisualizationJobRef::getProcessId)
                         .toList();
-                workflow.setVisualizationJobs(startVisuals(userId, recipeId, toRestart, workflow.getVisualizationJobs()));
+                workflow.setVisualizationJobs(startVisuals(userId, recipeId, workflow.getId(), toRestart, workflow.getVisualizationJobs()));
                 workflow.setStatus(RecipeAiWorkflowStatus.RUNNING_DOWNSTREAM_TASKS);
                 update.set("visualizationJobs", workflow.getVisualizationJobs()).set("status", workflow.getStatus());
             }
@@ -365,7 +367,7 @@ public class RecipeAiWorkflowService {
                             .filter(stepId -> isFailedNarration(narrations.get(stepId)))
                             .toList();
                     if (!failed.isEmpty()) {
-                        startNarration(userId, recipeId, process.getProcessId(), failed);
+                        startNarration(userId, recipeId, workflow.getId(), process.getProcessId(), failed);
                     }
                 }
                 workflow.setStatus(RecipeAiWorkflowStatus.RUNNING_DOWNSTREAM_TASKS);
@@ -439,8 +441,12 @@ public class RecipeAiWorkflowService {
     private RecipeProcessGenerationJobResponseDTO startGeneration(Long userId, RecipeAiWorkflow workflow) {
         // A per-attempt idempotency key, so a retry is a new generation but a double submit isn't.
         String clientRequestId = "wf-" + workflow.getId() + "-" + UUID.randomUUID();
-        RecipeProcessGenerationJobResponseDTO job = generationJobService.startJob(userId, workflow.getRecipeId(),
-                new RecipeProcessGenerationRequestDTO(workflow.getRecipeText(), clientRequestId));
+        RecipeProcessGenerationJobResponseDTO job;
+        // Tags the job's AI requests with this workflow (the MDC travels with the job onto its pool threads).
+        try (MDC.MDCCloseable ignored = MDC.putCloseable(AiAnalyticsRecorder.WORKFLOW_ID_MDC, workflow.getId())) {
+            job = generationJobService.startJob(userId, workflow.getRecipeId(),
+                    new RecipeProcessGenerationRequestDTO(workflow.getRecipeText(), clientRequestId));
+        }
         if (job.isReused() && "EDIT".equals(job.getMode())) {
             throw RecipeAiWorkflowException.conflict("An AI edit is still running for this recipe. Try again once it finishes.");
         }
@@ -451,7 +457,8 @@ public class RecipeAiWorkflowService {
      * Starts (or joins) a visualization job per process. A process whose job can't be started is
      * recorded without a job id, so its steps count as failed and a retry starts it again.
      */
-    private List<VisualizationJobRef> startVisuals(Long userId, Long recipeId, List<Long> processIds, List<VisualizationJobRef> existing) {
+    private List<VisualizationJobRef> startVisuals(Long userId, Long recipeId, String workflowId, List<Long> processIds,
+                                                   List<VisualizationJobRef> existing) {
         Map<Long, VisualizationJobRef> refs = new LinkedHashMap<>();
         for (VisualizationJobRef ref : existing) {
             refs.put(ref.getProcessId(), ref);
@@ -459,7 +466,9 @@ public class RecipeAiWorkflowService {
         for (Long processId : processIds) {
             String jobId = null;
             try {
-                jobId = visualizationJobService.startJob(userId, recipeId, processId).getJobId();
+                try (MDC.MDCCloseable ignored = MDC.putCloseable(AiAnalyticsRecorder.WORKFLOW_ID_MDC, workflowId)) {
+                    jobId = visualizationJobService.startJob(userId, recipeId, processId).getJobId();
+                }
             } catch (RuntimeException e) {
                 FailureLogger.logFailure(log, "ai_workflow_visuals_start_failed", e,
                         "recipeId=" + recipeId + " processId=" + processId);
@@ -469,8 +478,8 @@ public class RecipeAiWorkflowService {
         return new ArrayList<>(refs.values());
     }
 
-    private void startNarration(Long userId, Long recipeId, Long processId, List<String> stepIds) {
-        try {
+    private void startNarration(Long userId, Long recipeId, String workflowId, Long processId, List<String> stepIds) {
+        try (MDC.MDCCloseable ignored = MDC.putCloseable(AiAnalyticsRecorder.WORKFLOW_ID_MDC, workflowId)) {
             narrationService.ensureAll(userId, recipeId, processId, stepIds);
         } catch (RuntimeException e) {
             // The steps stay NOT_GENERATED and are reported as failed, so the user can retry them.

@@ -1,0 +1,41 @@
+/* Shared footer for the public home page and every /kitchen view. */
+.app-footer {
+  margin-top: auto;
+  background: var(--flow-surface-muted);
+  color: var(--flow-text-muted);
+  padding: 14px 24px;
+  text-align: center;
+  border-top: 1px solid var(--flow-border);
+  font-size: 12px;
+}
+
+.app-footer-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.app-footer-content p {
+  margin: 0 0 6px 0;
+}
+
+.app-footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.app-footer-links a {
+  color: var(--flow-text-subtle);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.app-footer-links a:hover {
+  color: var(--flow-text);
+  text-decoration: underline;
+}
+
+.app-footer-links span {
+  color: var(--flow-border-strong);
+}

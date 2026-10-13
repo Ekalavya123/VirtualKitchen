@@ -136,7 +136,7 @@ public class RecipeProcessEditService {
                 .responseFormat("json_object")
                 .responseSchema(outputSchema.jsonSchema())
                 .responseSchemaName(RecipeProcessEditOutputSchema.SCHEMA_NAME)
-                .operation("RECIPE_EDIT_FLOW")
+                .operation(prevAttempt != null ? "RECIPE_EDIT_FLOW_RETRY" : "RECIPE_EDIT_FLOW")
                 .build();
 
         long startNs = System.nanoTime();

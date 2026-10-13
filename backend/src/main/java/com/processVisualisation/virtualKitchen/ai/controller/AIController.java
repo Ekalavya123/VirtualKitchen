@@ -46,6 +46,10 @@ public class AIController {
     @PostMapping("/chat")
     public AIChatResponseDTO chat(@Valid @RequestBody AIChatRequestDTO request) {
         AIResponse response = aiService.chat(request.getPrompt());
+        if (response.getAnalyticsRequestId() != null) {
+            // Already recorded, output included, by the AI analytics recorder.
+            return new AIChatResponseDTO(response.getContent());
+        }
         // Persist the response for analytics/training (store even failures)
         try {
             AIResponseRecordDTO record = new AIResponseRecordDTO();

@@ -46,6 +46,14 @@ public class AIResponseDocument {
      */
     private Map<String, Object> responseData = new LinkedHashMap<>();
 
+    /** The analytics request ({@code ai_request_analytics}) this output belongs to; null for older records. */
+    @Indexed(sparse = true)
+    private String analyticsRequestId;
+
+    /** The provider call (analytics attempt) that produced this output; null for older records. */
+    private String attemptId;
+
+    // Auditing is not enabled, so these are set explicitly on save; records written before that have neither.
     @CreatedDate
     private LocalDateTime createdAt;
 

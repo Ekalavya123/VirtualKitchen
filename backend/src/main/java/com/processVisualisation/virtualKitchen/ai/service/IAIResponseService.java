@@ -4,6 +4,7 @@ import com.processVisualisation.virtualKitchen.ai.dto.AIResponseRecordDTO;
 import com.processVisualisation.virtualKitchen.ai.model.AIResponseDocument;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -28,6 +29,14 @@ public interface IAIResponseService {
      * @return the matching document, or empty if none exists
      */
     Optional<AIResponseDocument> findById(String id);
+
+    /**
+     * Completes a record the analytics recorder already created for a provider call: sets its context and outcome
+     * and adds response-data entries (null values are skipped), instead of writing a second record for the call.
+     *
+     * @return the updated document, or empty if none exists with that id
+     */
+    Optional<AIResponseDocument> annotate(String id, String context, Boolean success, Map<String, Object> extraResponseData);
 
     /**
      * Retrieves all persisted AI response records.

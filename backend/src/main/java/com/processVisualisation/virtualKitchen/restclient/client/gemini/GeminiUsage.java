@@ -14,11 +14,15 @@ final class GeminiUsage {
         if (usage == null || usage.isMissingNode() || !usage.isObject()) {
             return ProviderUsage.NONE;
         }
+        JsonNode modelVersion = root.path("modelVersion");
         return new ProviderUsage(
                 count(usage, "promptTokenCount"),
                 count(usage, "candidatesTokenCount"),
                 count(usage, "thoughtsTokenCount"),
-                count(usage, "totalTokenCount"));
+                count(usage, "totalTokenCount"),
+                count(usage, "cachedContentTokenCount"),
+                modelVersion.isTextual() ? modelVersion.asText() : null,
+                null, null, null);
     }
 
     private static Long count(JsonNode usage, String field) {

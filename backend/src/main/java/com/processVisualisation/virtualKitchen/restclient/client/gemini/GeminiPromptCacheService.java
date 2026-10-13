@@ -2,6 +2,8 @@ package com.processVisualisation.virtualKitchen.restclient.client.gemini;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.processVisualisation.virtualKitchen.ai.usage.AiCallRecord;
+import com.processVisualisation.virtualKitchen.ai.usage.AiUsageMeter;
 import com.processVisualisation.virtualKitchen.restclient.config.GeminiProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -94,6 +96,14 @@ public class GeminiPromptCacheService {
     private Entry create(String model, String systemPrompt) {
         GeminiProperties.Cache config = properties.getCache();
         long startedAt = System.nanoTime();
+        Instant startedAtInstant = clock.instant();
+        // Creating a cache is its own provider call; it is recorded as an attempt of the request that triggered it.
+        AiCallRecord.AiCallRecordBuilder call = AiCallRecord.builder()
+                .purpose("PROMPT_CACHE_CREATE")
+                .provider("gemini")
+                .providerModelId(model)
+                .startedAt(startedAtInstant)
+                .inputChars(systemPrompt.length());
         try {
             Map<String, Object> body = Map.of(
                     "model", "models/" + model,
@@ -120,8 +130,17 @@ public class GeminiPromptCacheService {
             logger.info("event=ai_prompt_cache_created provider=gemini cache={} model={} tokens={} expiresAt={} durationMs={}",
                     name, model,
                     root.path("usageMetadata").path("totalTokenCount").asText("NA"), expireTime, elapsedMs(startedAt));
+            JsonNode cachedTokens = root.path("usageMetadata").path("totalTokenCount");
+            // Only the stored token count is reported; cache creation and storage are not priced per request.
+            AiUsageMeter.recordCall(call.endedAt(clock.instant()).durationMs(elapsedMs(startedAt)).success(true)
+                    .totalTokens(cachedTokens.isNumber() ? cachedTokens.asLong() : null)
+                    .build());
             return new Entry(name, expireTime.minusSeconds(config.getRefreshMarginSeconds()));
         } catch (Exception ex) {
+            AiUsageMeter.recordCall(call.endedAt(clock.instant()).durationMs(elapsedMs(startedAt)).success(false)
+                    .errorType(ex.getClass().getSimpleName())
+                    .errorMessage(ex.getMessage())
+                    .build());
             logger.warn("event=ai_prompt_cache_create_failed provider=gemini model={} fallback=inline_system_prompt "
                     + "backoffSeconds={} errorType={} error={}",
                     model, config.getFailureBackoffSeconds(), ex.getClass().getSimpleName(), ex.getMessage());

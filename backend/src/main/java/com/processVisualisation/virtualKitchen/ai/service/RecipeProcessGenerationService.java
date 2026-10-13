@@ -139,7 +139,7 @@ public class RecipeProcessGenerationService {
                 .responseFormat("json_object")
                 .responseSchema(outputSchema.jsonSchema())
                 .responseSchemaName(RecipeProcessOutputSchema.SCHEMA_NAME)
-                .operation("RECIPE_TO_FLOW")
+                .operation(prevAttempt != null ? "RECIPE_TO_FLOW_RETRY" : "RECIPE_TO_FLOW")
                 .build();
 
         long startNs = System.nanoTime();

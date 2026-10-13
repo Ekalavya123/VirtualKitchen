@@ -28,6 +28,7 @@ import com.processVisualisation.virtualKitchen.restclient.client.tts.GeneratedAu
 import com.processVisualisation.virtualKitchen.restclient.client.tts.TtsRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.processVisualisation.virtualKitchen.ai.analytics.AiAnalyticsRecorder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -84,6 +85,14 @@ public class StepNarrationService {
     private final NarrationProperties properties;
     private final TaskPool narrationTaskPool;
     private final Clock clock;
+
+    private AiAnalyticsRecorder analytics = AiAnalyticsRecorder.disabled();
+
+    /** Optional, so tests can construct this without analytics. */
+    @Autowired(required = false)
+    public void setAnalyticsRecorder(AiAnalyticsRecorder analytics) {
+        this.analytics = analytics;
+    }
 
     @Autowired
     public StepNarrationService(
@@ -304,6 +313,10 @@ public class StepNarrationService {
                 throw new IllegalStateException("TTS provider returned no audio");
             }
             String url = audioConsumer.commit(key, token, outcome.selection().model().getKey(), audio);
+            if (url != null) {
+                analytics.outputStored(outcome.jobId(), "AUDIO", "step_narration", key, url, audio.mimeType(),
+                        (long) audio.data().length);
+            }
             if (outcome.artifact() != null) {
                 artifactService.markConsumed(outcome.artifact().getId());
             }

@@ -6,6 +6,8 @@ import com.processVisualisation.virtualKitchen.restclient.client.ImageGeneration
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.Instant;
+
 /**
  * Wraps a provider {@link ImageGenerationClient}: counts each call's token usage against the running AI request
  * (so image cost is priced and persisted like text cost), and writes one DEBUG line per provider call. The
@@ -29,15 +31,27 @@ class LoggingImageGenerationClient implements ImageGenerationClient {
     @Override
     public GeneratedImage generate(String prompt) throws JsonProcessingException {
         long startedAt = System.nanoTime();
+        Instant startedAtInstant = Instant.now();
+        int promptChars = prompt == null ? 0 : prompt.length();
         try {
             GeneratedImage image = delegate.generate(prompt);
             AiUsageMeter.record(image == null ? null : image.usage());
+            AiUsageMeter.recordCall(AiCallRecords.withUsage(
+                            AiCallRecords.started("IMAGE_GENERATION", provider, model, startedAtInstant, startedAt),
+                            image == null ? null : image.usage())
+                    .success(true)
+                    .inputChars(promptChars)
+                    .outputBytes(image == null || image.data() == null ? null : (long) image.data().length)
+                    .build());
             log.debug("event=image_generation_completed provider={} model={} durationMs={} promptChars={} bytes={} mimeType={}",
                     provider, model, LoggingAIClient.elapsedMs(startedAt), prompt == null ? 0 : prompt.length(),
                     image == null || image.data() == null ? 0 : image.data().length,
                     image == null ? null : image.mimeType());
             return image;
         } catch (JsonProcessingException | RuntimeException ex) {
+            AiUsageMeter.recordCall(AiCallRecords.failed(
+                    AiCallRecords.started("IMAGE_GENERATION", provider, model, startedAtInstant, startedAt)
+                            .inputChars(promptChars), ex));
             log.debug("event=image_generation_failed provider={} model={} durationMs={} errorType={} status={}",
                     provider, model, LoggingAIClient.elapsedMs(startedAt), ex.getClass().getSimpleName(),
                     LoggingAIClient.httpStatusOf(ex));

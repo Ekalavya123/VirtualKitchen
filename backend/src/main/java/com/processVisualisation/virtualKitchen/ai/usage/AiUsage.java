@@ -18,6 +18,16 @@ public class AiUsage {
     private long completionTokens;
     private long thoughtsTokens;
     private long totalTokens;
+    /** Receives a per-call record of every provider call made for this job (analytics); null when none is attached. */
+    private volatile AiCallListener callListener;
+
+    public void setCallListener(AiCallListener callListener) {
+        this.callListener = callListener;
+    }
+
+    public AiCallListener getCallListener() {
+        return callListener;
+    }
 
     public synchronized void add(AIResponse response) {
         if (response == null) return;
@@ -34,6 +44,7 @@ public class AiUsage {
         providerCalls++;
         if (usage == null) return;
         promptTokens += orZero(usage.inputTokens());
+        cachedTokens += orZero(usage.cachedTokens());
         completionTokens += orZero(usage.outputTokens());
         thoughtsTokens += orZero(usage.thoughtsTokens());
         totalTokens += orZero(usage.totalTokens());

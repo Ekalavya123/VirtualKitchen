@@ -1,5 +1,8 @@
 package com.processVisualisation.virtualKitchen.ai.queue;
 
+import com.processVisualisation.virtualKitchen.ai.analytics.AiAnalyticsRecorder;
+import com.processVisualisation.virtualKitchen.ai.analytics.model.AnalyticsStatus;
+import com.processVisualisation.virtualKitchen.ai.analytics.model.OperationContext;
 import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifact;
 import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactService;
 import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactSpec;
@@ -24,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -82,9 +86,26 @@ public class AiRequestQueueService {
     private final AiRequestProperties requestProperties;
     private final AiArtifactService artifactService;
     private final AiModelRegistry modelRegistry;
+    private final AiAnalyticsRecorder analytics;
 
     private final Map<String, AtomicInteger> inFlightByPool = new ConcurrentHashMap<>();
 
+    /** Without analytics; for callers (mostly tests) that don't need it. */
+    public AiRequestQueueService(
+            AiRequestJobRepository jobRepository,
+            ModelSelectionService modelSelectionService,
+            CreditService creditService,
+            TaskPool aiTextTaskPool,
+            AiQueueProperties queueProperties,
+            AiRequestProperties requestProperties,
+            AiArtifactService artifactService,
+            AiModelRegistry modelRegistry
+    ) {
+        this(jobRepository, modelSelectionService, creditService, aiTextTaskPool, queueProperties, requestProperties,
+                artifactService, modelRegistry, AiAnalyticsRecorder.disabled());
+    }
+
+    @Autowired
     public AiRequestQueueService(
             AiRequestJobRepository jobRepository,
             ModelSelectionService modelSelectionService,
@@ -93,7 +114,8 @@ public class AiRequestQueueService {
             AiQueueProperties queueProperties,
             AiRequestProperties requestProperties,
             AiArtifactService artifactService,
-            AiModelRegistry modelRegistry
+            AiModelRegistry modelRegistry,
+            AiAnalyticsRecorder analytics
     ) {
         this.jobRepository = jobRepository;
         this.modelSelectionService = modelSelectionService;
@@ -103,6 +125,7 @@ public class AiRequestQueueService {
         this.requestProperties = requestProperties;
         this.artifactService = artifactService;
         this.modelRegistry = modelRegistry;
+        this.analytics = analytics;
         AiCostLedger.configureUsdToInr(requestProperties.getUsdToInr());
     }
 
@@ -128,21 +151,28 @@ public class AiRequestQueueService {
             Long userId, AiCapability capability, String preferredModelKey, String idempotencyKey,
             String correlationType, String correlationId, AiArtifactSpec<R> artifactSpec, AiWork<R> work
     ) {
-        Optional<AiRequestOutcome<R>> reused = findReusable(userId, artifactSpec);
-        if (reused.isPresent()) {
-            return reused.get();
-        }
+        long timeoutMs = requestProperties.timeoutFor(capability, 30_000L);
+        String analyticsId = analytics.begin(new AiAnalyticsRecorder.Begin(null, userId, capability, null,
+                correlationType, correlationId, idempotencyKey, preferredModelKey, AI_TEXT_POOL, timeoutMs));
+        return recordingFailures(analyticsId, () -> {
+            Optional<AiRequestOutcome<R>> reused = findReusable(userId, artifactSpec, analyticsId);
+            if (reused.isPresent()) {
+                return reused.get();
+            }
 
-        return withAdmissionControl(AI_TEXT_POOL, capability, () -> {
-            AiRequestJob job = createJob(userId, capability, preferredModelKey, idempotencyKey, correlationType, correlationId);
-            ModelSelectionOutcome selection = beginProcessing(job, capability, preferredModelKey);
-            long timeoutMs = requestProperties.timeoutFor(capability, 30_000L);
-            AiUsage usage = new AiUsage();
+            return withAdmissionControl(AI_TEXT_POOL, capability, depth -> {
+                AiRequestJob job = createJob(analyticsId, userId, capability, preferredModelKey, idempotencyKey,
+                        correlationType, correlationId);
+                ModelSelectionOutcome selection = beginProcessing(job, capability, preferredModelKey, depth);
+                AiUsage usage = trackedUsage(job, correlationType, selection);
 
-            AiRequestOutcome<R> outcome = runWithRetries(job, selection, usage, () -> {
+                AiRequestOutcome<R> outcome = runWithRetries(job, selection, usage, () -> {
                 // Bound on the pool thread, where the provider calls actually happen.
                 CompletableFuture<TaskResult<R>> future = aiTextTaskPool.submit(new NamedTask<>(job.getId(),
-                        () -> AiUsageMeter.measure(usage, () -> work.run(selection))));
+                        () -> AiUsageMeter.measure(usage, () -> {
+                            markWorkStarted(usage);
+                            return work.run(selection);
+                        })));
                 TaskResult<R> result;
                 try {
                     result = future.get(timeoutMs, TimeUnit.MILLISECONDS);
@@ -154,9 +184,10 @@ public class AiRequestQueueService {
                     throw error instanceof Exception ex ? ex : new RuntimeException(error);
                 }
                 return result.value();
-            });
+                });
 
-            return withStagedArtifact(userId, capability, correlationType, correlationId, artifactSpec, outcome);
+                return withStagedArtifact(userId, capability, correlationType, correlationId, artifactSpec, outcome);
+            });
         });
     }
 
@@ -184,21 +215,65 @@ public class AiRequestQueueService {
             Long userId, AiCapability capability, String preferredModelKey, String idempotencyKey,
             String correlationType, String correlationId, AiArtifactSpec<R> artifactSpec, AiWork<R> work
     ) {
-        Optional<AiRequestOutcome<R>> reused = findReusable(userId, artifactSpec);
-        if (reused.isPresent()) {
-            return reused.get();
-        }
-
         String pool = capability == AiCapability.TEXT_TO_SPEECH ? AI_TTS_POOL : AI_IMAGE_POOL;
-        return withAdmissionControl(pool, capability, () -> {
-            AiRequestJob job = createJob(userId, capability, preferredModelKey, idempotencyKey, correlationType, correlationId);
-            ModelSelectionOutcome selection = beginProcessing(job, capability, preferredModelKey);
+        String analyticsId = analytics.begin(new AiAnalyticsRecorder.Begin(null, userId, capability, null,
+                correlationType, correlationId, idempotencyKey, preferredModelKey, pool, null));
+        return recordingFailures(analyticsId, () -> {
+            Optional<AiRequestOutcome<R>> reused = findReusable(userId, artifactSpec, analyticsId);
+            if (reused.isPresent()) {
+                return reused.get();
+            }
 
-            AiUsage usage = new AiUsage();
-            AiRequestOutcome<R> outcome = runWithRetries(job, selection, usage,
-                    () -> AiUsageMeter.measure(usage, () -> work.run(selection)));
-            return withStagedArtifact(userId, capability, correlationType, correlationId, artifactSpec, outcome);
+            return withAdmissionControl(pool, capability, depth -> {
+                AiRequestJob job = createJob(analyticsId, userId, capability, preferredModelKey, idempotencyKey,
+                        correlationType, correlationId);
+                ModelSelectionOutcome selection = beginProcessing(job, capability, preferredModelKey, depth);
+
+                AiUsage usage = trackedUsage(job, correlationType, selection);
+                AiRequestOutcome<R> outcome = runWithRetries(job, selection, usage,
+                        () -> AiUsageMeter.measure(usage, () -> {
+                            markWorkStarted(usage);
+                            return work.run(selection);
+                        }));
+                return withStagedArtifact(userId, capability, correlationType, correlationId, artifactSpec, outcome);
+            });
         });
+    }
+
+    /**
+     * Records any failure that escapes before or around the provider work (queue full, no model, a duplicate
+     * submission) as the request's terminal status, then rethrows it unchanged. A request that already reached a
+     * terminal status keeps it: completion is idempotent.
+     */
+    private <R> AiRequestOutcome<R> recordingFailures(String analyticsId,
+                                                       java.util.function.Supplier<AiRequestOutcome<R>> body) {
+        try {
+            return body.get();
+        } catch (RuntimeException e) {
+            analytics.fail(analyticsId, e, null, null);
+            throw e;
+        }
+    }
+
+    /** A usage meter for this job that also hands every provider call to the analytics recorder. */
+    private AiUsage trackedUsage(AiRequestJob job, String correlationType, ModelSelectionOutcome selection) {
+        AiUsage usage = new AiUsage();
+        AiAnalyticsRecorder.RequestTracker tracker =
+                analytics.tracker(job.getId(), OperationContext.fromCorrelationType(correlationType));
+        tracker.model(selection.model());
+        usage.setCallListener(tracker);
+        return usage;
+    }
+
+    private static AiAnalyticsRecorder.RequestTracker trackerOf(AiUsage usage) {
+        return usage.getCallListener() instanceof AiAnalyticsRecorder.RequestTracker tracker ? tracker : null;
+    }
+
+    private static void markWorkStarted(AiUsage usage) {
+        AiAnalyticsRecorder.RequestTracker tracker = trackerOf(usage);
+        if (tracker != null) {
+            tracker.markWorkStarted();
+        }
     }
 
     /**
@@ -216,12 +291,15 @@ public class AiRequestQueueService {
      * No {@code AiRequestJob} row is written for a hit, so {@code ai_request_jobs} keeps meaning
      * "a provider call we actually made"; reuse is observable via {@code AiArtifact.reuseCount}.
      */
-    private <R> Optional<AiRequestOutcome<R>> findReusable(Long userId, AiArtifactSpec<R> artifactSpec) {
+    private <R> Optional<AiRequestOutcome<R>> findReusable(Long userId, AiArtifactSpec<R> artifactSpec, String analyticsId) {
         if (artifactSpec == null) {
             return Optional.empty();
         }
-        return artifactService.findReusable(userId, artifactSpec)
+        Optional<AiRequestOutcome<R>> reused = artifactService.findReusable(userId, artifactSpec)
                 .map(hit -> AiRequestOutcome.reused(hit, reusedSelection(hit.artifact())));
+        reused.ifPresent(outcome -> analytics.reused(analyticsId, outcome.artifact().getId(),
+                outcome.artifact().getProducingJobId(), outcome.selection().model(), outcome.selection().usedFallback()));
+        return reused;
     }
 
     /**
@@ -268,6 +346,7 @@ public class AiRequestQueueService {
         try {
             AiArtifact artifact = artifactService.stage(userId, capability, correlationType, correlationId,
                     artifactSpec, outcome.value(), outcome.selection(), outcome.jobId());
+            analytics.linkArtifact(outcome.jobId(), artifact.getId());
             return AiRequestOutcome.fresh(outcome.jobId(), outcome.value(), outcome.selection(), artifact);
         } catch (Exception e) {
             log.error("event=ai_artifact_stage_failed aiRequestId={} artifactKey={} payloadRetained=false errorType={}",
@@ -276,8 +355,9 @@ public class AiRequestQueueService {
         }
     }
 
+    /** Runs {@code body} with the pool's in-flight depth (including this request) once admitted. */
     private <R> AiRequestOutcome<R> withAdmissionControl(String poolName, AiCapability capability,
-                                                          java.util.function.Supplier<AiRequestOutcome<R>> body) {
+                                                          java.util.function.IntFunction<AiRequestOutcome<R>> body) {
         AtomicInteger counter = inFlightByPool.computeIfAbsent(poolName, k -> new AtomicInteger());
         int maxDepth = switch (poolName) {
             case AI_TEXT_POOL -> queueProperties.getAiTextMaxDepth();
@@ -285,23 +365,25 @@ public class AiRequestQueueService {
             default -> queueProperties.getAiImageMaxDepth();
         };
 
-        if (counter.incrementAndGet() > maxDepth) {
+        int depth = counter.incrementAndGet();
+        if (depth > maxDepth) {
             counter.decrementAndGet();
             log.warn("event=ai_request_rejected reason=queue_full pool={} capability={} maxDepth={}",
                     poolName, capability, maxDepth);
             throw new AiQueueFullException(capability);
         }
         try {
-            return body.get();
+            return body.apply(depth);
         } finally {
             counter.decrementAndGet();
         }
     }
 
-    private AiRequestJob createJob(Long userId, AiCapability capability, String preferredModelKey,
+    /** @param id the job id, shared with the request's analytics record so the two can always be joined */
+    private AiRequestJob createJob(String id, Long userId, AiCapability capability, String preferredModelKey,
                                     String idempotencyKey, String correlationType, String correlationId) {
         AiRequestJob job = new AiRequestJob();
-        job.setId(UUID.randomUUID().toString());
+        job.setId(id != null ? id : UUID.randomUUID().toString());
         job.setUserId(userId);
         job.setCapability(capability);
         job.setRequestedModelKey(preferredModelKey);
@@ -319,7 +401,8 @@ public class AiRequestQueueService {
         return jobRepository.save(job);
     }
 
-    private ModelSelectionOutcome beginProcessing(AiRequestJob job, AiCapability capability, String preferredModelKey) {
+    private ModelSelectionOutcome beginProcessing(AiRequestJob job, AiCapability capability, String preferredModelKey,
+                                                  int queueDepth) {
         ModelSelectionOutcome selection;
         try {
             selection = modelSelectionService.select(job.getUserId(), capability, preferredModelKey);
@@ -349,6 +432,8 @@ public class AiRequestQueueService {
         job.setStartedAt(Instant.now());
         job.setAttempt(1);
         jobRepository.save(job);
+        analytics.modelResolved(job.getId(), selection.model(), selection.usedFallback(), job.getFallbackReason(),
+                job.getCreditCost(), job.getCreditTransactionId(), job.getId(), queueDepth);
         return selection;
     }
 
@@ -362,8 +447,12 @@ public class AiRequestQueueService {
         int maxAttempts = job.getMaxAttempts();
         Exception lastError = null;
 
+        AiAnalyticsRecorder.RequestTracker tracker = trackerOf(usage);
         for (int i = 1; i <= maxAttempts; i++) {
             job.setAttempt(i);
+            if (tracker != null) {
+                tracker.transportAttempt(i);
+            }
             try {
                 R value = attempt.run();
                 AiUsageSummary summary = recordUsage(job, selection, usage);
@@ -374,6 +463,8 @@ public class AiRequestQueueService {
                 markFinished(job);
                 jobRepository.save(job);
                 logOutcome("ai_request_completed", job, selection, summary, null);
+                analytics.complete(job.getId(), AnalyticsStatus.SUCCEEDED, null, i,
+                        tracker == null ? null : tracker.workStartedAt());
                 return AiRequestOutcome.fresh(job.getId(), value, selection, null);
             } catch (TimeoutException te) {
                 lastError = te;
@@ -399,6 +490,7 @@ public class AiRequestQueueService {
         jobRepository.save(job);
         // WARN, no stack: the exception is rethrown and logged once by whichever boundary handles it.
         logOutcome("ai_request_failed", job, selection, summary, lastError);
+        analytics.fail(job.getId(), lastError, job.getAttempt(), tracker == null ? null : tracker.workStartedAt());
 
         if (lastError instanceof RuntimeException re) {
             throw re;
