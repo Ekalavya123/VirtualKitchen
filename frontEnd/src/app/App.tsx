@@ -24,6 +24,7 @@ import IngredientCatalogGate from '../features/recipe-tool/catalog/IngredientCat
 import RecipeOrderPage from '../features/recipe-order/RecipeOrderPage'
 import { recipeOrderPath } from '../features/recipe-order/model/orderView'
 import HomePage from '../features/HomePage'
+import AiAnalyticsPage from '../features/admin/ai-analytics/AiAnalyticsPage'
 import type { User } from '../types/User'
 import type { RecipeProcessBreadcrumbEntry } from '../types/recipe'
 import { AuthenticationApi, KitchenApi, RecipeOrderApi } from '../api'
@@ -443,6 +444,21 @@ function App() {
               <IngredientCatalogGate>
                 <RecipeProcessEditorRoute />
               </IngredientCatalogGate>
+            }
+          />
+
+          {/* Admin AI cost & efficiency analytics; the backend enforces the ADMIN role on every call too. */}
+          <Route
+            path="admin/ai-analytics/:tab?"
+            element={
+              currentUser?.userType === 'ADMIN' ? (
+                <AiAnalyticsPage />
+              ) : (
+                <Navigate
+                  to="/kitchen/inventory"
+                  replace
+                />
+              )
             }
           />
 

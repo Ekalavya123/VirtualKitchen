@@ -28,4 +28,8 @@ public class AIResponse {
     private Integer thoughtsTokens;
     private String finishReason;
     private String rawResponse;
+    /** Engine-side time spent on the call, as the provider reports it (Ollama {@code total_duration}); null otherwise. */
+    private Long providerDurationMs;
+    /** Set by the caller that records the call for analytics, so a later step can link its output; never sent. */
+    private String analyticsRequestId;
 }

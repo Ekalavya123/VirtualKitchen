@@ -230,6 +230,9 @@ public class OllamaClient implements AIClient {
                 .finishReason(
                         root.path("done_reason").asText(null)
                 )
+                .providerDurationMs(
+                        root.path("total_duration").isNumber() ? root.path("total_duration").asLong() / 1_000_000L : null
+                )
                 .rawResponse(rawResponse)
                 .build();
     }

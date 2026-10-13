@@ -247,6 +247,20 @@ export default function KitchenNavbar({
           <span><img src={recipesIcon} alt="Recipes" className="recipe-icon" /></span>
           My Recipes
         </NavLink>
+
+        {user.userType === 'ADMIN' && (
+          <NavLink
+            to="/kitchen/admin/ai-analytics"
+            className={({ isActive }) =>
+              `navbar-nav-item ${
+                isActive ? 'active' : ''
+              }`
+            }
+          >
+            <span>📊</span>
+            AI Analytics
+          </NavLink>
+        )}
       </div>
 
       {/* Profile */}

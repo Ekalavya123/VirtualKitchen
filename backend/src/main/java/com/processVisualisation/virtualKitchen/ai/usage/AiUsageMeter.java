@@ -40,6 +40,39 @@ public final class AiUsageMeter {
         }
     }
 
+    /**
+     * Hands one provider call's record to the analytics listener of the job bound to this thread, if any. Never
+     * throws: analytics must not change the outcome of the AI call it describes.
+     */
+    public static void recordCall(AiCallRecord record) {
+        AiCallListener listener = currentListener();
+        if (listener != null) {
+            try {
+                listener.onCall(record);
+            } catch (RuntimeException ignored) {
+                // The listener reports its own failures; the AI call carries on regardless.
+            }
+        }
+    }
+
+    /** Reports whether the output of the latest provider call passed the caller's validation, if a listener is bound. */
+    public static void reportValidation(boolean passed, java.util.List<String> errors) {
+        AiCallListener listener = currentListener();
+        if (listener != null) {
+            try {
+                listener.onValidation(passed, errors);
+            } catch (RuntimeException ignored) {
+                // As above.
+            }
+        }
+    }
+
+    /** The analytics listener of the job bound to this thread, or null. */
+    public static AiCallListener currentListener() {
+        AiUsage usage = CURRENT.get();
+        return usage == null ? null : usage.getCallListener();
+    }
+
     /** Counts one provider response against the job bound to this thread, if any. */
     public static void record(AIResponse response) {
         AiUsage usage = CURRENT.get();

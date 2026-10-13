@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.processVisualisation.virtualKitchen.ai.dto.AIResponseRecordDTO;
+import com.processVisualisation.virtualKitchen.ai.usage.AiCallListener;
+import com.processVisualisation.virtualKitchen.ai.usage.AiUsageMeter;
 import com.processVisualisation.virtualKitchen.restclient.dto.AIResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,7 +40,23 @@ class AiJsonResponseSupport {
     }
 
     void persistAIResponse(String context, String userPrompt, AIResponse response, boolean success, long durationMs, List<String> errors) {
+        // Tell the request's analytics whether this call's output was accepted (a no-op outside a tracked request).
+        AiUsageMeter.reportValidation(success, errors);
         try {
+            // The analytics recorder has already stored this call's output; complete that record rather than
+            // writing a second one for the same call.
+            AiCallListener analytics = AiUsageMeter.currentListener();
+            String recordedOutputId = analytics == null ? null : analytics.lastTextOutputId();
+            if (recordedOutputId != null) {
+                Map<String, Object> extra = new LinkedHashMap<>();
+                extra.put("rawResponse", response == null ? null : response.getRawResponse());
+                extra.put("durationMs", durationMs);
+                if (errors != null && !errors.isEmpty()) extra.put("errors", errors);
+                if (aiResponseService.annotate(recordedOutputId, context, success, extra).isPresent()) {
+                    return;
+                }
+            }
+
             AIResponseRecordDTO record = new AIResponseRecordDTO();
             record.setContext(context);
             record.setInput(userPrompt);

@@ -181,6 +181,9 @@ public class OpenAIClient implements AIClient {
                 .promptTokens(readInt(usage, "prompt_tokens"))
                 .completionTokens(readInt(usage, "completion_tokens"))
                 .totalTokens(readInt(usage, "total_tokens"))
+                // Included in prompt_tokens, as Gemini's cached count is. Reasoning tokens are not mapped to
+                // thoughtsTokens: OpenAI already counts them inside completion_tokens.
+                .cachedTokens(readInt(usage.path("prompt_tokens_details"), "cached_tokens"))
                 .finishReason(firstChoice.path("finish_reason").asText(null))
                 .rawResponse(rawResponse)
                 .build();

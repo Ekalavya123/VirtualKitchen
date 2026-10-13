@@ -46,7 +46,8 @@ public class AiClientResolver {
             throw new IllegalStateException(
                     "No AIClient bean named '" + model.getProviderBean() + "' for model '" + model.getKey() + "'");
         }
-        return new MeteredAIClient(new LoggingAIClient(client, LoggingAIClient.providerOf(model.getProviderBean())));
+        String provider = LoggingAIClient.providerOf(model.getProviderBean());
+        return new MeteredAIClient(new LoggingAIClient(client, provider), provider);
     }
 
     public ImageGenerationClient resolveImageClient(ModelDefinition model) {

@@ -11,6 +11,8 @@ import com.processVisualisation.virtualKitchen.common.exception.AuthException;
 import com.processVisualisation.virtualKitchen.common.mapper.UserMapper;
 import com.processVisualisation.virtualKitchen.kitchen.dto.KitchenRequestDTO;
 import com.processVisualisation.virtualKitchen.kitchen.service.IKitchenService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,8 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthServiceImpl implements IAuthService {
 
+    private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
+
     private final UserRepository userRepository;
     private final SequenceGeneratorService sequenceGeneratorService;
     private final UserMapper userMapper;
@@ -35,6 +39,7 @@ public class AuthServiceImpl implements IAuthService {
     private final OtpService otpService;
     private final GoogleTokenVerifierService googleTokenVerifierService;
     private final IKitchenService kitchenService;
+    private final AdminAllowlist adminAllowlist;
 
     public AuthServiceImpl(
             UserRepository userRepository,
@@ -44,8 +49,10 @@ public class AuthServiceImpl implements IAuthService {
             JwtService jwtService,
             OtpService otpService,
             GoogleTokenVerifierService googleTokenVerifierService,
-            IKitchenService kitchenService
+            IKitchenService kitchenService,
+            AdminAllowlist adminAllowlist
     ) {
+        this.adminAllowlist = adminAllowlist;
         this.userRepository = userRepository;
         this.sequenceGeneratorService = sequenceGeneratorService;
         this.userMapper = userMapper;
@@ -325,6 +332,11 @@ public class AuthServiceImpl implements IAuthService {
      * @return the issued authentication token paired with the user profile
      */
     private AuthResponseDTO buildAuthResponse(User user) {
+        if (user.isEmailVerified() && user.getUserType() != UserType.ADMIN && adminAllowlist.contains(user.getEmail())) {
+            user.setUserType(UserType.ADMIN);
+            user = userRepository.save(user);
+            log.info("event=user_promoted_to_admin userId={} reason=vk.admin.emails", user.getId());
+        }
         String token = jwtService.generateToken(user.getId(), user.getEmail(), user.getUserType());
 
         return AuthResponseDTO.builder()

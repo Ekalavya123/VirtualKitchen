@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.restclient.client.drawthings;
 
+import com.processVisualisation.virtualKitchen.restclient.client.ProviderUsage;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -91,7 +92,8 @@ public class DrawThingsImageClient implements ImageGenerationClient {
 
             return new GeneratedImage(
                     "image/png",
-                    imageBytes
+                    imageBytes,
+                    ProviderUsage.NONE.withImage(1, drawThingsProperties.getWidth(), drawThingsProperties.getHeight())
             );
 
         } catch (IllegalArgumentException e) {
