@@ -8,6 +8,7 @@ import { draftKeys } from '../../../../shared/drafts/draftStore'
 import { useDraft } from '../../../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
 import { useConfirmDiscard } from '../../../../shared/components/confirm/useConfirmDiscard'
+import { errorMessage } from '../../../../shared/errors'
 
 type NutritionEditorProps = {
   recipeId: number
@@ -96,7 +97,7 @@ export default function NutritionEditor({ recipeId, nutrition, onSaved, onCancel
       onSaved(updated.nutrition ?? null)
       notifySuccess('Nutrition saved')
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unable to save nutrition'
+      const message = errorMessage(error, 'Unable to save nutrition')
       setSaveError(message)
       notifyError(message)
     } finally {

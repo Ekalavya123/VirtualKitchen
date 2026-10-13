@@ -10,8 +10,7 @@ import ServingsStepper from '../components/ServingsStepper'
 import { cleanAddress, missingAddressFields, sameAddress } from '../model/orderFormat'
 import { buildOrderPresentation } from '../model/orderPresentation'
 import type { OrderStepProps } from './stepProps'
-
-const errorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback)
+import { errorMessage } from '../../../shared/errors'
 
 /**
  * Step 1: check the recipe being ordered (its snapshot) and the order details — servings (saved on

@@ -11,7 +11,7 @@
  */
 
 import type { Node } from '@xyflow/react'
-import { RECIPE_NODE_TYPES } from '../../model/recipeNodeTypes'
+import { DEFAULT_NODE_SIZE, RECIPE_NODE_TYPES } from '../../model/recipeNodeTypes'
 import type { FlowData, FlowEdgePayload, FlowNodePayload, FlowViewport } from '../model/canvasGraph'
 import { createDefaultRecipeStepNodeData } from '../../model/recipeStepData'
 import type {
@@ -32,7 +32,7 @@ export const createRecipeStepNode = (id: string, position: { x: number; y: numbe
   draggable: true,
   selectable: true,
   connectable: true,
-  style: { width: 280, height: 160 },
+  style: { ...DEFAULT_NODE_SIZE.step },
   data: createDefaultRecipeStepNodeData(),
 })
 

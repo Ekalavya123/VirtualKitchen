@@ -10,13 +10,14 @@
  */
 
 import type { ProcessEdge, ProcessNode } from '../../../../types/process'
+import { CONDITION_HANDLES, DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes.ts'
 
 export const EDIT_START = 'START'
 
-const YES_HANDLE = 'condition-yes'
-const NO_HANDLE = 'condition-no'
+const YES_HANDLE = CONDITION_HANDLES.yes
+const NO_HANDLE = CONDITION_HANDLES.no
 
-const DEFAULT_SIZE = { width: 280, height: 160 }
+const DEFAULT_SIZE = DEFAULT_NODE_SIZE.step
 const ROW_GAP = 260
 const NUDGE = 60
 const MAX_NUDGES = 30

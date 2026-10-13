@@ -21,6 +21,7 @@ import { clearDraft, draftKeys } from '../../../../shared/drafts/draftStore'
 import { workflowBadge, workflowChipLabel, workflowHeadline } from '../../workflow/model/workflowView'
 import type { RecipeAiTaskType } from '../../../../types/recipeAiWorkflow'
 import type { RecipeAiActions } from './AiActionsMenu'
+import { errorMessage } from '../../../../shared/errors'
 
 const GENERATION_STAGE_LABELS: Record<string, string> = {
   QUEUED: 'Queued…',
@@ -171,7 +172,7 @@ export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMain
       onMainProcessChanged(created.id)
       notifySuccess('Main process created')
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : 'Unable to create the main process')
+      notifyError(errorMessage(error, 'Unable to create the main process'))
     } finally {
       setCreatingMainProcess(false)
     }

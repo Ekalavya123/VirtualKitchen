@@ -5,6 +5,7 @@ import { useDraft } from '../../../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
 import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
 import { useConfirmDiscard } from '../../../../shared/components/confirm/useConfirmDiscard'
+import { errorMessage as describeError } from '../../../../shared/errors'
 
 /** A finished AI edit waiting for the user's review — either a list of changes or a question back. */
 export type PendingProcessEdit = {
@@ -105,7 +106,7 @@ export default function RecipeProcessGenerationModal({
     try {
       await (editing ? onEdit(trimmed) : onGenerate(trimmed))
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to reach the AI right now.')
+      setErrorMessage(describeError(error, 'Unable to reach the AI right now.'))
     }
   }
 

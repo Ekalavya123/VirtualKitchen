@@ -7,6 +7,7 @@ import { recipeToolPath } from '../../recipe-tool/recipeToolRoutes'
 import CancelOrderButton from '../components/CancelOrderButton'
 import { formatQuantity } from '../model/orderFormat'
 import type { OrderStepProps } from './stepProps'
+import { errorMessage } from '../../../shared/errors'
 
 function BasisBadge({ line }: { line: AvailabilityLine }) {
   if (line.basis !== 'DEFAULT_FACTOR') return null
@@ -94,7 +95,7 @@ export default function IngredientsStep({ order, userId, onOrderChange, onNaviga
         setCheckError(null)
       })
       .catch((error: unknown) => {
-        if (!cancelled) setCheckError(error instanceof Error ? error.message : 'Unable to check ingredient availability')
+        if (!cancelled) setCheckError(errorMessage(error, 'Unable to check ingredient availability'))
       })
       .finally(() => {
         if (!cancelled) setChecking(false)

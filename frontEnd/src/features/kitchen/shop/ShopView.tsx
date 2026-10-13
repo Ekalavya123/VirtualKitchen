@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom'
 import {
   OrderApi,
   type OrderCreateRequest,
-  type OrderUnitType,
   ShopApi,
 } from '../../../api'
+import type { ItemType, UnitType } from '../../../types/kitchen'
 import {
   clearCart,
   defaultShopPrice,
@@ -28,10 +28,10 @@ import './ShopView.css'
 interface ShopItem {
   id: number
   name: string
-  itemType: 'INGREDIENT' | 'EQUIPMENT'
+  itemType: ItemType
   description?: string
   basePrice: number
-  defaultUnit?: OrderUnitType
+  defaultUnit?: UnitType
   imageUrl?: string | null
 }
 
@@ -48,7 +48,7 @@ interface ShopViewProps {
   }
 }
 
-const INGREDIENT_UNIT_OPTIONS: OrderUnitType[] = [
+const INGREDIENT_UNIT_OPTIONS: UnitType[] = [
   'KG',
   'GRAM',
   'LITER',
@@ -56,7 +56,7 @@ const INGREDIENT_UNIT_OPTIONS: OrderUnitType[] = [
   'COUNT',
 ]
 
-const EQUIPMENT_UNIT_OPTIONS: OrderUnitType[] = ['COUNT']
+const EQUIPMENT_UNIT_OPTIONS: UnitType[] = ['COUNT']
 
 function ShopHeader({
   cartCount,
@@ -295,7 +295,7 @@ function CartDrawer({
   ) => void
   onUnitChange: (
     item: CartItem,
-    unit: OrderUnitType,
+    unit: UnitType,
   ) => void
   onCheckout: () => void
 }) {
@@ -786,7 +786,7 @@ export default function ShopView({
 
   const handleUnitChange = (
     item: CartItem,
-    unit: OrderUnitType,
+    unit: UnitType,
   ) => {
     setCartItems(current =>
       current.map(cartItem => {

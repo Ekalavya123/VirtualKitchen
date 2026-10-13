@@ -8,6 +8,7 @@ import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
 import AddNodeMenu from './AddNodeMenu'
 import { useProcessSidebarActions } from '../context/ProcessSidebarActionsContext'
 import { useConfirmDiscard } from '../../../../shared/components/confirm/useConfirmDiscard'
+import { errorMessage } from '../../../../shared/errors'
 
 type RecipeProcessSidebarProps = {
   processes: Process[]
@@ -73,7 +74,7 @@ export default function RecipeProcessSidebar({
       draft.clear()
       setShowCreateForm(false)
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : 'Unable to create this subprocess')
+      setCreateError(errorMessage(error, 'Unable to create this subprocess'))
     } finally {
       setCreating(false)
     }

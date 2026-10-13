@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { InventoryApi, type InventoryItem } from '../../../api'
+import { formatDate } from '../../../shared/format/date'
+import { formatNumber } from '../../../shared/format/number'
 import CatalogItemImage from '../components/CatalogItemImage'
 import './InventoryView.css'
 
@@ -120,9 +122,6 @@ function InventoryCard({
   const reserved = item.reservedQuantity ?? 0
   const free =
     item.availableQuantity ?? Math.max(0, quantity - reserved)
-  const formatAmount = (value: number) =>
-    String(Math.round(value * 100) / 100)
-
   return (
     <article className="inventory-card">
       <div className="inventory-card-image">
@@ -160,11 +159,11 @@ function InventoryCard({
         {reserved > 0 && (
           <div className="inventory-reserved-note">
             <span className="inventory-reserved-chip">
-              {formatAmount(reserved)} reserved
+              {formatNumber(reserved)} reserved
             </span>
 
             <span>
-              {formatAmount(free)} free for new
+              {formatNumber(free)} free for new
               orders
             </span>
           </div>
@@ -174,30 +173,12 @@ function InventoryCard({
           <span>Last updated</span>
 
           <strong>
-            {formatDate(item.lastUpdated)}
+            {formatDate(item.lastUpdated, 'N/A')}
           </strong>
         </div>
       </div>
     </article>
   )
-}
-
-function formatDate(value?: string) {
-  if (!value) {
-    return 'N/A'
-  }
-
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return 'N/A'
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date)
 }
 
 function InventoryEmptyState({

@@ -5,11 +5,7 @@ import logoIcon from '../../../assets/kitchen/blackShadowChef.png'
 import recipesIcon from '../../../assets/kitchen/recipeIcon.png'
 import { useTheme } from '../../../shared/theme/ThemeProvider'
 import './KitchenNavbar.css'
-
-interface Kitchen {
-  id: number
-  name: string
-}
+import type { Kitchen } from '../../../types/kitchen'
 
 interface KitchenNavbarProps {
   user: User

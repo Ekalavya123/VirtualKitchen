@@ -5,6 +5,7 @@ import type { RecipeAiTaskType, RecipeAiWorkflowCreateRequest } from '../../../t
 import { useRecipeSession } from '../session/RecipeSessionContext'
 import { workflowJobKey } from '../jobs/jobTracker'
 import { useJobTracker, useTrackedJob } from '../jobs/useJobTracker'
+import { errorMessage } from '../../../shared/errors'
 
 export type WorkflowAction = 'start' | 'approve' | 'retry' | 'discard' | 'dismiss'
 
@@ -30,7 +31,7 @@ export function useRecipeAiWorkflow(recipeId: number) {
       await work()
       return true
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Something went wrong. Please try again.')
+      setError(errorMessage(caught, 'Something went wrong. Please try again.'))
       return false
     } finally {
       setBusy(null)
@@ -55,7 +56,7 @@ export function useRecipeAiWorkflow(recipeId: number) {
       if (httpStatusOf(caught) === 409) {
         // Typically an edit that saved in between: the user's next click approves that version.
         tracker.refresh(workflowJobKey(recipeId))
-        throw new Error(caught instanceof Error ? caught.message : 'The recipe changed while approving. Please approve again.', { cause: caught })
+        throw new Error(errorMessage(caught, 'The recipe changed while approving. Please approve again.'), { cause: caught })
       }
       throw caught
     }

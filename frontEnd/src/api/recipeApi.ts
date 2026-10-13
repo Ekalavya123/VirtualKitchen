@@ -7,7 +7,8 @@
 import { apiGet, apiPost, apiDelete, apiPut } from './client'
 import { API } from './endpoints'
 import type { Process, ProcessBatchUpdateItem, ProcessBatchUpdateResult, ProcessCreateRequest, ProcessUpdateRequest } from '../types/process'
-import type { NutritionInfo, RecipeActiveJobsResponse, RecipeProcessGenerationJobResponse, RecipeProcessGenerationRequest, RecipeProcessVisualizationJobResponse, RecipeDetail, RecipeIngredient, UnitType } from '../types/recipe'
+import type { NutritionInfo, RecipeActiveJobsResponse, RecipeProcessGenerationJobResponse, RecipeProcessGenerationRequest, RecipeProcessVisualizationJobResponse, RecipeDetail, RecipeIngredient } from '../types/recipe'
+import type { UnitType } from '../types/kitchen'
 
 export type RecipeVisibility = 'PUBLIC' | 'PRIVATE'
 

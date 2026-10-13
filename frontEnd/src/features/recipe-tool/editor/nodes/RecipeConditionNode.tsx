@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { Handle, Position, NodeResizeControl, useNodeId, useUpdateNodeInternals, useReactFlow } from '@xyflow/react'
 import '../../styles/recipe-tool.css'
 import { normalizeConditionNodeData, type ConditionNodeData } from '../../model/recipeConditionData'
+import { CONDITION_HANDLES, DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes'
 import { useNodeHandleSides, useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'
 
 type ConditionNodeProps = {
@@ -37,8 +38,8 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
   const handleSides = useNodeHandleSides(nodeId)
   const normalized = normalizeConditionNodeData(data)
   const condition = normalized.condition
-  const width = toNumber(nodeWidth, toNumber(nodeStyle?.width, 190))
-  const height = toNumber(nodeHeight, toNumber(nodeStyle?.height, 190))
+  const width = toNumber(nodeWidth, toNumber(nodeStyle?.width, DEFAULT_NODE_SIZE.condition.width))
+  const height = toNumber(nodeHeight, toNumber(nodeStyle?.height, DEFAULT_NODE_SIZE.condition.height))
   const size = Math.min(width, height)
   const diamondSize = size * 0.72
   // Center-to-tip distance of the rotated square (half its diagonal, less what the rounded corners
@@ -106,7 +107,7 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
       updateNode(nodeId, { width: expandedSize, height: expandedSize })
       setIsExpanded(true)
     } else {
-      const restored = collapsedSizeRef.current ?? { width: 190, height: 190 }
+      const restored = collapsedSizeRef.current ?? { ...DEFAULT_NODE_SIZE.condition }
       updateNode(nodeId, { width: restored.width, height: restored.height })
       setIsExpanded(false)
     }
@@ -254,7 +255,7 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
       />
 
       <Handle
-        id="condition-yes"
+        id={CONDITION_HANDLES.yes}
         type="source"
         position={SIDE_POSITION[handleSides.source]}
         style={{
@@ -267,7 +268,7 @@ export default function RecipeConditionNode({ selected, style: nodeStyle, data, 
       />
 
       <Handle
-        id="condition-no"
+        id={CONDITION_HANDLES.no}
         type="source"
         position={SIDE_POSITION[handleSides.no]}
         style={{

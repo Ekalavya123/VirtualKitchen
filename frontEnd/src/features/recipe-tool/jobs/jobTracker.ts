@@ -8,6 +8,7 @@ import type {
   RecipeProcessVisualizationJobResponse,
 } from '../../../types/recipe'
 import type { RecipeAiWorkflowCreateRequest, RecipeAiWorkflowResponse, RecipeAiWorkflowStatus } from '../../../types/recipeAiWorkflow'
+import { errorMessage } from '../../../shared/errors'
 
 /**
  * App-wide tracker for the recipe tool's long-running backend jobs (AI process generation, Generate
@@ -335,7 +336,7 @@ export class JobTracker {
       this.failures.set(key, failures)
       if (failures >= GIVE_UP_AFTER) {
         this.failures.delete(key)
-        this.patch(key, { connectionLost: false, pollError: error instanceof Error ? error.message : 'Lost track of this job.' })
+        this.patch(key, { connectionLost: false, pollError: errorMessage(error, 'Lost track of this job.') })
         return
       }
       if (failures >= CONNECTION_LOST_AFTER) this.patch(key, { connectionLost: true })

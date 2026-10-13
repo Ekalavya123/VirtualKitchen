@@ -14,9 +14,10 @@ import { buildDurationLabel } from '../../../../shared/catalog/stepFieldCatalog'
 import { normalizeConditionNodeData } from '../../model/recipeConditionData'
 import { normalizeRecipeStepNodeData } from '../../model/recipeStepData'
 import { getProcessReadingOrder } from '../../view/model/recipeView'
+import { CONDITION_HANDLES } from '../../model/recipeNodeTypes'
 
-const YES_HANDLE = 'condition-yes'
-const NO_HANDLE = 'condition-no'
+const YES_HANDLE = CONDITION_HANDLES.yes
+const NO_HANDLE = CONDITION_HANDLES.no
 
 const orNull = (value: string) => value.trim() || null
 

@@ -1,9 +1,10 @@
 /**
- * Display helpers for recipe orders: status labels/tones, quantities in inventory units, money,
- * dates and addresses. Pure and import-free (types only), so node:test covers it directly.
+ * Display helpers for recipe orders: status labels/tones, quantities in inventory units, servings
+ * and addresses. Pure (runtime imports carry their .ts extension), so node:test covers it directly.
  */
 
-import type { UnitType } from '../../../types/recipe'
+import { formatNumber } from '../../../shared/format/number.ts'
+import type { UnitType } from '../../../types/kitchen'
 import type { DeliveryAddress, RecipeOrderStatus } from '../../../types/recipeOrder'
 
 export type StatusTone = 'neutral' | 'info' | 'warning' | 'danger' | 'success' | 'accent'
@@ -38,12 +39,6 @@ const UNIT_LABEL: Record<UnitType, string> = {
 const formatUnit = (unit: UnitType | string | null | undefined): string =>
   unit ? (UNIT_LABEL[unit as UnitType] ?? unit.toLowerCase()) : ''
 
-/** At most two decimals, no trailing zeros: 1.5, 250, 0.33. */
-export const formatNumber = (value: number | null | undefined): string => {
-  if (value == null || !Number.isFinite(value)) return '—'
-  return String(Math.round(value * 100) / 100)
-}
-
 /** "250 g", "1.5 kg", "3 pcs". */
 export const formatQuantity = (value: number | null | undefined, unit: UnitType | string | null | undefined): string => {
   const label = formatUnit(unit)
@@ -54,16 +49,6 @@ export const formatQuantity = (value: number | null | undefined, unit: UnitType 
 export const formatServings = (servings: number, baseServings: number | null | undefined): string => {
   if (baseServings == null) return `${servings} ${servings === 1 ? 'batch' : 'batches'}`
   return `${servings} ${servings === 1 ? 'serving' : 'servings'}`
-}
-
-export { formatMoney } from '../../../shared/format/money.ts'
-
-/** The backend's ISO local date-time as a short local date + time; '' when missing/invalid. */
-export const formatDateTime = (value: string | null | undefined): string => {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
 /** Milliseconds since the epoch for sorting; 0 when missing/invalid. */

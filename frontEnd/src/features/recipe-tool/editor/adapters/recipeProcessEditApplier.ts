@@ -27,8 +27,9 @@ import {
 import { getProcessReadingOrder } from '../../view/model/recipeView'
 import { buildConditionNode, buildStepNode } from './recipeProcessGenerationConverter'
 import { EDIT_START, detachNode, findFreePosition, insertNodeAfter, preferredInsertPosition, type ProcessGraph } from './recipeProcessEditGraph'
+import { DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes'
 
-const STEP_SIZE = { width: 280, height: 160 }
+const STEP_SIZE = DEFAULT_NODE_SIZE.step
 
 export class ProcessEditConflictError extends Error {
   constructor() {

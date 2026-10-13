@@ -6,16 +6,15 @@
  * Pure apart from the injectable storage, and free of runtime imports, so node:test can import it.
  */
 
-import type { OrderUnitType } from '../../api/orderApi'
+import type { ItemType, UnitType } from '../../types/kitchen'
 
-export type CartItemType = 'INGREDIENT' | 'EQUIPMENT'
 
 export interface CartItem {
   itemId: number
-  itemType: CartItemType
+  itemType: ItemType
   itemName: string
   quantity: number
-  unit: OrderUnitType
+  unit: UnitType
   /** Price per unit (shop prices are frontend defaults — see defaultShopPrice). */
   price: number
 }
@@ -36,14 +35,14 @@ const DEFAULT_INGREDIENT_PRICE = 60
 const DEFAULT_EQUIPMENT_PRICE = 999
 
 /** The shop's price rule: the item's base price when it has one, else the default for its type. */
-export const defaultShopPrice = (itemType: CartItemType, basePrice?: number | null): number =>
+export const defaultShopPrice = (itemType: ItemType, basePrice?: number | null): number =>
   basePrice ?? (itemType === 'EQUIPMENT' ? DEFAULT_EQUIPMENT_PRICE : DEFAULT_INGREDIENT_PRICE)
 
 export const getCartStorageKey = (userId: number) => `virtual-kitchen.cart.${userId}`
 
-export const getCartItemKey = (itemType: CartItemType, itemId: number) => `${itemType}-${itemId}`
+export const getCartItemKey = (itemType: ItemType, itemId: number) => `${itemType}-${itemId}`
 
-export const toCartUnit = (value: unknown): OrderUnitType => {
+export const toCartUnit = (value: unknown): UnitType => {
   const normalized = String(value ?? '').trim().toUpperCase()
 
   if (normalized === 'KG') return 'KG'
@@ -63,7 +62,7 @@ export const normalizeCartItems = (value: unknown): CartItem[] => {
       const raw = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>
       return {
         itemId: Number(raw.itemId),
-        itemType: (raw.itemType === 'EQUIPMENT' ? 'EQUIPMENT' : 'INGREDIENT') as CartItemType,
+        itemType: (raw.itemType === 'EQUIPMENT' ? 'EQUIPMENT' : 'INGREDIENT') as ItemType,
         itemName: String(raw.itemName ?? ''),
         quantity: Number(raw.quantity),
         unit: toCartUnit(raw.unit),

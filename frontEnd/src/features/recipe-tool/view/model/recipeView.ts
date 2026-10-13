@@ -24,6 +24,7 @@ import {
   type ActionOnIngredient,
   type RecipeStepFields,
 } from '../../model/recipeStepData'
+import { CONDITION_HANDLES } from '../../model/recipeNodeTypes'
 
 // ---------------------------------------------------------------------------------------------
 // Presentation types
@@ -143,8 +144,8 @@ export type RecipePresentation = {
 // Graph ordering
 // ---------------------------------------------------------------------------------------------
 
-const YES_HANDLE = 'condition-yes'
-const NO_HANDLE = 'condition-no'
+const YES_HANDLE = CONDITION_HANDLES.yes
+const NO_HANDLE = CONDITION_HANDLES.no
 
 type OrderedProcess = {
   nodes: ProcessNode[]

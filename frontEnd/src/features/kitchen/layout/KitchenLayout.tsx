@@ -3,12 +3,7 @@ import type { User } from '../../../types/User'
 import AppFooter from '../../../shared/components/AppFooter'
 import KitchenNavbar from './KitchenNavbar'
 import './KitchenLayout.css'
-
-interface Kitchen {
-  id: number
-  name: string
-  ownerId: number
-}
+import type { Kitchen } from '../../../types/kitchen'
 
 interface KitchenPageProps {
   user: User

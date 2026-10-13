@@ -1,5 +1,5 @@
 import { MarkerType, type Edge, type Node } from '@xyflow/react'
-import { RECIPE_NODE_TYPES } from '../../model/recipeNodeTypes'
+import { CONDITION_HANDLES, DEFAULT_NODE_SIZE, RECIPE_NODE_TYPES } from '../../model/recipeNodeTypes'
 import {
   createDefaultConditionFields,
   getConditionNodeTitle,
@@ -17,8 +17,8 @@ const EDGE_COLORS: Record<EdgeKind, string> = {
 }
 
 const getEdgeKind = (sourceHandle?: string | null, targetHandle?: string | null): EdgeKind => {
-  if (sourceHandle === 'condition-yes') return 'yes'
-  if (sourceHandle === 'condition-no') return 'no'
+  if (sourceHandle === CONDITION_HANDLES.yes) return 'yes'
+  if (sourceHandle === CONDITION_HANDLES.no) return 'no'
   if (String(sourceHandle ?? '').startsWith('parallel-') || String(targetHandle ?? '').startsWith('parallel-')) {
     return 'parallel'
   }
@@ -66,7 +66,7 @@ export const createConditionNode = (id: string, position: { x: number; y: number
   draggable: true,
   selectable: true,
   connectable: true,
-  style: { width: 190, height: 190 },
+  style: { ...DEFAULT_NODE_SIZE.condition },
   data: {
     title: getConditionNodeTitle(''),
     condition: createDefaultConditionFields(),

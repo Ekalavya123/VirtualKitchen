@@ -7,7 +7,7 @@
  * RecipeSessionContext.saveAll() creates them.
  */
 
-import { RECIPE_NODE_TYPES } from '../../model/recipeNodeTypes'
+import { CONDITION_HANDLES, DEFAULT_NODE_SIZE, RECIPE_NODE_TYPES } from '../../model/recipeNodeTypes'
 import { normalizeConditionNodeData, type ConditionNodeData } from '../../model/recipeConditionData'
 import { normalizeRecipeStepNodeData, type RecipeStepNodeData } from '../../model/recipeStepData'
 import { ROW_LAYOUT, arrangeRows, planRows } from '../model/processLayout'
@@ -15,8 +15,8 @@ import { parseDurationLabel } from '../../../../shared/catalog/stepFieldCatalog'
 import type { Process, ProcessEdge, ProcessNode } from '../../../../types/process'
 import type { GeneratedRecipeProcess, GeneratedRecipeStep, RecipeProcessGenerationResult } from '../../../../types/recipe'
 
-const STEP_SIZE = { width: 280, height: 160 }
-const CONDITION_SIZE = { width: 190, height: 190 }
+const STEP_SIZE = DEFAULT_NODE_SIZE.step
+const CONDITION_SIZE = DEFAULT_NODE_SIZE.condition
 
 const ORIGIN = { x: 120, y: 80 }
 /**
@@ -184,9 +184,9 @@ const buildNodesAndEdges = (steps: GeneratedRecipeStep[], refToProcessId: Map<st
     // before the condition) so it's repeated until the check passes. The prompt asks for every
     // condition to be phrased that way and placed right after the step it checks.
     const checkedStep = unplaced.slice(0, i).reverse().find((node) => node.kind === 'STEP')
-    if (next) edges.push({ id: crypto.randomUUID(), source: source.id, target: next.id, sourceHandle: 'condition-yes', label: 'Yes' })
+    if (next) edges.push({ id: crypto.randomUUID(), source: source.id, target: next.id, sourceHandle: CONDITION_HANDLES.yes, label: 'Yes' })
     const noTarget = checkedStep ?? next
-    if (noTarget) edges.push({ id: crypto.randomUUID(), source: source.id, target: noTarget.id, sourceHandle: 'condition-no', label: 'No' })
+    if (noTarget) edges.push({ id: crypto.randomUUID(), source: source.id, target: noTarget.id, sourceHandle: CONDITION_HANDLES.no, label: 'No' })
   })
 
   const layout = arrangeRows(

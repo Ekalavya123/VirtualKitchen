@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { RecipeDetailApi, RecipeOrderApi } from '../../api'
 import { useNotifications } from '../../shared/components/notifications/NotificationProvider'
 import { recipeOrderPath } from './model/orderView'
+import { errorMessage } from '../../shared/errors'
 
 /**
  * "Order Recipe": starts a draft order for one of the user's recipes and opens its confirm page.
@@ -29,7 +30,7 @@ export function useStartRecipeOrder() {
       const order = await RecipeOrderApi.create({ recipeId, servings: servings && servings > 0 ? servings : 1 })
       navigate(recipeOrderPath(order.id, 'confirm'))
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : 'Unable to start the order')
+      notifyError(errorMessage(error, 'Unable to start the order'))
     } finally {
       setOrderingRecipeId(null)
     }

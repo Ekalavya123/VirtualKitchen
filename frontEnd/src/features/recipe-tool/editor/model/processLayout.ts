@@ -1,3 +1,4 @@
+import { CONDITION_HANDLES, DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes.ts'
 /**
  * Row layout for a process canvas: steps read like text — left to right in rows of 1–3 (as many as
  * fit the canvas width), wrapping to the start of the next row. Every row fills the width and cards
@@ -38,14 +39,14 @@ export const ROW_LAYOUT = {
   /** Narrowest cell a card is comfortable to read in; decides how many fit per row. */
   minCellWidth: 300,
   maxPerRow: 3,
-  conditionMinSize: 190,
+  conditionMinSize: DEFAULT_NODE_SIZE.condition.width,
   conditionMaxSize: 260,
   // Mirror RecipeStepNode's resize minimums.
   stepMinWidth: 240,
   stepMinHeight: 140,
 }
 
-const NO_HANDLE = 'condition-no'
+const NO_HANDLE = CONDITION_HANDLES.no
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 

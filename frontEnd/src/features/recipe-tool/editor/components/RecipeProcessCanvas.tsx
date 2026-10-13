@@ -23,6 +23,8 @@ import '@xyflow/react/dist/style.css'
 
 import { recipeNodeComponents } from '../nodes/recipeNodeComponents'
 import {
+  CONDITION_HANDLES,
+  DEFAULT_NODE_SIZE,
   RECIPE_NODE_TYPES,
   isRecipeConditionNode,
   isRecipeStepNode,
@@ -74,6 +76,7 @@ import AddNodeMenu from './AddNodeMenu'
 import type { RecipeAiActions } from './AiActionsMenu'
 import { ProcessSidebarActionsProvider, type ProcessSidebarActions } from '../context/ProcessSidebarActionsContext'
 import RecipeVisualizationSlideshow, { type SlideshowStep } from '../../walkthrough/RecipeVisualizationSlideshow'
+import { errorMessage } from '../../../../shared/errors'
 import '../../styles/recipe-tool.css'
 import '../styles/RecipePropertiesPanel.css'
 import '../styles/RecipeProcessCanvas.css'
@@ -109,8 +112,8 @@ type RecipeProcessCanvasProps = {
 }
 
 // Default sizes of a new node (see createRecipeStepNode/createConditionNode).
-const NEW_STEP_SIZE = { width: 280, height: 160 }
-const NEW_CONDITION_SIZE = { width: 190, height: 190 }
+const NEW_STEP_SIZE = DEFAULT_NODE_SIZE.step
+const NEW_CONDITION_SIZE = DEFAULT_NODE_SIZE.condition
 /** Free space kept around a newly added node, so it never lands touching another one. */
 const NEW_NODE_CLEARANCE = 24
 
@@ -742,7 +745,7 @@ function RecipeProcessCanvasContent({
     setNodes((nds) => nds.map((node) => (node.id === nodeId ? applyConditionFieldUpdate(node, field, value) : node)))
 
     if (field === 'condition.successLabel' || field === 'condition.failureLabel') {
-      const sourceHandle = field === 'condition.successLabel' ? 'condition-yes' : 'condition-no'
+      const sourceHandle = field === 'condition.successLabel' ? CONDITION_HANDLES.yes : CONDITION_HANDLES.no
       const fallbackLabel = field === 'condition.successLabel' ? 'Yes' : 'No'
       setEdges((eds) => eds.map((edge) =>
         edge.source === nodeId && edge.sourceHandle === sourceHandle
@@ -796,8 +799,8 @@ function RecipeProcessCanvasContent({
 
     if (sourceNode && isRecipeConditionNode(sourceNode)) {
       const condition = normalizeConditionNodeData(sourceNode.data).condition
-      if (connection.sourceHandle === 'condition-yes') label = condition.successLabel
-      if (connection.sourceHandle === 'condition-no') label = condition.failureLabel
+      if (connection.sourceHandle === CONDITION_HANDLES.yes) label = condition.successLabel
+      if (connection.sourceHandle === CONDITION_HANDLES.no) label = condition.failureLabel
     }
 
     const presentation = getFlowEdgePresentation(connection.sourceHandle, connection.targetHandle, label)
@@ -939,7 +942,7 @@ function RecipeProcessCanvasContent({
       if (!unmountedRef.current) {
         setGenerateVisualsMessage({
           type: 'error',
-          text: error instanceof Error ? error.message : 'Unable to generate visuals right now.',
+          text: errorMessage(error, 'Unable to generate visuals right now.'),
         })
       }
     } finally {
@@ -1012,7 +1015,7 @@ function RecipeProcessCanvasContent({
       confirmLabel: 'Discard & reload',
     }))) return
     session.resolveConflict(choice).catch((error) => {
-      notifyError(error instanceof Error ? error.message : 'Unable to resolve the conflict right now')
+      notifyError(errorMessage(error, 'Unable to resolve the conflict right now'))
     })
   }, [session, notifyError, confirm])
 

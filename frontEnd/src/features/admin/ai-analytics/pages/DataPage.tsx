@@ -4,6 +4,7 @@ import type { BackfillRun } from '../api/aiAnalyticsApi'
 import { LoadState, Stat } from '../components/common'
 import { useApiData } from '../hooks/useApiData'
 import { MISSING, formatCost, formatDateTime, humanize } from '../model/analyticsFormat'
+import { errorMessage } from '../../../../shared/errors'
 
 /** Rate cards, the historical backfill, and analytics write health. */
 export default function DataPage() {
@@ -21,7 +22,7 @@ export default function DataPage() {
       setLastRun(await AiAnalyticsApi.runBackfill())
       runs.reload()
     } catch (error) {
-      setRunError(error instanceof Error ? error.message : 'Backfill failed')
+      setRunError(errorMessage(error, 'Backfill failed'))
     } finally {
       setRunning(false)
     }

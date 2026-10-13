@@ -11,6 +11,7 @@ import { useConfirm } from '../../../shared/components/confirm/confirmContext'
 import { useConfirmDiscard } from '../../../shared/components/confirm/useConfirmDiscard'
 import { toBatchItems } from '../session/persistence/snapshotPersistence'
 import { countSubprocessReferences, withoutSubprocessReferences } from '../model/subprocessReferences'
+import { errorMessage } from '../../../shared/errors'
 
 type RecipeProcessListPageProps = {
   recipeId: number
@@ -56,7 +57,7 @@ export default function RecipeProcessListPage({ recipeId, currentUserId, onOpenP
         setLoadError(null)
       })
       .catch((error) => {
-        setLoadError(error instanceof Error ? error.message : 'Unable to load this recipe\'s processes')
+        setLoadError(errorMessage(error, 'Unable to load this recipe\'s processes'))
       })
       .finally(() => setLoading(false))
   }, [recipeId, currentUserId])
@@ -75,7 +76,7 @@ export default function RecipeProcessListPage({ recipeId, currentUserId, onOpenP
       notifySuccess('Main process created')
       onOpenProcess(created.id)
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : 'Unable to create the main process')
+      notifyError(errorMessage(error, 'Unable to create the main process'))
     } finally {
       setCreatingMain(false)
     }
@@ -116,7 +117,7 @@ export default function RecipeProcessListPage({ recipeId, currentUserId, onOpenP
       await ProcessApi.delete(recipeId, process.id)
       notifySuccess(`Subprocess “${process.name}” deleted`)
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : 'Unable to delete this subprocess')
+      notifyError(errorMessage(error, 'Unable to delete this subprocess'))
     } finally {
       setDeletingId(null)
       loadProcesses()
@@ -142,7 +143,7 @@ export default function RecipeProcessListPage({ recipeId, currentUserId, onOpenP
       notifySuccess('Subprocess created')
       loadProcesses()
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : 'Unable to create this subprocess')
+      setCreateError(errorMessage(error, 'Unable to create this subprocess'))
     } finally {
       setCreating(false)
     }

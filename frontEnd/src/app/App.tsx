@@ -31,12 +31,7 @@ import { AuthenticationApi, KitchenApi, RecipeOrderApi } from '../api'
 import { clearStoredToken, isAuthenticated } from '../shared/auth/session'
 import { clearAllDrafts } from '../shared/drafts/draftStore'
 import type { ShopResumeState } from '../shared/cart/cartStorage'
-
-interface Kitchen {
-  id: number
-  name: string
-  ownerId: number
-}
+import type { Kitchen } from '../types/kitchen'
 
 function ShopRoute({ userId }: { userId: number }) {
   const navigate = useNavigate()

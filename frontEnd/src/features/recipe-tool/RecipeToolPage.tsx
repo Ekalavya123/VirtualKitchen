@@ -14,6 +14,7 @@ import { useConfirm } from '../../shared/components/confirm/confirmContext'
 import { useNotifications } from '../../shared/components/notifications/NotificationProvider'
 import { browserStorage, clearRecovery } from './session/persistence/recoveryStore'
 import { clearRecipeDrafts } from '../../shared/drafts/draftStore'
+import { errorMessage } from '../../shared/errors'
 
 type RecipeToolPageProps = {
   recipeId: number
@@ -79,7 +80,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
       })
       .catch((error) => {
         if (!cancelled) {
-          setLoadError(error instanceof Error ? error.message : 'Unable to load this recipe')
+          setLoadError(errorMessage(error, 'Unable to load this recipe'))
         }
       })
       .finally(() => {
@@ -127,7 +128,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
       setRecipe((current) => (current ? { ...current, visibility: updated.visibility } : current))
       notifySuccess(makingPublic ? 'Recipe is now public.' : 'Recipe is now private.')
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : 'Unable to update recipe visibility')
+      notifyError(errorMessage(error, 'Unable to update recipe visibility'))
     }
   }
 
@@ -149,7 +150,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
       notifySuccess('Recipe deleted.')
       onBack()
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : 'Unable to delete recipe')
+      notifyError(errorMessage(error, 'Unable to delete recipe'))
     }
   }
 

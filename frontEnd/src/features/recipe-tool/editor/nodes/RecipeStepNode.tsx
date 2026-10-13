@@ -12,6 +12,7 @@ import {
   type RecipeStepNodeData,
 } from '../../model/recipeStepData'
 import { useNodeHandleSides, useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'
+import { DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes'
 import { getStepOutputLabel, getStepOutputReferenceProblem } from '../../model/recipeStepOutputs'
 import { getStepActionById, type ActionCategory, type StepActionId } from '../../../../shared/catalog/actionCatalog'
 import { getPreparationStyleDisplayName } from '../../../../shared/catalog/preparationStyleCatalog'
@@ -112,8 +113,8 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
   const step = normalized.step
   const theme = getCategoryTheme(step.action)
   const handleSides = useNodeHandleSides(nodeId)
-  const width = Math.max(toNumber(nodeWidth, toNumber(nodeStyle?.width, 280)), MIN_WIDTH)
-  const minHeight = Math.max(toNumber(nodeHeight, toNumber(nodeStyle?.height, 160)), MIN_HEIGHT)
+  const width = Math.max(toNumber(nodeWidth, toNumber(nodeStyle?.width, DEFAULT_NODE_SIZE.step.width)), MIN_WIDTH)
+  const minHeight = Math.max(toNumber(nodeHeight, toNumber(nodeStyle?.height, DEFAULT_NODE_SIZE.step.height)), MIN_HEIGHT)
 
   const stepIndex = nodeId ? stepOrder.indexOf(nodeId) : -1
   const stepNumber = stepIndex >= 0 ? stepIndex + 1 : data.stepNumber

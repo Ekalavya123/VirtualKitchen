@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { errorMessage } from '../../../../shared/errors'
 
 interface State<T> {
   key: string | null
@@ -28,7 +29,7 @@ export function useApiData<T>(key: string | null, load: () => Promise<T>) {
           setState((previous) => ({
             key: requestKey,
             data: previous.data,
-            error: error instanceof Error ? error.message : 'Request failed',
+            error: errorMessage(error, 'Request failed'),
           }))
         }
       })

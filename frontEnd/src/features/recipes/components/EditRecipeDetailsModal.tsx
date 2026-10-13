@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { errorMessage } from '../../../shared/errors'
 import '../../recipe-tool/styles/recipe-tool.css'
 
 export type RecipeDetailsDraft = { name: string; description: string }
@@ -62,7 +63,7 @@ function EditRecipeDetailsForm({
     try {
       await onSave({ name: trimmedName, description: description.trim() })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unable to save the recipe details')
+      setError(errorMessage(err, 'Unable to save the recipe details'))
       setSaving(false)
     }
   }

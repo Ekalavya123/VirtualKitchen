@@ -4,8 +4,11 @@ import { OrderApi, RecipeOrderApi, type OrderResponse } from '../../../api'
 import type { RecipeOrder } from '../../../types/recipeOrder'
 import OrderStatusBadge from '../../recipe-order/components/OrderStatusBadge'
 import OrderThumb from '../../recipe-order/components/OrderThumb'
-import { formatDateTime, formatMoney, formatServings, timeValue } from '../../recipe-order/model/orderFormat'
+import { formatServings, timeValue } from '../../recipe-order/model/orderFormat'
+import { formatDateTime } from '../../../shared/format/date'
+import { formatMoney } from '../../../shared/format/money'
 import { isPaidStatus, recipeOrderPath } from '../../recipe-order/model/orderView'
+import { errorMessage } from '../../../shared/errors'
 import './OrderHistoryView.css'
 
 interface OrderHistoryViewProps {
@@ -24,8 +27,6 @@ const TABS: { id: OrderTab; label: string }[] = [
   { id: 'shop', label: 'Shop Orders' },
 ]
 
-const errorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback)
-
 function RecipeOrderCard({ order }: { order: RecipeOrder }) {
   const name = order.recipe?.name ?? 'Recipe'
   const paid = isPaidStatus(order.status)
@@ -41,7 +42,7 @@ function RecipeOrderCard({ order }: { order: RecipeOrder }) {
         </div>
         <h3>{name}</h3>
         <p>
-          {formatServings(order.servings, order.baseServings)} · {formatDateTime(order.timestamps?.createdAt) || 'N/A'}
+          {formatServings(order.servings, order.baseServings)} · {formatDateTime(order.timestamps?.createdAt, 'N/A')}
         </p>
       </div>
 
@@ -74,7 +75,7 @@ function ShopOrderCard({ order }: { order: OrderResponse }) {
             {order.orderCode && <span className="order-code">{order.orderCode}</span>}
           </div>
           <h3>Order #{order.orderId}</h3>
-          <p>{order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}</p>
+          <p>{formatDateTime(order.createdAt, 'N/A')}</p>
         </div>
         <div className="order-status-block">
           <span className={`status-badge payment-${order.paymentStatus.toLowerCase()}`}>Payment: {order.paymentStatus}</span>

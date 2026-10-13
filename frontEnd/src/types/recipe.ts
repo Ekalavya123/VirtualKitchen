@@ -5,10 +5,8 @@
  * NutritionInfoDTO, RecipeProcessGeneration*DTO, Generated*DTO, VisualizationJobResponseDTO).
  */
 
+import type { UnitType } from './kitchen'
 import type { RecipeAiWorkflowResponse } from './recipeAiWorkflow'
-
-/** Mirrors the backend's UnitType enum (also duplicated locally in orderApi.ts as OrderUnitType — there is no single shared source for it yet). */
-export type UnitType = 'KG' | 'GRAM' | 'LITER' | 'ML' | 'COUNT'
 
 /**
  * AI-generated recipe process structures (recipe/dto/Generated*.java) — semantic

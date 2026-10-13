@@ -18,6 +18,7 @@ import {
 import { mergeRecoveredProcesses, restoreSnapshot } from './persistence/sessionSnapshot'
 import { SessionStore } from './persistence/sessionStore'
 import RecoveryPrompt from '../components/RecoveryPrompt'
+import { errorMessage } from '../../../shared/errors'
 
 /**
  * A process not yet created on the backend (e.g. from AI generation — see
@@ -329,7 +330,7 @@ export function RecipeSessionProvider({ recipeId, canEdit = true, children }: { 
         void jobTracker.discover(recipeId)
       })
       .catch((error) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : 'Unable to load this recipe\'s processes')
+        if (!cancelled) setLoadError(errorMessage(error, 'Unable to load this recipe\'s processes'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)

@@ -5,15 +5,10 @@
 
 import { apiGet, apiPost } from './client'
 import { API } from './endpoints'
+import type { Kitchen } from '../types/kitchen'
 import type { User } from '../types/User'
 
 export interface KitchenCreateRequest {
-  name: string
-  ownerId: number
-}
-
-export interface Kitchen {
-  id: number
   name: string
   ownerId: number
 }

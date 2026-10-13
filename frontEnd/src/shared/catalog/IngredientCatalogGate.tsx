@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import '../../features/recipe-tool/styles/recipe-tool.css'
 import { isIngredientCatalogLoaded, loadIngredientCatalog, useIngredientCatalog } from './ingredientCatalog'
+import { errorMessage } from '../../shared/errors'
 
 type IngredientCatalogGateProps = {
   children: ReactNode
@@ -23,7 +24,7 @@ export default function IngredientCatalogGate({ children }: IngredientCatalogGat
     if (isIngredientCatalogLoaded()) return
     let cancelled = false
     loadIngredientCatalog().catch((loadError: unknown) => {
-      if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Unable to load the ingredient catalog')
+      if (!cancelled) setError(errorMessage(loadError, 'Unable to load the ingredient catalog'))
     })
     return () => {
       cancelled = true

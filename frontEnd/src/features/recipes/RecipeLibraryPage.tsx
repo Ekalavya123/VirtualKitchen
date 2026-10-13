@@ -12,6 +12,7 @@ import { useConfirm } from '../../shared/components/confirm/confirmContext'
 import { useIncrementalReveal } from '../../shared/hooks/useIncrementalReveal'
 import ListEnd from '../../shared/components/ListEnd'
 import ActionMenu, { type ActionMenuItem } from '../../shared/components/ActionMenu'
+import { formatDate } from '../../shared/format/date'
 import EditRecipeDetailsModal, { type RecipeDetailsDraft } from './components/EditRecipeDetailsModal'
 
 type RecipeTab = 'mine' | 'global'
@@ -701,20 +702,6 @@ function ConfirmVisibilityModal({
       </div>
     </div>
   )
-}
-
-function formatDate(value: string) {
-  const date = new Date(value)
-
-  if (Number.isNaN(date.getTime())) {
-    return ''
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  }).format(date)
 }
 
 export default function RecipeLibraryPage({
