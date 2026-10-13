@@ -1,182 +1,96 @@
 # Frontend Code Structure
 
-This document explains the frontend folder structure of the Virtual Kitchen application and the responsibility of each main directory.
+How the Virtual Kitchen frontend is organised: what each folder owns, which way folders may import each other,
+and the conventions that keep it that way.
 
-## Overall architecture
+## Tech stack
 
-The frontend is built with React, TypeScript, and Vite. The code is organized by feature and responsibility so the UI remains modular and easy to extend.
+- React 19 + TypeScript, built with Vite 8
+- React Router 7 (`BrowserRouter`, nested routes)
+- `@xyflow/react` (React Flow) for the recipe process editor
+- Tailwind 4 for layout/spacing, plain CSS files for component styling, `--flow-*` CSS variables for light/dark themes
+- `node --test` unit tests in `tests/` (pure modules only; runtime imports there carry a `.ts` extension)
 
-## Main folder structure
-
-```text
-frontEnd/
-├── api/
-├── app/
-├── assets/
-├── features/
-│   ├── auth/
-│   ├── kitchen/
-│   ├── recipe-tool/
-│   └── recipes/
-├── shared/
-├── styles/
-├── types/
-├── App.css
-├── index.css
-├── main.tsx
-├── package.json
-├── tsconfig.json
-└── vite.config.ts
-```
-
-## Folder responsibilities
-
-### `api`
-
-- Contains API client and integration code.
-- Example files:
-  - `client.ts`
-  - `endpoints.ts`
-  - `inventoryApi.ts`
-  - `recipeApi.ts`
-  - `authApi.ts`
-- Responsibilities:
-  - Configure HTTP client behavior.
-  - Define server endpoints and payload contracts.
-  - Provide reusable API methods for feature code.
-
-### `app`
-
-- Contains the main application shell.
-- Example: `App.tsx`
-- Responsibilities:
-  - Renders the root application layout.
-  - Connects page routes and feature modules.
-  - Hosts global providers and layout structure.
-
-### `features`
-
-- Contains feature-based modules grouped by business capability.
-- Current features include:
-  - `auth` for authentication and login flows.
-  - `recipes` for the recipe list (create, publish, copy).
-  - `recipe-tool` for a single recipe: the Recipe Editor and the human-readable Recipe Process.
-  - `kitchen` for inventory and kitchen management.
-- Responsibilities:
-  - Keep related UI, state, and business logic together.
-  - Isolate feature-specific code from shared infrastructure.
-
-### `features/auth`
-
-- Handles user authentication UI.
-- Includes login and auth-related views.
-- Responsibilities:
-  - Render sign-in screens.
-  - Manage authentication forms and validation.
-  - Connect with the `api/authApi.ts` client.
-
-### `features/recipes`
-
-- `RecipeHomePage.tsx`: My Recipes / Global Recipes, create, publish/unpublish, copy and delete. Opening a recipe goes to the Recipe Tool.
-
-### `features/recipe-tool`
-
-- The Recipe Tool for one recipe (`RecipeToolPage.tsx`) has two routed tabs (`recipeToolRoutes.ts`): the Recipe Editor (`/tool/editor`, the React Flow process editor) and the Recipe Process (`/tool/process`, the readable recipe). Both read the same `RecipeSessionContext`.
-- `context/RecipeSessionContext.tsx` holds the unified in-memory recipe snapshot (MAIN + every SUBPROCESS); the recipe-level Save persists all of it at once.
-- `catalog/`: the recipe step catalogs (actions with their per-action field/target/preparation rules, ingredients, units, preparation styles, heat levels, temperature and duration units) built from `stepCatalogs.data.json` — shared with the backend AI prompt and validator. Schema and rationale: [docs/recipe-vocabulary-v2.md](../docs/recipe-vocabulary-v2.md).
-- `styles/recipe-tool.css`: shared tokens and component styles.
-
-#### `features/recipe-tool/presentation` (Recipe Process view)
-
-- `model/recipePresentation.ts`: derives the readable recipe from the process graphs: ordered steps and checks, parts for subprocesses, totalled ingredients, the hero image. It's pure and never stored; graph concepts stop here.
-- `components/`: `RecipeProcessPage` (hero, ingredients, step timeline, nutrition), `RecipeHero`, `RecipeIngredientsList`, `RecipeStepsTimeline`, `RecipeNutritionPanel` and `RecipeImage`.
-- `styles/recipe-process.css`: the view's styles (`rp-*` classes).
-
-#### `features/recipe-tool/process` (Recipe Editor)
-
-The recipe-specific editor built on the generic Process graph (`types/process.ts`):
-
-- `components/`: `RecipeProcessCanvas` (the React Flow editor), `RecipeProcessEditor`, `RecipeProcessTopBar`, `RecipeProcessSidebar`, `RecipeProcessBreadcrumb`, `RecipeStepPanel`, `RecipeConditionPanel`, `RecipeEditorView` (the Recipe Editor tab), `RecipeProcessListPage`, `RecipeProcessGenerationModal` and `RecipeVisualizationSlideshow`.
-- `nodes/`: `RecipeStepNode` and `RecipeConditionNode`.
-- `model/`: recipe step data (Action / Action On / cooking properties), condition data, node type constants and the canvas payload types.
-- `adapters/`: Process graph ↔ canvas conversion, and AI generation result → processes.
-- `context/`: per-canvas graph context for node components.
-
-### `features/kitchen`
-
-- Contains inventory and kitchen page components.
-- Responsibilities:
-  - Render inventory views and shop interfaces.
-  - Display kitchen dashboard and navigation.
-  - Manage kitchen-related user interactions.
-
-### `shared`
-
-- Contains reusable UI components used across the app.
-- Example: `shared/components/Button.tsx`
-- Responsibilities:
-  - Avoid duplication.
-  - Provide consistent shared building blocks.
-
-### `assets`
-
-- Stores static assets such as images, icons, and other resources.
-- Responsibilities:
-  - Keep non-code resources organized.
-  - Make assets easy to import into components.
-
-### `styles`
-
-- Contains global and shared styling files.
-- Example: `global.css`
-- Responsibilities:
-  - Define application-wide visual styles.
-  - Keep styling separate from component logic.
-
-### `types`
-
-- Contains TypeScript type definitions.
-- Responsibilities:
-  - Define shared domain types and interfaces.
-  - Ensure type safety across the frontend.
-
-### Root files
-
-- `main.tsx`
-  - Application entry point.
-  - Mounts React into the DOM.
-- `App.css`, `index.css`
-  - Define global and app-level styles.
-- `package.json`
-  - Manages dependencies and scripts.
-- `vite.config.ts`
-  - Configures the Vite build and dev server.
-- `tsconfig.json`
-  - Configures TypeScript compiler options.
-
-## Typical frontend flow
-
-A typical UI flow usually looks like this:
+## Folder map
 
 ```text
-User action -> React component -> feature/api logic -> state update -> UI render
+src/
+├── main.tsx          mounts the providers (theme, notifications, confirm, AI job tracker) and <App />
+├── app/              the app shell
+│   ├── App.tsx            the route table + signed-in / admin guards
+│   ├── routes/            route components that read URL params and wire features together
+│   └── session/           useAppSession (restore / login / logout / 401) and the SignedIn context
+├── api/              HTTP client (auth header, 401 → sign-out, envelope unwrapping) + one module per backend area
+├── types/            domain types shared across features (kitchen, recipe, process, recipe order, …)
+├── shared/           feature-independent building blocks
+│   ├── catalog/           step & ingredient catalogs (stepCatalogs.data.json is also read by the backend build)
+│   ├── components/        confirm dialog, notifications, payment gateway, ActionMenu, ListEnd, SearchableSelect, …
+│   ├── format/            money, date, number formatting
+│   ├── hooks/             useApiData (load/reload/mutate), useIncrementalReveal
+│   ├── cart/  drafts/  theme/
+│   └── errors.ts          errorMessage(error, fallback)
+├── styles/           global.css (Tailwind), theme-tokens.css, flow-ui.css (shared flow-* component classes)
+└── features/
+    ├── home/              landing page
+    ├── auth/              login / signup / OTP / password reset
+    ├── kitchen/           layout/ (navbar), inventory/, shop/ (catalog, cart, checkout), orders/ (order history)
+    ├── recipes/           recipe library page, its components and useRecipeLibrary
+    ├── recipe-order/      order wizard: confirm → ingredients → payment → tracking → receipt   (public API: index.ts)
+    ├── recipe-tool/       the recipe tool                                                       (public API: index.ts)
+    └── admin/ai-analytics/ admin AI cost & usage dashboards
 ```
 
-For the editor feature, the flow is:
+### Inside `features/recipe-tool`
 
 ```text
-User edits node/edge -> component updates store -> canvas rerenders -> state persists via API
+recipe-tool/
+├── index.ts          everything other features and the app may use
+├── recipeToolRoutes.ts
+├── page/             RecipeToolPage (editor ⇄ view tabs), its navbar, summary and edit-details dialog
+├── model/            the step/condition data model and graph logic, shared by every folder below
+├── session/          RecipeSessionProvider: the one in-memory editing session (autosave, undo/redo,
+│                     crash recovery in useRecoveryMirror, generated images in useVisualsApplier)
+├── jobs/             JobTracker: app-wide polling of AI generation, visuals and workflow jobs
+├── editor/           the React Flow editor: components/, hooks/, adapters/ (process ⇄ canvas, AI edits),
+│                     model/ (layout, slides, deletion wording), nodes/, context/, styles/
+├── view/             the read-only "Recipe Process" view (recipeView.ts builds it from the graphs)
+├── walkthrough/      step slideshow + narration player (used by the editor's Preview and the view's cook mode)
+├── workflow/         AI Recipe Creation (generate → approve → visuals → narration)
+├── process-list/     the standalone list of a recipe's processes
+└── styles/           modals.css, RecipePropertiesPanel.css
 ```
 
-## Summary
+## Dependency rules
 
-The frontend is organized around:
+Imports only go downward; there are no cycles between folders.
 
-- `api` for backend integration and shared service calls
-- `app` for the root application shell
-- `features` for business-oriented UI modules
-- `shared` for reusable components
-- `styles` and `assets` for styling and static resources
-- `types` for TypeScript definitions
+```text
+app ──► features ──► shared / api / types
+kitchen, recipes ──► recipe-order ──► recipe-tool          (other features: no feature imports)
+recipe-tool: page ──► editor / view / workflow ──► session / jobs / walkthrough ──► model
+```
 
-This layout keeps the application modular, maintainable, and ready to grow with new functionality.
+- Code outside `recipe-tool` or `recipe-order` imports only from that feature's `index.ts`.
+- `recipe-tool` never imports another feature: actions it needs from elsewhere (e.g. "Order recipe") are passed in
+  as props by the app's route components.
+- `shared` never imports a feature; `api` only imports `types`.
+
+## Conventions
+
+- **Data loading:** `useApiData(key, load)` for fetch-on-mount/reload (it handles cancellation, stale responses
+  and derived `loading`); don't hand-write `loading`/`error` state with a fetch inside `useEffect`.
+- **Errors:** show `errorMessage(error, 'fallback')`; `ApiError` carries the backend's message and status
+  (`httpStatusOf`). A 401 on a signed-in request signs the user out (`api/authToken.ts`).
+- **Contexts:** keep the context object and its `useX` hook in a `.ts` file and the provider component in a
+  `.tsx` file (React Fast Refresh needs component-only files).
+- **Types:** shared domain types go in `types/`; a type used by one feature stays in that feature.
+- **Styles:** Tailwind for layout; a component's own CSS file for its look; `--flow-*` tokens for colours.
+
+## Request flow
+
+```text
+Route (app/routes) → feature page → hook (useApiData / feature hook) → api/<area>.ts → api/client → backend
+```
+
+Slow AI work runs as backend jobs; `recipe-tool/jobs/JobTracker` polls them app-wide so progress survives
+navigation and reloads.
