@@ -125,7 +125,7 @@ export type RecipeStepNodeData = {
   visualization?: RecipeStepVisualizationData
 }
 
-export const createDefaultRecipeStepFields = (): RecipeStepFields => ({
+const createDefaultRecipeStepFields = (): RecipeStepFields => ({
   action: '',
   customActionName: '',
   actionOn: { ingredients: [], processes: [], steps: [] },

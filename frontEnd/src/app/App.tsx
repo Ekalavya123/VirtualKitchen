@@ -31,7 +31,6 @@ import { AuthenticationApi, KitchenApi, RecipeOrderApi } from '../api'
 import { clearStoredToken, isAuthenticated } from '../shared/auth/session'
 import { clearAllDrafts } from '../shared/drafts/draftStore'
 import type { ShopResumeState } from '../shared/cart/cartStorage'
-import '../App.css'
 
 interface Kitchen {
   id: number

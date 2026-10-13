@@ -49,7 +49,7 @@ const describeRequestError = (error: unknown): Error => {
 }
 
 /** A recipe-wide step id: the step's process and its node id, as `${processId}:${nodeId}`. */
-export const recipeStepId = (processId: number, nodeId: string) => `${processId}:${nodeId}`
+const recipeStepId = (processId: number, nodeId: string) => `${processId}:${nodeId}`
 
 const splitRecipeStepId = (id: string) => {
   const separator = id.indexOf(':')

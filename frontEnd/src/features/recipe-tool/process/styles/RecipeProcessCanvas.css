@@ -15,17 +15,6 @@
   font-family: 'DM Sans', system-ui, sans-serif;
 }
 
-/* Topbar area: full-width, sticky to the top of the editor shell so panning
-   or scrolling inside the canvas/panels never moves it. Its border lives on
-   FlowEditorTopBar's own root element (single edge, no doubled border). */
-.flow-canvas-topbar {
-  flex-shrink: 0;
-  width: 100%;
-  position: sticky;
-  top: 0;
-  z-index: 20;
-}
-
 /* Body row: sidebar + canvas + properties share the remaining viewport height */
 .flow-canvas-body {
   display: flex;
@@ -56,18 +45,6 @@
   min-height: 0; /* prevent flex overflow issues on nested scroll containers */
 }
 
-.flow-canvas-workspace {
-  display: flex;
-  flex: 1;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  align-items: stretch;
-  background:
-    radial-gradient(circle at top left, rgba(var(--flow-accent-rgb), 0.08), transparent 26%),
-    linear-gradient(180deg, rgba(var(--flow-surface-rgb), 0.74), rgba(var(--flow-surface-rgb), 0.3));
-}
-
 .flow-canvas-viewport {
   position: relative;
   flex: 1;
@@ -78,7 +55,7 @@
 }
 
 /* Ensure ReactFlow fills the canvas area */
-.flow-canvas-area .reactflow-wrapper,
+
 .flow-canvas-area .reactflow {
   width: 100%;
   height: 100%;
@@ -125,7 +102,6 @@
   color: var(--flow-accent-strong);
 }
 
-.sidebar-collapse-button,
 .props-collapse-button {
   display: flex;
   align-items: center;
@@ -138,10 +114,6 @@
   background: transparent;
   border: 1px solid var(--flow-border);
   color: var(--flow-text-muted);
-}
-
-.flow-sidebar-wrapper.collapsed .flow-sidebar {
-  display: none;
 }
 
 .flow-properties-wrapper.collapsed .flow-properties-panel {
@@ -471,38 +443,6 @@
   .recipe-builder-surface {
     padding: 0.85rem;
   }
-}
-
-/* Visualization result notification */
-.flow-canvas-visualization-result {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px;
-  z-index: 5;
-  pointer-events: none;
-}
-
-.flow-canvas-visualization-box {
-  display: inline-block;
-  max-width: 480px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(var(--flow-surface-rgb), 0.95);
-  border: 1px solid var(--flow-info-border);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-}
-
-.flow-canvas-visualization-title {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--flow-info);
-}
-
-.flow-canvas-visualization-info {
-  font-size: 12px;
-  color: var(--flow-text);
-  margin-top: 4px;
 }
 
 /* Export modal */

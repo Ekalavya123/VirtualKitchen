@@ -165,21 +165,6 @@ export async function apiPut<T>(
 }
 
 /**
- * PATCH request
- */
-export async function apiPatch<T>(
-  endpoint: string,
-  body?: unknown,
-  options?: FetchOptions
-): Promise<T> {
-  return request<T>(endpoint, {
-    ...options,
-    method: 'PATCH',
-    body: body ? JSON.stringify(body) : undefined,
-  })
-}
-
-/**
  * DELETE request
  */
 export async function apiDelete<T>(

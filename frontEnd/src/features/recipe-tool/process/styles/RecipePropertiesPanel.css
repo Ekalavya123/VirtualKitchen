@@ -88,16 +88,6 @@
   overflow-y: auto;
 }
 
-/* Section header */
-.flow-properties-section-header {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--flow-text-subtle);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  margin: 16px 0 10px 0;
-}
-
 /* Field group */
 .flow-properties-field {
   margin-bottom: 12px;
@@ -135,19 +125,6 @@
 
 .flow-properties-textarea {
   resize: none;
-}
-
-/* Read-only field */
-.flow-properties-readonly {
-  width: 100%;
-  padding: 7px 10px;
-  border-radius: 7px;
-  border: 1.5px solid var(--flow-border);
-  background: var(--flow-surface-muted);
-  cursor: default;
-  box-sizing: border-box;
-  font-size: 13px;
-  color: var(--flow-text-muted);
 }
 
 /* Condition-specific input colors */

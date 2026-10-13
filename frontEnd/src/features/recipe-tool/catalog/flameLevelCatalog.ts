@@ -33,7 +33,7 @@ export const resolveFlameLevelId = (value: unknown): FlameLevelId | '' => resolv
 // looked up during render (canvas node detail badges), so it must never throw.
 const UNKNOWN_FLAME_LEVEL: FlameLevelDefinition = { id: CUSTOM_FLAME_LEVEL_ID, label: 'Unknown' }
 
-export const getFlameLevelById = (id: FlameLevelId): FlameLevelDefinition =>
+const getFlameLevelById = (id: FlameLevelId): FlameLevelDefinition =>
   flameById.get(id) ?? UNKNOWN_FLAME_LEVEL
 
 export const getFlameLevelDisplayName = (levelId: FlameLevelId | '', customLevel = '') =>

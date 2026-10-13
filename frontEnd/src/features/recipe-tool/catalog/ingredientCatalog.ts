@@ -2,12 +2,11 @@ import { useSyncExternalStore } from 'react'
 import stepCatalogsData from './stepCatalogs.data.json'
 import { IngredientCatalogApi } from '../../../api/recipeApi'
 import { PIECE_UNIT_ID, UNIT_CATALOG, isUnitId, type UnitId } from './unitCatalog'
-import { getCatalogDisplayName, resolveCatalogInput } from './catalogSelectionUtils'
+import { getCatalogDisplayName } from './catalogSelectionUtils'
 import {
   CUSTOM_INGREDIENT_ID,
   findIngredientDefinition,
   getCatalogIngredients,
-  getIngredientAliasLookup,
   getIngredientCatalogVersion,
   isIngredientCatalogLoaded,
   resolveIngredientAlias,
@@ -42,9 +41,9 @@ export type IngredientCategoryDefinition = {
   preparationStyleSets: readonly string[]
 }
 
-export const INGREDIENT_CATEGORIES: readonly IngredientCategoryDefinition[] = stepCatalogsData.ingredientCategories
+const INGREDIENT_CATEGORIES: readonly IngredientCategoryDefinition[] = stepCatalogsData.ingredientCategories
 
-export const INGREDIENT_CATEGORY_ORDER: readonly IngredientCategory[] = INGREDIENT_CATEGORIES.map((category) => category.id)
+const INGREDIENT_CATEGORY_ORDER: readonly IngredientCategory[] = INGREDIENT_CATEGORIES.map((category) => category.id)
 
 const categoryById = new Map<IngredientCategory, IngredientCategoryDefinition>(
   INGREDIENT_CATEGORIES.map((category) => [category.id, category])
@@ -75,9 +74,6 @@ export const loadIngredientCatalog = (): Promise<void> => {
 /** Re-renders the caller whenever the catalog is (re)loaded; returns the catalog version. */
 export const useIngredientCatalog = (): number =>
   useSyncExternalStore(subscribeIngredientCatalog, getIngredientCatalogVersion)
-
-/** Every ingredient (custom last). */
-export const getIngredientCatalog = (): readonly IngredientDefinition[] => getCatalogIngredients()
 
 let groupedVersion = -1
 let grouped: { order: readonly IngredientCategory[]; byCategory: Readonly<Record<IngredientCategory, readonly IngredientDefinition[]>> } = {
@@ -125,11 +121,6 @@ export const getIngredientById = (id: IngredientId): IngredientDefinition =>
 /** An id, name, alias or legacy catalog slug ("onion") -> the ingredient's id; '' when nothing matches. */
 export const resolveIngredientId = (value: unknown): IngredientId | '' => resolveIngredientAlias(value)
 
-export const resolveIngredientInput = (value: string): { ingredientId: IngredientId | ''; customIngredientName: string } => {
-  const resolved = resolveCatalogInput(getIngredientAliasLookup(), CUSTOM_INGREDIENT_ID, value)
-  return { ingredientId: resolved.id, customIngredientName: resolved.customValue }
-}
-
 export const getIngredientDisplayName = (ingredientId: IngredientId | '', customIngredientName = '') =>
   getCatalogDisplayName(
     CUSTOM_INGREDIENT_ID,
@@ -159,6 +150,3 @@ export const getIngredientPreparationStyleSets = (ingredientId: IngredientId | '
   if (!ingredient) return null
   return ingredient.preparationStyleSets ?? categoryById.get(ingredient.category)?.preparationStyleSets ?? []
 }
-
-export const getIngredientSearchValue = (ingredientId: IngredientId | '', customIngredientName = '') =>
-  getIngredientDisplayName(ingredientId, customIngredientName)

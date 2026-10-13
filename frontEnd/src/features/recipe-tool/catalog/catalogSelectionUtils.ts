@@ -2,7 +2,7 @@
 // every step-property catalog (action, ingredient, unit, preparation style, flame level).
 // Replaces what used to be 4 near-identical hand-copied implementations.
 
-export const normalizeCatalogText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
+const normalizeCatalogText = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ')
 
 export function buildAliasLookup<T extends string>(
   entries: readonly { id: T; aliases: readonly string[] }[]
@@ -22,32 +22,6 @@ export function resolveCatalogId<T extends string>(aliasLookup: Map<string, T>, 
   const normalized = normalizeCatalogText(value)
   if (!normalized) return ''
   return aliasLookup.get(normalized) ?? ''
-}
-
-export type CatalogInputResolution<T extends string> = {
-  id: T | ''
-  customValue: string
-}
-
-/**
- * Resolves free-form text (typed by a user, or produced by AI generation) against a catalog's
- * alias lookup. A match returns that entry's id; no match falls back to the catalog's `customId`
- * with the raw text preserved as the custom value, instead of being dropped.
- */
-export function resolveCatalogInput<T extends string>(
-  aliasLookup: Map<string, T>,
-  customId: T,
-  value: string
-): CatalogInputResolution<T> {
-  const normalized = normalizeCatalogText(value)
-  if (!normalized) return { id: '', customValue: '' }
-
-  const match = aliasLookup.get(normalized)
-  if (match) {
-    return match === customId ? { id: customId, customValue: '' } : { id: match, customValue: '' }
-  }
-
-  return { id: customId, customValue: value.trim() }
 }
 
 export function getCatalogDisplayName<T extends string>(

@@ -47,7 +47,7 @@ const kindForFlowNodeType = (type?: string): ProcessNodeKind =>
   type === RECIPE_NODE_TYPES.condition ? 'CONDITION' : 'STEP'
 
 /** Converts one backend ProcessNode into a React Flow node payload. */
-export const processNodeToFlowNode = (node: ProcessNodeModel): FlowNodePayload => {
+const processNodeToFlowNode = (node: ProcessNodeModel): FlowNodePayload => {
   const type = node.type || NODE_TYPE_BY_KIND[node.kind]
 
   return {
@@ -67,7 +67,7 @@ export const processNodeToFlowNode = (node: ProcessNodeModel): FlowNodePayload =
 }
 
 /** Converts one backend ProcessEdge into a React Flow edge payload. */
-export const processEdgeToFlowEdge = (edge: ProcessEdge): FlowEdgePayload => ({
+const processEdgeToFlowEdge = (edge: ProcessEdge): FlowEdgePayload => ({
   id: edge.id,
   source: edge.source,
   target: edge.target,
@@ -97,7 +97,7 @@ export const processToFlowData = (process: Process): FlowData => ({
  * is derived from `node.type` (set by createRecipeStepNode/createConditionNode,
  * or preserved on load) rather than trusting anything inside `data`.
  */
-export const flowNodeToProcessNode = (node: FlowNodePayload): ProcessNodeModel => ({
+const flowNodeToProcessNode = (node: FlowNodePayload): ProcessNodeModel => ({
   id: node.id,
   kind: kindForFlowNodeType(node.type),
   data: (node.data as Record<string, unknown> | undefined) ?? {},
@@ -114,7 +114,7 @@ export const flowNodeToProcessNode = (node: FlowNodePayload): ProcessNodeModel =
 })
 
 /** Converts a React Flow edge payload back into a backend ProcessEdge. */
-export const flowEdgeToProcessEdge = (edge: FlowEdgePayload): ProcessEdge => ({
+const flowEdgeToProcessEdge = (edge: FlowEdgePayload): ProcessEdge => ({
   id: edge.id,
   source: edge.source,
   target: edge.target,

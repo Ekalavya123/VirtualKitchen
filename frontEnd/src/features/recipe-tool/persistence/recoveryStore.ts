@@ -12,7 +12,7 @@
 
 import type { Process } from '../../../types/process'
 
-export const RECOVERY_SCHEMA_VERSION = 1
+const RECOVERY_SCHEMA_VERSION = 1
 const KEY_PREFIX = 'recipeTool.recovery.v1.'
 
 export type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 'key' | 'length'>

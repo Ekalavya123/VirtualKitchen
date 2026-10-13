@@ -5,13 +5,6 @@
   font-family: var(--flow-font);
 }
 
-.flow-editor-panel {
-  border: 1px solid var(--flow-border);
-  background: var(--flow-surface);
-  border-radius: var(--flow-radius-xl);
-  box-shadow: var(--flow-shadow-card);
-}
-
 .flow-editor-surface {
   border: 1px solid var(--flow-border);
   background: var(--flow-surface);
@@ -45,23 +38,6 @@
   color: var(--flow-text-muted);
 }
 
-.flow-editor-action-button {
-  border: 1px solid var(--flow-border);
-  border-radius: var(--flow-radius-md);
-  background: var(--flow-surface);
-  color: var(--flow-text);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-}
-
-.flow-editor-action-button:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--flow-shadow-card);
-}
-
-
 /* =========================================================
    Recipe flow nodes
    ========================================================= */
@@ -74,7 +50,6 @@
 .condition-node-diamond:hover {
   filter: brightness(1.03);
 }
-
 
 /* =========================================================
    Recipe Home
@@ -464,7 +439,6 @@
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
-
 /* =========================================================
    Search
    ========================================================= */
@@ -495,7 +469,6 @@
     0 0 0 3px rgba(99, 102, 241, 0.12),
     var(--flow-shadow-card);
 }
-
 
 /* =========================================================
    Buttons
@@ -553,7 +526,6 @@
   background: var(--flow-surface-muted);
 }
 
-
 /* =========================================================
    Empty State
    ========================================================= */
@@ -597,7 +569,6 @@
   font-size: 0.8rem;
   line-height: 1.3rem;
 }
-
 
 /* =========================================================
    Create Recipe Modal
@@ -674,7 +645,6 @@
   line-height: 1.2rem;
 }
 
-
 /* =========================================================
    Loading skeleton
    ========================================================= */
@@ -706,7 +676,6 @@
     opacity: 1;
   }
 }
-
 
 /* =========================================================
    Responsive

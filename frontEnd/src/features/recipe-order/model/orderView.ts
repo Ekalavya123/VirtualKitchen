@@ -9,7 +9,7 @@
 
 import type { RecipeOrderStatus } from '../../../types/recipeOrder'
 
-export const RECIPE_ORDER_VIEWS = ['confirm', 'ingredients', 'payment', 'receipt', 'track'] as const
+const RECIPE_ORDER_VIEWS = ['confirm', 'ingredients', 'payment', 'receipt', 'track'] as const
 
 export type RecipeOrderView = (typeof RECIPE_ORDER_VIEWS)[number]
 
@@ -20,7 +20,7 @@ export const recipeOrderPath = (orderId: number, view?: RecipeOrderView) =>
   view ? `/kitchen/recipe-orders/${orderId}/${view}` : `/kitchen/recipe-orders/${orderId}`
 
 /** Statuses whose order has been paid (CONFIRMED and everything the simulation moves it through). */
-export const PAID_STATUSES: readonly RecipeOrderStatus[] = [
+const PAID_STATUSES: readonly RecipeOrderStatus[] = [
   'CONFIRMED', 'PREPARING', 'QUALITY_CHECK', 'OUT_FOR_DELIVERY', 'COMPLETING', 'COMPLETED',
 ]
 
@@ -74,7 +74,7 @@ export const defaultViewForStatus = (status: RecipeOrderStatus): RecipeOrderView
   }
 }
 
-export const isViewAllowed = (status: RecipeOrderStatus, view: RecipeOrderView) =>
+const isViewAllowed = (status: RecipeOrderStatus, view: RecipeOrderView) =>
   allowedViewsForStatus(status).includes(view)
 
 /**
@@ -93,7 +93,7 @@ export const resolveOrderView = (
 // Stepper (Confirm -> Ingredients -> Payment -> Receipt -> Tracking)
 // ---------------------------------------------------------------------------------------------
 
-export const ORDER_STEPS: readonly { view: RecipeOrderView; label: string }[] = [
+const ORDER_STEPS: readonly { view: RecipeOrderView; label: string }[] = [
   { view: 'confirm', label: 'Confirm' },
   { view: 'ingredients', label: 'Ingredients' },
   { view: 'payment', label: 'Payment' },

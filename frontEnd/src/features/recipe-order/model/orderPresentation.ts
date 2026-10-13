@@ -11,7 +11,7 @@ import {
   type RecipeTimelineStep,
 } from '../../recipe-tool/presentation/model/recipePresentation'
 
-export const EMPTY_PRESENTATION: RecipePresentation = { sections: [], ingredients: [], stepCount: 0 }
+const EMPTY_PRESENTATION: RecipePresentation = { sections: [], ingredients: [], stepCount: 0 }
 
 export const buildOrderPresentation = (processes: Process[] | null | undefined): RecipePresentation =>
   processes && processes.length > 0 ? buildRecipePresentation(processes) : EMPTY_PRESENTATION

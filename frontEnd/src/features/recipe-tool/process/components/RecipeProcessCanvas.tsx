@@ -75,7 +75,6 @@ import type { RecipeAiActions } from './AiActionsMenu'
 import { ProcessSidebarActionsProvider, type ProcessSidebarActions } from '../context/ProcessSidebarActionsContext'
 import RecipeVisualizationSlideshow, { type SlideshowStep } from './RecipeVisualizationSlideshow'
 import '../../styles/recipe-tool.css'
-import '../styles/RecipeProcessSidebar.css'
 import '../styles/RecipePropertiesPanel.css'
 import '../styles/RecipeProcessCanvas.css'
 

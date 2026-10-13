@@ -513,11 +513,6 @@ p.ro-muted {
   color: var(--flow-accent-strong);
 }
 
-.ro-btn-danger {
-  background: var(--flow-danger);
-  color: #fff;
-}
-
 .ro-btn-danger-ghost {
   border-color: var(--flow-danger-border);
   background: transparent;
@@ -555,7 +550,6 @@ p.ro-muted {
   color: var(--flow-text-muted);
   cursor: pointer;
 }
-
 
 /* ---------- thumbnails ---------- */
 

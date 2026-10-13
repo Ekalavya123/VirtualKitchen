@@ -35,7 +35,7 @@ const UNIT_LABEL: Record<UnitType, string> = {
   COUNT: 'pcs',
 }
 
-export const formatUnit = (unit: UnitType | string | null | undefined): string =>
+const formatUnit = (unit: UnitType | string | null | undefined): string =>
   unit ? (UNIT_LABEL[unit as UnitType] ?? unit.toLowerCase()) : ''
 
 /** At most two decimals, no trailing zeros: 1.5, 250, 0.33. */
@@ -83,7 +83,7 @@ export const formatAddressLines = (address: DeliveryAddress | null | undefined):
 }
 
 /** The fields the backend requires before an order can be confirmed. */
-export const REQUIRED_ADDRESS_FIELDS = ['recipientName', 'line1', 'city', 'postalCode'] as const
+const REQUIRED_ADDRESS_FIELDS = ['recipientName', 'line1', 'city', 'postalCode'] as const
 
 export type RequiredAddressField = (typeof REQUIRED_ADDRESS_FIELDS)[number]
 

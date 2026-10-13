@@ -490,13 +490,13 @@ const productParts = (label: string, anchorId: string | undefined, source: strin
   return [...(article ? [{ text: article }] : []), { text: label, kind: 'product' as const, anchorId, source }]
 }
 
-export const instructionText = (parts: InstructionPart[]) => parts.map((part) => part.text).join('')
+const instructionText = (parts: InstructionPart[]) => parts.map((part) => part.text).join('')
 
 const GENERIC_MAIN_NAME = /^\s*main(\s+process)?\s*$/i
 
-export const sectionAnchorId = (processId: number) => `recipe-part-${processId}`
+const sectionAnchorId = (processId: number) => `recipe-part-${processId}`
 
-export const itemAnchorId = (processId: number, nodeId: string) => `recipe-item-${processId}-${nodeId}`
+const itemAnchorId = (processId: number, nodeId: string) => `recipe-item-${processId}-${nodeId}`
 
 const sectionTitleOf = (process: Process) => {
   const name = process.name.trim()

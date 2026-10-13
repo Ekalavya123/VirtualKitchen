@@ -1,7 +1,6 @@
 import stepCatalogsData from './stepCatalogs.data.json'
 import {
   buildAliasLookup,
-  getCatalogDisplayName,
   resolveCatalogId,
 } from './catalogSelectionUtils'
 
@@ -25,7 +24,7 @@ export type UnitDefinition = {
   aliases: readonly string[]
 }
 
-export const UNIT_CATEGORIES: readonly UnitCategoryDefinition[] = stepCatalogsData.unitCategories
+const UNIT_CATEGORIES: readonly UnitCategoryDefinition[] = stepCatalogsData.unitCategories
 
 export const UNIT_CATEGORY_ORDER: readonly UnitCategory[] = UNIT_CATEGORIES.map((category) => category.id)
 
@@ -64,9 +63,6 @@ export const getUnitById = (unitId: UnitId): UnitDefinition =>
 export const resolveUnitId = (value: unknown): UnitId | '' => resolveCatalogId(unitAliasLookup, value)
 
 export const isQuantifiableUnit = (unitId: UnitId | '') => !unitId || getUnitById(unitId).quantifiable
-
-export const getUnitDisplayValue = (unitId: UnitId | '', customUnit = '') =>
-  getCatalogDisplayName(CUSTOM_UNIT_ID, unitId, customUnit, (id) => getUnitById(id).shortLabel, '')
 
 /** "200 g", "2 tbsp", "2" (a plain piece count), "to taste" (non-numeric), or "" when there's nothing to show. */
 export const formatQuantityWithUnit = (quantity: number | null | undefined, unitId: UnitId | '') => {

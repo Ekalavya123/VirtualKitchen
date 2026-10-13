@@ -43,7 +43,7 @@ const FALLBACK_ICON = '🥕'
  * part of the catalog regardless of what the API returned. Its units are left empty: the getters
  * offer every unit for it.
  */
-export const CUSTOM_INGREDIENT: IngredientDefinition = {
+const CUSTOM_INGREDIENT: IngredientDefinition = {
   id: CUSTOM_INGREDIENT_ID,
   name: 'Custom Ingredient',
   category: 'other',
@@ -138,5 +138,3 @@ export const findIngredientDefinition = (id: IngredientId): IngredientDefinition
 
 /** An id, name, alias or legacy slug ("onion") -> the entry's id; '' when nothing matches. */
 export const resolveIngredientAlias = (value: unknown): IngredientId | '' => resolveCatalogId(state.aliasLookup, value)
-
-export const getIngredientAliasLookup = (): Map<string, IngredientId> => state.aliasLookup

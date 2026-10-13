@@ -45,9 +45,6 @@ export const getStepActionSchema = (action: StepActionId | ''): StepActionSchema
 export const isStepFieldEnabled = (action: StepActionId | '', field: StepSchemaFieldKey) =>
   getStepActionSchema(action).fields.some((config) => config.key === field)
 
-export const getStepFieldRequirement = (action: StepActionId | '', field: StepSchemaFieldKey): FieldRequirement | null =>
-  getStepActionSchema(action).fields.find((config) => config.key === field)?.requirement ?? null
-
 /** Step-level fields (not per-ingredient) an action may carry — used to drop stale values when the action changes. */
 export const STEP_LEVEL_FIELD_KEYS: readonly StepSchemaFieldKey[] = stepCatalogsData.fieldDefinitions
   .filter((field) => field.scope === 'step')

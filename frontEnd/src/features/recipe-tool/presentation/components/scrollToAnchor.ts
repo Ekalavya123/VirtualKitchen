@@ -6,4 +6,3 @@ export const scrollToAnchor = (anchorId: string) => {
   document.getElementById(anchorId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
-export const stepAnchorId = (stepNumber: number) => `recipe-step-${stepNumber}`

@@ -36,16 +36,6 @@ export function conversionNote(): string | null {
   return display.usdRate ? `1 USD = ${display.symbol}${display.usdRate.toFixed(2)}` : null
 }
 
-/** USD amount → display currency amount (identity when showing USD). */
-export function toDisplayAmount(usd: number): number {
-  return display.usdRate ? usd * display.usdRate : usd
-}
-
-/** Display currency amount → USD, for cost filters the admin types in the display currency. */
-export function fromDisplayAmount(amount: number): number {
-  return display.usdRate ? amount / display.usdRate : amount
-}
-
 /**
  * A stored cost shown in the display currency (USD amounts are converted; any other currency is shown as is).
  * Very small amounts keep enough precision to stay distinguishable from zero.
@@ -109,7 +99,7 @@ export function humanize(value: Maybe<string>): string {
   return words.charAt(0).toUpperCase() + words.slice(1)
 }
 
-export const COST_BASIS_LABELS: Record<string, string> = {
+const COST_BASIS_LABELS: Record<string, string> = {
   PROVIDER_REPORTED: 'Provider reported',
   CALCULATED: 'Calculated',
   ESTIMATED: 'Estimate',

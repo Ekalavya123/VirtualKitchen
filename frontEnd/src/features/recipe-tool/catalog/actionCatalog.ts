@@ -3,8 +3,6 @@ import {
   buildAliasLookup,
   getCatalogDisplayName,
   resolveCatalogId,
-  resolveCatalogInput,
-  type CatalogInputResolution,
 } from './catalogSelectionUtils'
 
 // Ids are plain strings: the catalog (stepCatalogs.data.json, shared with the backend AI
@@ -66,11 +64,11 @@ type RawActionEntry = {
   visualization?: string
 }
 
-export const ACTION_CATEGORIES: readonly ActionCategoryDefinition[] = stepCatalogsData.actionCategories
+const ACTION_CATEGORIES: readonly ActionCategoryDefinition[] = stepCatalogsData.actionCategories
 
 export const ACTION_CATEGORY_ORDER: readonly ActionCategory[] = ACTION_CATEGORIES.map((category) => category.id)
 
-export const STEP_ACTION_CATALOG: readonly StepActionDefinition[] = (
+const STEP_ACTION_CATALOG: readonly StepActionDefinition[] = (
   stepCatalogsData.actions as RawActionEntry[]
 ).map((entry) => ({
   id: entry.id,
@@ -109,9 +107,6 @@ export const ACTIONS_BY_CATEGORY: Readonly<Record<ActionCategory, readonly StepA
 
 export const getActionCategoryLabel = (category: ActionCategory) => categoryById.get(category)?.label ?? category
 
-export const isStepActionId = (value: unknown): value is StepActionId =>
-  typeof value === 'string' && catalogById.has(value)
-
 // Falls back instead of crashing when `id` doesn't resolve (e.g. an action removed/renamed in
 // stepCatalogs.data.json since a process was saved) — this is looked up during render (canvas node
 // theming/labels, the Step Properties panel), so it must never throw.
@@ -147,13 +142,6 @@ export const actionAllowsProcesses = (id: StepActionId | '') => {
 
 export const resolveStepActionId = (value: unknown): StepActionId | '' =>
   resolveCatalogId(actionAliasLookup, value)
-
-/**
- * Resolves free-form action text (e.g. from AI generation or a legacy saved flow) against the
- * catalog. Unrecognized text is preserved as a custom action name instead of being dropped.
- */
-export const resolveActionInput = (value: string): CatalogInputResolution<StepActionId> =>
-  resolveCatalogInput(actionAliasLookup, CUSTOM_ACTION_ID, value)
 
 export const getActionDisplayName = (id: StepActionId | '', customActionName = '') =>
   id

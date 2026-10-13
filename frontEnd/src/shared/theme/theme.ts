@@ -1,7 +1,7 @@
 /**
  * Client-side theme preference storage for the Virtual Kitchen UI.
  */
-export const THEME_KEY = 'virtual-kitchen.theme'
+const THEME_KEY = 'virtual-kitchen.theme'
 
 export type Theme = 'light' | 'dark'
 

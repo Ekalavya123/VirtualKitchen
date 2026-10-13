@@ -2,7 +2,7 @@
  * The Recipe Tool's two views, each its own route (`/kitchen/recipes/:recipeId/tool/:view`):
  * the Recipe Editor (build the process graph) and the Recipe Process (read and cook the recipe).
  */
-export const RECIPE_TOOL_VIEWS = ['editor', 'process'] as const
+const RECIPE_TOOL_VIEWS = ['editor', 'process'] as const
 
 export type RecipeToolView = (typeof RECIPE_TOOL_VIEWS)[number]
 

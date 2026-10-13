@@ -32,8 +32,8 @@ export type ShopResumeState = {
 export type CartStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
 /** Demo prices in INR (the catalog has no prices yet). */
-export const DEFAULT_INGREDIENT_PRICE = 60
-export const DEFAULT_EQUIPMENT_PRICE = 999
+const DEFAULT_INGREDIENT_PRICE = 60
+const DEFAULT_EQUIPMENT_PRICE = 999
 
 /** The shop's price rule: the item's base price when it has one, else the default for its type. */
 export const defaultShopPrice = (itemType: CartItemType, basePrice?: number | null): number =>

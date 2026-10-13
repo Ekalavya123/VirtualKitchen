@@ -5,7 +5,6 @@ import { NotificationProvider } from './shared/components/notifications/Notifica
 import { ConfirmProvider } from './shared/components/confirm/ConfirmProvider'
 import { JobTrackerProvider } from './features/recipe-tool/context/JobTrackerContext'
 import { ThemeProvider } from './shared/theme/ThemeProvider'
-import './App.css'
 
 import './styles/global.css'
 

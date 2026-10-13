@@ -21,9 +21,9 @@ export type PreparationStyleSet = {
   styles: readonly PreparationStyleId[]
 }
 
-export const PREPARATION_STYLE_CATALOG: readonly PreparationStyleDefinition[] = stepCatalogsData.preparationStyles
+const PREPARATION_STYLE_CATALOG: readonly PreparationStyleDefinition[] = stepCatalogsData.preparationStyles
 
-export const PREPARATION_STYLE_SETS: readonly PreparationStyleSet[] = stepCatalogsData.preparationStyleSets
+const PREPARATION_STYLE_SETS: readonly PreparationStyleSet[] = stepCatalogsData.preparationStyleSets
 
 export const CUSTOM_PREPARATION_STYLE_ID: PreparationStyleId = 'custom'
 /** Pre-fill for a newly added Action On ingredient — only used when it's actually allowed for that action/ingredient (see actionSchemaCatalog's `getAllowedPreparationStyles`). */
