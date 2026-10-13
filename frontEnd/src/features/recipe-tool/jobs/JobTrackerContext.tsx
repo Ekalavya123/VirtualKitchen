@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { useNotifications } from '../../../shared/components/notifications/NotificationProvider'
+import { useNotifications } from '../../../shared/components/notifications/notificationContext'
 import { JobTracker, JobTrackerContext } from './jobTracker'
 
 /**

@@ -18,3 +18,19 @@ export function clearStoredToken(): void {
 export function isAuthenticated(): boolean {
   return getStoredToken() !== null
 }
+
+const expiryListeners = new Set<() => void>()
+
+/** Calls `listener` whenever the backend rejects the stored token; returns a function that unsubscribes it. */
+export function onSessionExpired(listener: () => void): () => void {
+  expiryListeners.add(listener)
+  return () => {
+    expiryListeners.delete(listener)
+  }
+}
+
+/** The backend rejected the stored token (HTTP 401): forget it and tell the app, which signs the user out. */
+export function expireSession(): void {
+  clearStoredToken()
+  expiryListeners.forEach((listener) => listener())
+}

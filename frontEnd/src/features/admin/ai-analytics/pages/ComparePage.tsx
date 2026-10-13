@@ -3,7 +3,7 @@ import { AiAnalyticsApi } from '../api/aiAnalyticsApi'
 import type { GroupMetrics } from '../api/aiAnalyticsApi'
 import { BarList } from '../components/charts'
 import { LoadState, MetricsTable } from '../components/common'
-import { useApiData } from '../hooks/useApiData'
+import { useApiData } from '../../../../shared/hooks/useApiData'
 import { displayCurrency, formatCost, formatMs, formatPercent, humanize } from '../model/analyticsFormat'
 import { requestKey } from '../model/analyticsQuery'
 

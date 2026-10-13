@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useMemo, useState } from 'react'
 import { InventoryApi, type InventoryItem } from '../../../api'
 import { formatDate } from '../../../shared/format/date'
 import { formatNumber } from '../../../shared/format/number'
+import { useApiData } from '../../../shared/hooks/useApiData'
 import CatalogItemImage from '../components/CatalogItemImage'
 import './InventoryView.css'
 
@@ -248,57 +249,22 @@ function InventoryLoading() {
   )
 }
 
+const NO_ITEMS: InventoryItem[] = []
+
 export default function InventoryView({
   kitchenId,
   filter,
   onFilterChange,
 }: InventoryViewProps) {
-  const [items, setItems] = useState<InventoryItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
   const [search, setSearch] = useState('')
-
-  const fetchItems = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError('')
-
-      const fetchedItems =
-        await InventoryApi.getInventoryByKitchenId(
-          kitchenId,
-        )
-
-      if (
-        fetchedItems &&
-        Array.isArray(fetchedItems)
-      ) {
-        setItems(fetchedItems)
-      } else {
-        setError(
-          'Unexpected response format from server',
-        )
-      }
-    } catch (err) {
-      console.error(
-        'Error fetching inventory:',
-        err,
-      )
-
-      setError(
-        `Failed to load inventory: ${
-          err instanceof Error
-            ? err.message
-            : 'Unknown error'
-        }`,
-      )
-    } finally {
-      setLoading(false)
-    }
-  }, [kitchenId])
-
-  useEffect(() => {
-    void fetchItems()
-  }, [fetchItems])
+  const inventory = useApiData(`kitchen-${kitchenId}`, async () => {
+    const fetched = await InventoryApi.getInventoryByKitchenId(kitchenId)
+    if (!Array.isArray(fetched)) throw new Error('Unexpected response format from server')
+    return fetched
+  })
+  const items = inventory.data ?? NO_ITEMS
+  const loading = inventory.loading
+  const error = inventory.error ? `Failed to load inventory: ${inventory.error}` : ''
 
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -363,7 +329,7 @@ export default function InventoryView({
           <span>{error}</span>
 
           <button
-            onClick={() => void fetchItems()}
+            onClick={inventory.reload}
             className="inventory-retry-button"
           >
             Try again

@@ -1,496 +1,81 @@
-import { useEffect, useState } from 'react'
-import {
-  BrowserRouter,
-  Navigate,
-  Route,
-  Routes,
-  useLocation,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from 'react-router-dom'
-import Auth from '../features/auth/Auth'
-import KitchenLayout from '../features/kitchen/layout/KitchenLayout'
-import InventoryView from '../features/kitchen/inventory/InventoryView'
-import ShopView from '../features/kitchen/shop/ShopView'
-import OrderHistoryView from '../features/kitchen/orders/OrderHistoryView'
-import RecipeLibraryPage from '../features/recipes/RecipeLibraryPage'
-import { isRecipeToolView, RecipeProcessEditor, RecipeProcessListPage, RecipeSessionProvider, RecipeToolPage, recipeToolPath } from '../features/recipe-tool'
-import IngredientCatalogGate from '../shared/catalog/IngredientCatalogGate'
-import { RecipeOrderPage, recipeOrderPath, useStartRecipeOrder } from '../features/recipe-order'
-import HomePage from '../features/home/HomePage'
+import { useState, type ReactNode } from 'react'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import AiAnalyticsPage from '../features/admin/ai-analytics/AiAnalyticsPage'
-import type { User } from '../types/User'
-import type { RecipeProcessBreadcrumbEntry } from '../types/recipe'
-import { AuthenticationApi, KitchenApi, RecipeOrderApi } from '../api'
-import { clearStoredToken, isAuthenticated } from '../api/authToken'
-import { clearAllDrafts } from '../shared/drafts/draftStore'
-import type { ShopResumeState } from '../shared/cart/cartStorage'
-import type { Kitchen } from '../types/kitchen'
+import Auth from '../features/auth/Auth'
+import InventoryView from '../features/kitchen/inventory/InventoryView'
+import KitchenLayout from '../features/kitchen/layout/KitchenLayout'
+import OrderHistoryView from '../features/kitchen/orders/OrderHistoryView'
+import IngredientCatalogGate from '../shared/catalog/IngredientCatalogGate'
+import HomeRoute from './routes/HomeRoute'
+import RecipeOrderRoute from './routes/RecipeOrderRoute'
+import { RecipeProcessEditorRoute, RecipeProcessListRoute, RecipesRoute, RecipeToolRoute } from './routes/RecipeRoutes'
+import ShopRoute from './routes/ShopRoute'
+import { SignedInContext, useSignedIn, type SignedInSession } from './session/signedIn'
+import { useAppSession } from './session/useAppSession'
 
-function ShopRoute({ userId }: { userId: number }) {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const [searchParams] = useSearchParams()
-
-  // `?resumeRecipeOrder=<id>`: shopping for a recipe order's missing ingredients.
-  const resumeParam = Number(searchParams.get('resumeRecipeOrder'))
-  const resumeOrderId = Number.isInteger(resumeParam) && resumeParam > 0 ? resumeParam : null
-  const stateCode = (location.state as ShopResumeState | null)?.recipeOrderCode
-  const [fetchedCode, setFetchedCode] = useState<{ orderId: number; code: string } | null>(null)
-
-  useEffect(() => {
-    // The code normally comes with the navigation; after a reload it's looked up.
-    if (resumeOrderId == null || stateCode) return
-    let cancelled = false
-    RecipeOrderApi.get(resumeOrderId)
-      .then((order) => {
-        if (!cancelled) setFetchedCode({ orderId: resumeOrderId, code: order.orderCode })
-      })
-      .catch(() => {
-        // The banner falls back to the order id.
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [resumeOrderId, stateCode])
-
-  const resumeOrderCode = stateCode ?? (fetchedCode?.orderId === resumeOrderId ? fetchedCode.code : null)
-
+/** The kitchen area: only for a signed-in user (else back to the landing page), inside the kitchen layout. */
+function SignedInArea({ session, onLogout }: { session: SignedInSession | null; onLogout: () => void }) {
+  if (!session) return <Navigate to="/" replace />
   return (
-    <ShopView
-      // Remount when the resume target changes, so the cart is re-read from storage.
-      key={resumeOrderId ?? 'shop'}
-      userId={userId}
-      resumeRecipeOrder={resumeOrderId != null ? { orderId: resumeOrderId, orderCode: resumeOrderCode } : undefined}
-      // Back to the order's ingredient check (which re-checks stock) instead of the order list.
-      onOrderPlaced={() => navigate(resumeOrderId != null ? recipeOrderPath(resumeOrderId, 'ingredients') : '/kitchen/orders')}
-    />
+    <SignedInContext.Provider value={session}>
+      <KitchenLayout user={session.user} kitchen={session.kitchen} onLogout={onLogout} />
+    </SignedInContext.Provider>
   )
 }
 
-function RecipeOrderRoute({ userId }: { userId: number }) {
-  const { orderId: orderIdParam, view } = useParams()
-  const orderId = Number(orderIdParam)
-
-  if (!Number.isInteger(orderId) || orderId <= 0) {
-    return (
-      <Navigate
-        to="/kitchen/orders"
-        replace
-      />
-    )
-  }
-
-  // RecipeOrderPage itself validates `view` against the order's status (and redirects).
-  return (
-    <RecipeOrderPage
-      key={orderId}
-      orderId={orderId}
-      view={view}
-      userId={userId}
-    />
-  )
+/** Admin-only pages; the backend enforces the ADMIN role on every call too. */
+function AdminOnly({ children }: { children: ReactNode }) {
+  const { user } = useSignedIn()
+  return user.userType === 'ADMIN' ? children : <Navigate to="/kitchen/inventory" replace />
 }
 
-function RecipesRoute({ userId }: { userId: number }) {
-  const navigate = useNavigate()
+type InventoryFilter = 'ingredients' | 'equipment'
 
-  // Opening (or just having created) a recipe goes straight to the Recipe Tool.
-  return (
-    <RecipeLibraryPage
-      userId={userId}
-      onCreateRecipe={(recipeId) => navigate(recipeToolPath(recipeId))}
-    />
-  )
+function InventoryRoute({ filter, onFilterChange }: { filter: InventoryFilter; onFilterChange: (filter: InventoryFilter) => void }) {
+  const { kitchen } = useSignedIn()
+  return <InventoryView kitchenId={kitchen.id} filter={filter} onFilterChange={onFilterChange} />
 }
 
-function RecipeToolRoute({ currentUserId }: { currentUserId: number }) {
-  const navigate = useNavigate()
-  const { startOrder, orderingRecipeId } = useStartRecipeOrder()
-  const { recipeId: recipeIdParam, view } = useParams()
-  const recipeId = Number(recipeIdParam)
-
-  if (!Number.isFinite(recipeId)) {
-    return (
-      <Navigate
-        to="/kitchen/recipes"
-        replace
-      />
-    )
-  }
-
-  // An unknown view segment falls back to the bare tool URL, which picks the default view.
-  if (view !== undefined && !isRecipeToolView(view)) {
-    return (
-      <Navigate
-        to={recipeToolPath(recipeId)}
-        replace
-      />
-    )
-  }
-
-  return (
-    <RecipeToolPage
-      // Fresh mount per recipe (fresh initial state) rather than resetting in place — mirrors
-      // RecipeProcessEditorRoute's own `key` below.
-      key={recipeId}
-      recipeId={recipeId}
-      currentUserId={currentUserId}
-      view={view}
-      onBack={() => navigate('/kitchen/recipes')}
-      onOrderRecipe={(id, servings) => void startOrder(id, servings)}
-      orderingRecipeId={orderingRecipeId}
-    />
-  )
-}
-
-type RecipeProcessRouteState = {
-  /** Ancestors from the recipe's process list down to this process's parent, root-first. */
-  breadcrumb?: RecipeProcessBreadcrumbEntry[]
-}
-
-function RecipeProcessListRoute({ currentUserId }: { currentUserId: number }) {
-  const navigate = useNavigate()
-  const { recipeId: recipeIdParam } = useParams()
-  const recipeId = Number(recipeIdParam)
-
-  if (!Number.isFinite(recipeId)) {
-    return (
-      <Navigate
-        to="/kitchen/recipes"
-        replace
-      />
-    )
-  }
-
-  return (
-    <RecipeProcessListPage
-      recipeId={recipeId}
-      currentUserId={currentUserId}
-      onOpenProcess={(processId) => navigate(`/kitchen/recipes/${recipeId}/process/${processId}`)}
-      onBack={() => navigate(recipeToolPath(recipeId, 'editor'))}
-    />
-  )
-}
-
-function RecipeProcessEditorRoute() {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const { recipeId: recipeIdParam, processId: processIdParam } = useParams()
-  const recipeId = Number(recipeIdParam)
-  const processId = Number(processIdParam)
-
-  if (!Number.isFinite(recipeId) || !Number.isFinite(processId)) {
-    return (
-      <Navigate
-        to="/kitchen/recipes"
-        replace
-      />
-    )
-  }
-
-  // The navigation trail lives here, as router state, rather than in RecipeProcessCanvas or any app-level
-  // store — "normal route/navigation state" per the brief. Each entry is an ancestor process this
-  // editor was reached through; the process currently open is not included (RecipeProcessCanvas already
-  // knows its own name once loaded).
-  const breadcrumb = (location.state as RecipeProcessRouteState | null)?.breadcrumb ?? []
-
-  const goToProcess = (targetProcessId: number, nextBreadcrumb: RecipeProcessBreadcrumbEntry[]) => {
-    navigate(`/kitchen/recipes/${recipeId}/process/${targetProcessId}`, {
-      state: { breadcrumb: nextBreadcrumb } satisfies RecipeProcessRouteState,
-    })
-  }
-
-  const goToList = () => navigate(`/kitchen/recipes/${recipeId}/processes`)
-
-  const goBack = () => {
-    if (breadcrumb.length === 0) {
-      goToList()
-      return
-    }
-    const parent = breadcrumb[breadcrumb.length - 1]
-    goToProcess(parent.processId, breadcrumb.slice(0, -1))
-  }
-
-  return (
-    // Keyed only by recipeId (not processId): navigating into/out of a subprocess here is the same
-    // "one recipe, one editing session" model as the embedded Recipe Tool tab — RecipeProcessCanvas itself
-    // handles switching which process is displayed without losing another process's unsaved edits or
-    // re-fetching what's already loaded. A different recipe id (a real route change) still gets a
-    // fresh session; the same recipeId across a process-to-process navigation does not remount.
-    <RecipeSessionProvider key={recipeId} recipeId={recipeId}>
-      <RecipeProcessEditor
-        recipeId={recipeId}
-        processId={processId}
-        breadcrumbAncestors={breadcrumb}
-        onNavigateToList={goToList}
-        onNavigateToAncestor={(index) => goToProcess(breadcrumb[index].processId, breadcrumb.slice(0, index))}
-        onOpenSubprocess={(subprocessId, currentProcessName) =>
-          goToProcess(subprocessId, [...breadcrumb, { processId, name: currentProcessName }])
-        }
-        onBack={goBack}
-      />
-    </RecipeSessionProvider>
-  )
-}
-
-function HomeRoute({onLoginSuccess,}: { onLoginSuccess: (user: User, kitchen: Kitchen) => void}) {
-  const navigate = useNavigate()
-  const [showAuthModal, setShowAuthModal] = useState(false)
-
-  const handleAuthSuccess = (user: User, kitchen: Kitchen) => {
-    onLoginSuccess(user, kitchen)
-    setShowAuthModal(false)
-    navigate('/kitchen/inventory')
-  }
-
-  const hasSession = isAuthenticated()
-
-  return (
-    <>
-      <HomePage
-        onTryIt={() => {
-          hasSession ? navigate('/kitchen/recipes') : setShowAuthModal(true)
-        }}
-        onLogin={() => setShowAuthModal(true)}
-      />
-
-      {showAuthModal && (
-        <Auth
-          onLoginSuccess={handleAuthSuccess}
-          onClose={() => setShowAuthModal(false)}
-        />
-      )}
-    </>
-  )
+function OrdersRoute() {
+  const { user } = useSignedIn()
+  return <OrderHistoryView userId={user.id} />
 }
 
 function App() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null)
-  const [currentKitchen, setCurrentKitchen] = useState<Kitchen | null>(null)
-  const [isRestoringSession, setIsRestoringSession] = useState(true)
-  const [inventoryFilter, setInventoryFilter] = useState<'ingredients' | 'equipment'>('ingredients')
+  const { session, restoring, login, logout } = useAppSession()
+  // Kept here so the inventory tab remembers its filter while the user visits other kitchen pages.
+  const [inventoryFilter, setInventoryFilter] = useState<InventoryFilter>('ingredients')
 
-  useEffect(() => {
-    clearAllDrafts(undefined, { onlyExpired: true })
-
-    const restoreSession = async () => {
-      if (!isAuthenticated()) {
-        setIsRestoringSession(false)
-        return
-      }
-
-      try {
-        const user = await AuthenticationApi.me()
-        const kitchensData = await KitchenApi.getKitchenByOwnerId(user.id)
-        const kitchens = Array.isArray(kitchensData) ? kitchensData : [kitchensData]
-        const kitchen = kitchens[0]
-
-        if (!kitchen) {
-          throw new Error('No kitchen found for this user')
-        }
-
-        setCurrentUser(user)
-        setCurrentKitchen(kitchen)
-      } catch (error) {
-        console.error('Session restore failed:', error)
-        clearStoredToken()
-        setCurrentUser(null)
-        setCurrentKitchen(null)
-      } finally {
-        setIsRestoringSession(false)
-      }
-    }
-
-    void restoreSession()
-  }, [])
-
-  const handleLoginSuccess = (user: User, kitchen: Kitchen) => {
-    setCurrentUser(user)
-    setCurrentKitchen(kitchen)
-  }
-
-  const handleLogout = () => {
-    clearStoredToken()
-    // Unsent drafts may hold recipe content; the next person on this browser shouldn't see them.
-    clearAllDrafts()
-    setCurrentUser(null)
-    setCurrentKitchen(null)
-  }
-
-  if (isRestoringSession) {
+  if (restoring) {
     return null
   }
-
-  const isLoggedIn = Boolean(
-    currentUser && currentKitchen,
-  )
 
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<HomeRoute onLoginSuccess={handleLoginSuccess} />} />
-        <Route
-          path="/auth"
-          element={
-            isLoggedIn ? (
-              <Navigate
-                to="/kitchen/inventory"
-                replace
-              />
-            ) : (
-              <Auth onLoginSuccess={handleLoginSuccess} />
-            )
-          }
-        />
+        <Route path="/" element={<HomeRoute signedIn={session != null} onLoginSuccess={login} />} />
+        <Route path="/auth" element={session ? <Navigate to="/kitchen/inventory" replace /> : <Auth onLoginSuccess={login} />} />
 
-        <Route
-          path="/kitchen"
-          element={
-            isLoggedIn && currentUser && currentKitchen ? (
-              <KitchenLayout
-                user={currentUser}
-                kitchen={currentKitchen}
-                onLogout={handleLogout}
-              />
-            ) : (
-              <Navigate
-                to="/"
-                replace
-              />
-            )
-          }
-        >
-          <Route
-            index
-            element={
-              <Navigate
-                to="inventory"
-                replace
-              />
-            }
-          />
+        <Route path="/kitchen" element={<SignedInArea session={session} onLogout={logout} />}>
+          <Route index element={<Navigate to="inventory" replace />} />
+          <Route path="inventory" element={<InventoryRoute filter={inventoryFilter} onFilterChange={setInventoryFilter} />} />
+          <Route path="shop" element={<ShopRoute />} />
+          <Route path="orders" element={<OrdersRoute />} />
 
-          <Route
-            path="inventory"
-            element={
-              currentKitchen ? (
-                <InventoryView
-                  kitchenId={currentKitchen.id}
-                  filter={inventoryFilter}
-                  onFilterChange={setInventoryFilter}
-                />
-              ) : null
-            }
-          />
-
-          <Route
-            path="shop"
-            element={
-              currentUser ? (
-                <ShopRoute userId={currentUser.id} />
-              ) : null
-            }
-          />
-
-          <Route
-            path="recipes"
-            element={
-              currentUser ? (
-                <RecipesRoute userId={currentUser.id} />
-              ) : null
-            }
-          />
-
-          <Route
-            path="recipes/:recipeId"
-            // Old links to a recipe (this path used to open a separate editor) land in the Recipe Tool.
-            element={<Navigate to="tool" replace />}
-          />
-
-          {/* Recipe Tool: the Recipe Editor (tool/editor) and the Recipe Process (tool/process). */}
-          <Route
-            path="recipes/:recipeId/tool/:view?"
-            element={
-              currentUser ? (
-                <IngredientCatalogGate>
-                  <RecipeToolRoute currentUserId={currentUser.id} />
-                </IngredientCatalogGate>
-              ) : null
-            }
-          />
-          <Route
-            path="recipes/:recipeId/processes"
-            element={
-              currentUser ? (
-                <IngredientCatalogGate>
-                  <RecipeProcessListRoute currentUserId={currentUser.id} />
-                </IngredientCatalogGate>
-              ) : null
-            }
-          />
-          <Route
-            path="recipes/:recipeId/process/:processId"
-            element={
-              <IngredientCatalogGate>
-                <RecipeProcessEditorRoute />
-              </IngredientCatalogGate>
-            }
-          />
-
-          {/* Admin AI cost & efficiency analytics; the backend enforces the ADMIN role on every call too. */}
-          <Route
-            path="admin/ai-analytics/:tab?"
-            element={
-              currentUser?.userType === 'ADMIN' ? (
-                <AiAnalyticsPage />
-              ) : (
-                <Navigate
-                  to="/kitchen/inventory"
-                  replace
-                />
-              )
-            }
-          />
+          <Route path="recipes" element={<RecipesRoute />} />
+          {/* Old links to a recipe (this path used to open a separate editor) land in the Recipe Tool. */}
+          <Route path="recipes/:recipeId" element={<Navigate to="tool" replace />} />
+          <Route path="recipes/:recipeId/tool/:view?" element={<IngredientCatalogGate><RecipeToolRoute /></IngredientCatalogGate>} />
+          <Route path="recipes/:recipeId/processes" element={<IngredientCatalogGate><RecipeProcessListRoute /></IngredientCatalogGate>} />
+          <Route path="recipes/:recipeId/process/:processId" element={<IngredientCatalogGate><RecipeProcessEditorRoute /></IngredientCatalogGate>} />
 
           {/* Recipe orders: confirm -> ingredients -> payment -> receipt -> track (see features/recipe-order). */}
-          <Route
-            path="recipe-orders/:orderId/:view?"
-            element={
-              currentUser ? (
-                <IngredientCatalogGate>
-                  <RecipeOrderRoute userId={currentUser.id} />
-                </IngredientCatalogGate>
-              ) : null
-            }
-          />
+          <Route path="recipe-orders/:orderId/:view?" element={<IngredientCatalogGate><RecipeOrderRoute /></IngredientCatalogGate>} />
 
-          <Route
-            path="orders"
-            element={
-              currentUser ? (
-                <OrderHistoryView
-                  userId={currentUser.id}
-                />
-              ) : null
-            }
-          />
+          <Route path="admin/ai-analytics/:tab?" element={<AdminOnly><AiAnalyticsPage /></AdminOnly>} />
         </Route>
 
-        <Route
-          path="*"
-          element={
-            <Navigate
-              to={
-                isLoggedIn
-                  ? '/kitchen/inventory'
-                  : '/auth'
-              }
-              replace
-            />
-          }
-        />
+        <Route path="*" element={<Navigate to={session ? '/kitchen/inventory' : '/auth'} replace />} />
       </Routes>
     </BrowserRouter>
   )

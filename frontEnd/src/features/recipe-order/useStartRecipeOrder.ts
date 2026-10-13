@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { RecipeDetailApi, RecipeOrderApi } from '../../api'
-import { useNotifications } from '../../shared/components/notifications/NotificationProvider'
+import { useNotifications } from '../../shared/components/notifications/notificationContext'
 import { recipeOrderPath } from './model/orderView'
 import { errorMessage } from '../../shared/errors'
 

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { AiAnalyticsApi } from '../api/aiAnalyticsApi'
 import type { BackfillRun } from '../api/aiAnalyticsApi'
 import { LoadState, Stat } from '../components/common'
-import { useApiData } from '../hooks/useApiData'
+import { useApiData } from '../../../../shared/hooks/useApiData'
 import { MISSING, formatCost, formatDateTime, humanize } from '../model/analyticsFormat'
 import { errorMessage } from '../../../../shared/errors'
 

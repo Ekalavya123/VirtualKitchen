@@ -3,7 +3,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import type { User } from '../../../types/User'
 import logoIcon from '../../../assets/kitchen/blackShadowChef.png'
 import recipesIcon from '../../../assets/kitchen/recipeIcon.png'
-import { useTheme } from '../../../shared/theme/ThemeProvider'
+import { useTheme } from '../../../shared/theme/themeContext'
 import './KitchenNavbar.css'
 import type { Kitchen } from '../../../types/kitchen'
 

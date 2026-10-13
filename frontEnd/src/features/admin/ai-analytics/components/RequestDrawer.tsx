@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { AiAnalyticsApi } from '../api/aiAnalyticsApi'
 import type { Attempt } from '../api/aiAnalyticsApi'
-import { useApiData } from '../hooks/useApiData'
+import { useApiData } from '../../../../shared/hooks/useApiData'
 import {
   costBasisLabel,
   costBreakdown,

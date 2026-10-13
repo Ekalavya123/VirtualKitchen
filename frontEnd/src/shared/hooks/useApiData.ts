@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { errorMessage } from '../../../../shared/errors'
+import { errorMessage } from '../errors'
 
 interface State<T> {
   key: string | null
@@ -10,7 +10,8 @@ interface State<T> {
 /**
  * Loads data for a request key: whenever {@code key} changes the request runs again, stale responses are
  * dropped, and {@code loading} is derived (true until the response for the current key arrives).
- * {@code reload} re-runs the current request.
+ * {@code reload} re-runs the current request; {@code mutate} applies a local change to the loaded data (e.g.
+ * after a successful update), so the screen doesn't have to fetch it again.
  */
 export function useApiData<T>(key: string | null, load: () => Promise<T>) {
   const [state, setState] = useState<State<T>>({ key: null, data: null, error: null })
@@ -40,11 +41,15 @@ export function useApiData<T>(key: string | null, load: () => Promise<T>) {
   }, [requestKey])
 
   const reload = useCallback(() => setReloadCount((count) => count + 1), [])
+  const mutate = useCallback((update: (data: T) => T) => {
+    setState((previous) => (previous.data === null ? previous : { ...previous, data: update(previous.data) }))
+  }, [])
 
   return {
     data: state.data,
     error: state.key === requestKey ? state.error : null,
     loading: requestKey !== null && state.key !== requestKey,
     reload,
+    mutate,
   }
 }

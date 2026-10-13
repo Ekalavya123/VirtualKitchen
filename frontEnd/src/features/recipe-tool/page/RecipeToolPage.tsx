@@ -10,7 +10,7 @@ import RecipeViewPage from '../view/components/RecipeViewPage'
 import { recipeToolPath, type RecipeToolView } from '../recipeToolRoutes'
 import EditRecipeDetailsModal, { type RecipeDetailsDraft } from './EditRecipeDetailsModal'
 import { useConfirm } from '../../../shared/components/confirm/confirmContext'
-import { useNotifications } from '../../../shared/components/notifications/NotificationProvider'
+import { useNotifications } from '../../../shared/components/notifications/notificationContext'
 import { forgetRecipeLocalState } from '../session/forgetRecipeLocalState'
 import { errorMessage } from '../../../shared/errors'
 

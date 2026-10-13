@@ -4,7 +4,7 @@
  */
 
 import { API_CONFIG } from './config'
-import { getStoredToken } from './authToken'
+import { expireSession, getStoredToken } from './authToken'
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean>
@@ -71,26 +71,28 @@ async function request<T>(
     externalSignal.addEventListener('abort', () => controller.abort(externalSignal.reason), { once: true })
   }
 
+  const timedOut = new DOMException('Request timed out', 'TimeoutError')
   const timeoutId = timeout > 0
-    ? window.setTimeout(() => controller.abort(new DOMException('Request timed out', 'AbortError')), timeout)
+    ? window.setTimeout(() => controller.abort(timedOut), timeout)
     : null
+  const token = getStoredToken()
 
   let response: Response
 
   try {
     response = await fetch(url, {
-      ...defaultFetchOptions,
       ...fetchOptions,
       signal: controller.signal,
       headers: {
         ...API_CONFIG.headers,
-        ...authHeader(),
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...fetchOptions.headers,
       },
     })
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('Request timed out. Please try again.')
+    // Only our own timeout is reported as one; a caller's abort is passed through for it to recognise.
+    if (controller.signal.reason === timedOut) {
+      throw new Error('Request timed out. Please try again.', { cause: error })
     }
 
     throw error
@@ -98,6 +100,10 @@ async function request<T>(
     if (timeoutId != null) {
       window.clearTimeout(timeoutId)
     }
+  }
+
+  if (response.status === 401 && token) {
+    expireSession()
   }
 
   if (!response.ok) {
@@ -109,7 +115,7 @@ async function request<T>(
     )
   }
 
-  const raw = await response.json().catch(() => (null as any))
+  const raw: unknown = await response.json().catch(() => null)
 
   // Support two response shapes:
   // 1) API wrapper: { success: boolean, message?: string, data: T }
@@ -145,7 +151,7 @@ export async function apiPost<T>(
   return request<T>(endpoint, {
     ...options,
     method: 'POST',
-    body: body ? JSON.stringify(body) : undefined,
+    body: body == null ? undefined : JSON.stringify(body),
   })
 }
 
@@ -160,7 +166,7 @@ export async function apiPut<T>(
   return request<T>(endpoint, {
     ...options,
     method: 'PUT',
-    body: body ? JSON.stringify(body) : undefined,
+    body: body == null ? undefined : JSON.stringify(body),
   })
 }
 
@@ -177,15 +183,4 @@ export async function apiDelete<T>(
   })
 }
 
-const defaultFetchOptions: RequestInit = {
-  headers: API_CONFIG.headers,
-}
 
-/**
- * Attaches the stored session token (if any) as a Bearer Authorization header.
- */
-function authHeader(): Record<string, string> {
-  const token = getStoredToken()
-
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}

@@ -65,7 +65,7 @@ import { RecipeProcessGraphProvider } from '../context/RecipeProcessGraphContext
 import { useRecipeSession, type RecipeSessionContextValue } from '../../session/RecipeSessionContext'
 import type { Process } from '../../../../types/process'
 import type { RecipeProcessBreadcrumbEntry, RecipeProcessVisualizationStepResult } from '../../../../types/recipe'
-import { useNotifications } from '../../../../shared/components/notifications/NotificationProvider'
+import { useNotifications } from '../../../../shared/components/notifications/notificationContext'
 import { useConfirm, type ConfirmOptions } from '../../../../shared/components/confirm/confirmContext'
 import { isTrackedJobActive, visualsJobKey } from '../../jobs/jobTracker'
 import { useJobTracker, useTrackedJob } from '../../jobs/useJobTracker'

@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useRef, useState, type ReactNode } from 'react'
+import { NotificationContext } from './notificationContext'
 import './NotificationProvider.css'
 
 type NotificationType = 'success' | 'error' | 'info'
@@ -9,16 +10,7 @@ type NotificationItem = {
   type: NotificationType
 }
 
-type NotificationContextValue = {
-  notifySuccess: (message: string) => void
-  notifyError: (message: string) => void
-  /** For neutral/informational notices — e.g. "using the standard model, premium credits are exhausted" — that are neither a success nor an error. */
-  notifyInfo: (message: string) => void
-}
-
 const AUTO_DISMISS_MS = 4000
-
-const NotificationContext = createContext<NotificationContextValue | null>(null)
 
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
@@ -67,14 +59,4 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       </div>
     </NotificationContext.Provider>
   )
-}
-
-export function useNotifications() {
-  const context = useContext(NotificationContext)
-
-  if (!context) {
-    throw new Error('useNotifications must be used within a NotificationProvider')
-  }
-
-  return context
 }
