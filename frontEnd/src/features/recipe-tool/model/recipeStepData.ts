@@ -316,7 +316,7 @@ export const getRecipeStepTemperatureLabel = (step: RecipeStepFields) =>
 
 /**
  * Applies a single unprefixed step field update (e.g. `action`, `temperature`) to a
- * RecipeStepNodeData value (the STEP counterpart of recipeProcessCanvas.helpers.ts's
+ * RecipeStepNodeData value (the STEP counterpart of adapters/canvasFlow.ts's
  * `applyConditionFieldUpdate`) — `actionOn` itself is updated separately (see
  * `withRecipeStepActionOnIngredients`/`withRecipeStepActionOnProcesses` below), not through this
  * generic field setter, since it's a structured list rather than a scalar.

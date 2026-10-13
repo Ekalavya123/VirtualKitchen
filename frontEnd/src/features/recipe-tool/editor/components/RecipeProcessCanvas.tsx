@@ -33,17 +33,18 @@ import {
 import {
   createConditionNode,
   createFlowDataPayload,
+  flowToProcess,
   getFlowEdgePresentation,
   normalizeFlowEdges,
   normalizeFlowNode,
   applyConditionFieldUpdate,
-} from './recipeProcessCanvas.helpers'
+} from '../adapters/canvasFlow'
 import { normalizeConditionNodeData } from '../../model/recipeConditionData'
 import { type FlowViewport } from '../model/canvasGraph'
 import { ROW_LAYOUT, arrangeRows, findLoopEdges, getHandleSides, planRows, type RowPlan } from '../model/processLayout'
 import { findFreePosition } from '../adapters/recipeProcessEditGraph'
 import { getProcessReadingOrder } from '../../model/processReadingOrder'
-import { buildStepOutputGraph, getStepOutputLabel } from '../../model/recipeStepOutputs'
+import { buildStepOutputGraph } from '../../model/recipeStepOutputs'
 import {
   buildProcessUpdateRequest,
   createRecipeStepNode,
@@ -51,9 +52,6 @@ import {
 } from '../adapters/recipeProcessCanvasAdapter'
 import {
   applyRecipeStepFieldUpdate,
-  getActionOnIngredientDisplayName,
-  getRecipeStepDurationLabel,
-  getRecipeStepTemperatureLabel,
   normalizeRecipeStepNodeData,
   withRecipeStepActionOnIngredients,
   withRecipeStepActionOnProcesses,
@@ -66,23 +64,25 @@ import { useRecipeSession, type RecipeSessionContextValue } from '../../session/
 import type { Process } from '../../../../types/process'
 import type { RecipeProcessBreadcrumbEntry, RecipeProcessVisualizationStepResult } from '../../../../types/recipe'
 import { useNotifications } from '../../../../shared/components/notifications/notificationContext'
-import { useConfirm, type ConfirmOptions } from '../../../../shared/components/confirm/confirmContext'
-import { isTrackedJobActive, visualsJobKey } from '../../jobs/jobTracker'
-import { useJobTracker, useTrackedJob } from '../../jobs/useJobTracker'
+import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
 import RecipeConditionPanel from './RecipeConditionPanel'
 import RecipeStepPanel from './RecipeStepPanel'
 import RecipeProcessTopBar, { type NodeSelectorOption } from './RecipeProcessTopBar'
 import AddNodeMenu from './AddNodeMenu'
 import type { RecipeAiActions } from './AiActionsMenu'
 import { ProcessSidebarActionsProvider, type ProcessSidebarActions } from '../context/ProcessSidebarActionsContext'
-import RecipeVisualizationSlideshow, { type SlideshowStep } from '../../walkthrough/RecipeVisualizationSlideshow'
+import RecipeVisualizationSlideshow from '../../walkthrough/RecipeVisualizationSlideshow'
+import ExportProcessModal from './ExportProcessModal'
+import { startPanelResize } from './panelResize'
+import { useCanvasShortcuts } from '../hooks/useCanvasShortcuts'
+import { useProcessVisuals } from '../hooks/useProcessVisuals'
+import { buildCanvasSlideshowSteps } from '../model/canvasSlideshow'
+import { describeNodeDeletion } from '../model/nodeDeletion'
 import { errorMessage } from '../../../../shared/errors'
 import '../../../../styles/flow-ui.css'
 import '../../styles/RecipePropertiesPanel.css'
 import '../styles/RecipeProcessCanvas.css'
 import '../../styles/modals.css'
-
-type GenerateVisualsStatus = { type: 'success' | 'error' | 'info'; text: string }
 
 type RecipeProcessCanvasProps = {
   recipeId: number
@@ -276,28 +276,6 @@ function RecipeProcessCanvasContent({
     setNarrationReady(session.saveNow().then((result) => result.ok, () => false))
     setShowSlideshow(true)
   }, [session])
-  // Generate Visuals state lives in the app-level JobTracker (keyed by process), so it's still
-  // correct after this instance remounts or the page reloads; only the start request is local.
-  const jobTracker = useJobTracker()
-  const visualsJob = useTrackedJob(visualsJobKey(processId))
-  const [startingVisuals, setStartingVisuals] = useState(false)
-  const generatingVisuals = startingVisuals || isTrackedJobActive(visualsJob)
-  const [generateVisualsMessage, setGenerateVisualsMessage] = useState<GenerateVisualsStatus | null>(null)
-
-  // Guards generateVisuals below against setState-after-unmount — this instance remounts fresh
-  // per process (key={processId} on the outer RecipeProcessCanvas), so a start request still in
-  // flight when switching processes must not touch this instance's state once it's gone. Reset on every
-  // (re-)mount rather than declared once: React StrictMode's
-  // dev-only mount->cleanup->mount cycle would otherwise run the cleanup once during the synthetic
-  // first "unmount" and permanently latch this to true even though the component is actually mounted.
-  const unmountedRef = useRef(false)
-  useEffect(() => {
-    unmountedRef.current = false
-    return () => {
-      unmountedRef.current = true
-    }
-  }, [])
-
   const reactFlowInstance = useRef<ReactFlowInstance<Node, Edge> | null>(null)
   const currentViewportRef = useRef<FlowViewport | null>(initialFlowData.viewport ?? null)
   const sidebarRef = useRef<HTMLDivElement | null>(null)
@@ -595,8 +573,7 @@ function RecipeProcessCanvasContent({
     const current = nodesRef.current
     if (!wrapper || current.length === 0) return
     const plan = planRows(wrapper.clientWidth - 2 * ROW_LAYOUT.padding)
-    const { nodes: processNodes, edges: processEdges } = buildProcessUpdateRequest('', undefined, createFlowDataPayload(current, edgesRef.current))
-    const order = getProcessReadingOrder({ ...process, nodes: processNodes ?? [], edges: processEdges ?? [] }).map((node) => node.id)
+    const order = getProcessReadingOrder(flowToProcess(process, current, edgesRef.current)).map((node) => node.id)
     if (recordUndo) pushHistorySnapshot()
     const pending = { plan, order }
     pendingArrangeRef.current = pending
@@ -651,36 +628,8 @@ function RecipeProcessCanvasContent({
   const confirmingDeleteRef = useRef(false)
   const requestDeleteNode = useCallback(async (id: string) => {
     if (confirmingDeleteRef.current) return
-    const current = nodesRef.current
-    const node = current.find((candidate) => candidate.id === id)
-    if (!node) return
-    const connections = edgesRef.current.filter((edge) => edge.source === id || edge.target === id).length
-    const connectionsText = connections > 0 ? ` and its ${connections} connection${connections === 1 ? '' : 's'}` : ''
-
-    let options: ConfirmOptions
-    if (isRecipeStepNode(node)) {
-      const stepNumber = current.filter(isRecipeStepNode).indexOf(node) + 1
-      const title = normalizeRecipeStepNodeData(node.data).title || 'Untitled step'
-      // Other steps using this step's output lose that reference (see deleteNode).
-      const usedBy = current.filter((other) => other.id !== id && isRecipeStepNode(other)
-        && normalizeRecipeStepNodeData(other.data).step.actionOn.steps.some((entry) => entry.stepId === id)).length
-      options = {
-        eyebrow: 'Delete step',
-        title: `Delete step ${stepNumber} · ${title}?`,
-        message: `This step${connectionsText} will be removed from the process, with its Action On, settings and visualization.`
-          + (usedBy > 0 ? ` ${usedBy} other step${usedBy === 1 ? ' uses' : 's use'} its output — that reference will be removed too.` : '')
-          + ' You can Undo this.',
-        confirmLabel: 'Delete step',
-      }
-    } else {
-      const title = normalizeConditionNodeData(node.data).title || 'Untitled condition'
-      options = {
-        eyebrow: 'Delete condition',
-        title: `Delete condition “${title}”?`,
-        message: `This condition${connectionsText} (its Yes/No branches) will be removed from the process. You can Undo this.`,
-        confirmLabel: 'Delete condition',
-      }
-    }
+    const options = describeNodeDeletion(nodesRef.current, edgesRef.current, id)
+    if (!options) return
 
     confirmingDeleteRef.current = true
     try {
@@ -703,26 +652,7 @@ function RecipeProcessCanvasContent({
     else if (selectedEdgeId) deleteEdge(selectedEdgeId)
   }, [selectedNodeId, selectedEdgeId, requestDeleteNode, deleteEdge])
 
-  // Keyboard shortcuts (Delete/Backspace, Ctrl/Cmd+Z, Ctrl/Cmd+Y) — a global listener so shortcuts
-  // work regardless of which element inside the canvas currently has focus,
-  // not only while the React Flow pane itself is focused. Skips typing in an input/textarea, and is
-  // scoped to specific key combos only, so it never interferes with browser/app navigation shortcuts.
-  // This is the *only* keyboard-delete path — React Flow's own built-in one is disabled
-  // (`deleteKeyCode={null}` below) so a single press can't be handled twice (once by us calling
-  // deleteNode/deleteEdge directly, once by React Flow's own default removal going through
-  // onNodesChange/onEdgesChange) and so edges — which React Flow tracks selection for independently
-  // of our own `selectedNodeId` — are covered too, which the old node-only handler never was.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const tag = (event.target as HTMLElement)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
-      if (event.key === 'Delete' || event.key === 'Backspace') deleteSelected()
-      if ((event.ctrlKey || event.metaKey) && event.key === 'z') { event.preventDefault(); undo() }
-      if ((event.ctrlKey || event.metaKey) && event.key === 'y') { event.preventDefault(); redo() }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [deleteSelected, undo, redo])
+  useCanvasShortcuts({ onDelete: deleteSelected, onUndo: undo, onRedo: redo })
 
   const duplicateNode = useCallback((id: string) => {
     pushHistorySnapshot()
@@ -849,61 +779,7 @@ function RecipeProcessCanvasContent({
     setExportJson(JSON.stringify({ recipeId, processId, type: process.type, ...payload }, null, 2))
   }, [nodes, edges, process, recipeId, processId])
 
-  const downloadExportJson = useCallback(() => {
-    if (!exportJson) return
-    const blob = new Blob([exportJson], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `process-${processId}.json`
-    link.click()
-    URL.revokeObjectURL(url)
-  }, [exportJson, processId])
-
-  const copyExportJson = useCallback(() => {
-    if (!exportJson) return
-    void navigator.clipboard.writeText(exportJson)
-  }, [exportJson])
-
-  // Walkthrough of this process's steps, in reading order — the same order the Recipe Process page
-  // shows them in (not the order nodes were added). Falls back to a text-only "story mode" slide
-  // (the slideshow component already renders a placeholder) until a step has actually been
-  // visualized — see generateVisuals below, which is what populates `visualization.imageUrl`.
-  const buildSlideshowSteps = useCallback((): SlideshowStep[] => {
-    const { nodes: processNodes, edges: processEdges } = buildProcessUpdateRequest('', undefined, createFlowDataPayload(nodes, edges))
-    const readingOrder = new Map(getProcessReadingOrder({ ...process, nodes: processNodes ?? [], edges: processEdges ?? [] })
-      .map((node, index) => [node.id, index]))
-    const stepNodes = nodes.filter(isRecipeStepNode)
-      .sort((a, b) => (readingOrder.get(a.id) ?? 0) - (readingOrder.get(b.id) ?? 0))
-    return stepNodes.map((node, index) => {
-      const normalized = normalizeRecipeStepNodeData(node.data)
-      const { step } = normalized
-      const ingredientNames = [
-        ...step.actionOn.steps.map((entry) => getStepOutputLabel(stepOutputGraph, entry.stepId)).filter(Boolean),
-        ...step.actionOn.ingredients.map(getActionOnIngredientDisplayName),
-      ]
-      const subprocessNames = step.actionOn.processes
-        .map((entry) => availableSubprocesses.find((candidate) => candidate.id === entry.processId)?.name)
-        .filter((name): name is string => Boolean(name))
-      // The action description is the slide's instruction text; the rest are supporting details.
-      const descriptionParts = [
-        ingredientNames.length > 0 ? `On: ${ingredientNames.join(', ')}` : '',
-        subprocessNames.length > 0 ? `Using: ${subprocessNames.join(', ')}` : '',
-        getRecipeStepDurationLabel(step),
-        getRecipeStepTemperatureLabel(step),
-        step.expectedOutput ? `Expected: ${step.expectedOutput}` : '',
-      ].filter(Boolean)
-
-      return {
-        id: node.id,
-        title: normalized.title,
-        instruction: step.actionDescription?.trim() || undefined,
-        description: descriptionParts.join(' · ') || undefined,
-        imageUrl: normalized.visualization?.imageUrl,
-        stepNumber: index + 1,
-      }
-    })
-  }, [nodes, edges, process, availableSubprocesses, stepOutputGraph])
+  const buildSlideshowSteps = () => buildCanvasSlideshowSteps(process, nodes, edges, availableSubprocesses, stepOutputGraph)
 
   const applyStepVisualization = useCallback((stepResult: RecipeProcessVisualizationStepResult) => {
     if (!stepResult.success || stepResult.visualizationAssetId == null) return
@@ -920,70 +796,12 @@ function RecipeProcessCanvasContent({
     }))
   }, [setNodes])
 
-  /**
-   * Starts (or joins the already-running) per-step visualization job for this process's own STEP
-   * nodes — one generated image per step; CONDITION nodes and subprocesses referenced from Action
-   * On are never visualized by this call, see RecipeProcessVisualizationService. The job itself is
-   * followed by the app-level JobTracker, not this component, so it keeps running (and its progress
-   * stays visible) across process switches, page navigation and reloads.
-   */
-  const generateVisuals = useCallback(async () => {
-    if (generatingVisuals) return
-    const stepNodeCount = nodes.filter(isRecipeStepNode).length
-    if (stepNodeCount === 0) {
-      setGenerateVisualsMessage({ type: 'error', text: 'No steps to visualize' })
-      return
-    }
-
-    setGenerateVisualsMessage(null)
-    setStartingVisuals(true)
-    try {
-      await jobTracker.startVisuals(recipeId, processId)
-    } catch (error) {
-      if (!unmountedRef.current) {
-        setGenerateVisualsMessage({
-          type: 'error',
-          text: errorMessage(error, 'Unable to generate visuals right now.'),
-        })
-      }
-    } finally {
-      if (!unmountedRef.current) setStartingVisuals(false)
-    }
-  }, [generatingVisuals, nodes, jobTracker, recipeId, processId])
-
-  // Applies each step's result to the canvas as soon as it shows up in a poll — including, on
-  // (re)mount, every step a job already finished while this process wasn't open. Generated images
-  // then flow into the shared recipe session the same way any other canvas edit does (see the
-  // nodes/edges push-to-session effect above).
-  const appliedVisualStepsRef = useRef(new Set<string>())
-  useEffect(() => {
-    if (!visualsJob) return
-    for (const step of visualsJob.job.steps) {
-      const appliedKey = `${visualsJob.job.jobId}:${step.stepId}`
-      if (appliedVisualStepsRef.current.has(appliedKey)) continue
-      applyStepVisualization(step)
-      appliedVisualStepsRef.current.add(appliedKey)
-    }
-  }, [visualsJob, applyStepVisualization])
-
-  const generateVisualsStatus = useMemo<GenerateVisualsStatus | null>(() => {
-    if (generateVisualsMessage) return generateVisualsMessage
-    if (!visualsJob) return null
-    const { job } = visualsJob
-    if (visualsJob.pollError) return { type: 'error', text: `Lost track of visuals generation: ${visualsJob.pollError}` }
-    if (isTrackedJobActive(visualsJob)) {
-      const progress = `Generating visuals… ${job.completedSteps}/${job.totalSteps} steps`
-      return { type: 'info', text: visualsJob.connectionLost ? `${progress} (connection lost, retrying…)` : progress }
-    }
-    const successCount = job.steps.filter((step) => step.success).length
-    if (job.status === 'COMPLETED') return { type: 'success', text: `Generated visuals for all ${job.totalSteps} steps` }
-    if (job.status === 'COMPLETED_WITH_ERRORS') return { type: 'error', text: `Generated ${successCount}/${job.totalSteps} steps — ${job.totalSteps - successCount} failed` }
-    return { type: 'error', text: job.errorMessage || 'Unable to generate visuals right now.' }
-  }, [generateVisualsMessage, visualsJob])
-
-  const visualsProgressLabel = visualsJob && isTrackedJobActive(visualsJob)
-    ? `Generating… ${visualsJob.job.completedSteps}/${visualsJob.job.totalSteps}`
-    : undefined
+  const visuals = useProcessVisuals({
+    recipeId,
+    processId,
+    stepCount: nodes.filter(isRecipeStepNode).length,
+    applyStep: applyStepVisualization,
+  })
 
   /**
    * Guards actually leaving via onBack. Pending edits are simply saved on the way out (autosave
@@ -1103,10 +921,10 @@ function RecipeProcessCanvasContent({
         canAutoArrange={nodes.length > 0}
         onPreview={openSlideshow}
         onExport={handleExport}
-        onGenerateVisuals={() => void generateVisuals()}
-        isGeneratingVisuals={generatingVisuals}
-        visualsProgressLabel={visualsProgressLabel}
-        generateVisualsStatus={generateVisualsStatus}
+        onGenerateVisuals={() => void visuals.generate()}
+        isGeneratingVisuals={visuals.generating}
+        visualsProgressLabel={visuals.progressLabel}
+        generateVisualsStatus={visuals.status}
         aiActions={aiActions}
         // With a process sidebar, adding lives in its "+ Add" menu (and its collapsed rail's "+").
         onAddStep={sidebarHeader ? undefined : addStep}
@@ -1153,32 +971,14 @@ function RecipeProcessCanvasContent({
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize sidebar"
-            onMouseDown={(event) => {
-              const startX = event.clientX
-              const startWidth = sidebarRef.current?.offsetWidth ?? sidebarWidth
-              const minWidth = 200
-              const maxWidth = 460
-
-              const onMove = (moveEvent: MouseEvent) => {
-                const delta = moveEvent.clientX - startX
-                let nextWidth = startWidth + delta
-                const propsSpace = propsCollapsed ? 48 : propsWidth
-                const gaps = 10 /* sidebar resizer */ + (propsCollapsed ? 0 : 10) /* props resizer */
-                const effectiveMax = getMaxPanelWidth(maxWidth, propsSpace, gaps)
-                if (nextWidth < minWidth) nextWidth = minWidth
-                if (nextWidth > effectiveMax) nextWidth = Math.max(minWidth, effectiveMax)
-                setSidebarWidth(nextWidth)
-              }
-
-              const onUp = () => {
-                document.removeEventListener('mousemove', onMove)
-                document.removeEventListener('mouseup', onUp)
-              }
-
-              document.addEventListener('mousemove', onMove)
-              document.addEventListener('mouseup', onUp)
-              event.preventDefault()
-            }}
+            onMouseDown={(event) => startPanelResize(event, {
+              side: 'left',
+              startWidth: sidebarRef.current?.offsetWidth ?? sidebarWidth,
+              minWidth: 200,
+              // Leaves room for the properties panel (and its resizer) and the canvas itself.
+              maxWidth: () => getMaxPanelWidth(460, propsCollapsed ? 48 : propsWidth, 10 + (propsCollapsed ? 0 : 10)),
+              onResize: setSidebarWidth,
+            })}
           />
         )}
 
@@ -1252,33 +1052,14 @@ function RecipeProcessCanvasContent({
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize properties panel"
-          onMouseDown={(event) => {
-            const startX = event.clientX
-            const startWidth = propsRef.current?.offsetWidth ?? propsWidth
-            const minWidth = 220
-            const maxWidth = 520
-
-            const onMove = (moveEvent: MouseEvent) => {
-              // Panel is on the right: dragging left (clientX decreases) should grow it.
-              const delta = startX - moveEvent.clientX
-              let nextWidth = startWidth + delta
-              const sidebarSpace = sidebarHeader ? (sidebarCollapsed ? 48 : sidebarWidth) : 0
-              const gaps = (sidebarHeader ? 10 : 0) /* sidebar resizer */ + 10 /* this resizer */
-              const effectiveMax = getMaxPanelWidth(maxWidth, sidebarSpace, gaps)
-              if (nextWidth < minWidth) nextWidth = minWidth
-              if (nextWidth > effectiveMax) nextWidth = Math.max(minWidth, effectiveMax)
-              setPropsWidth(nextWidth)
-            }
-
-            const onUp = () => {
-              document.removeEventListener('mousemove', onMove)
-              document.removeEventListener('mouseup', onUp)
-            }
-
-            document.addEventListener('mousemove', onMove)
-            document.addEventListener('mouseup', onUp)
-            event.preventDefault()
-          }}
+          onMouseDown={(event) => startPanelResize(event, {
+            side: 'right',
+            startWidth: propsRef.current?.offsetWidth ?? propsWidth,
+            minWidth: 220,
+            // Leaves room for the sidebar (and its resizer) and the canvas itself.
+            maxWidth: () => getMaxPanelWidth(520, sidebarHeader ? (sidebarCollapsed ? 48 : sidebarWidth) : 0, (sidebarHeader ? 10 : 0) + 10),
+            onResize: setPropsWidth,
+          })}
         />
 
         <div
@@ -1305,9 +1086,9 @@ function RecipeProcessCanvasContent({
                   onDeleteNode={(id) => void requestDeleteNode(id)}
                   onDuplicateNode={duplicateNode}
                   onOpenSubprocess={handleOpenSubprocess}
-                  onGenerateVisuals={() => void generateVisuals()}
-                  isGeneratingVisuals={generatingVisuals}
-                  visualsProgressLabel={visualsProgressLabel}
+                  onGenerateVisuals={() => void visuals.generate()}
+                  isGeneratingVisuals={visuals.generating}
+                  visualsProgressLabel={visuals.progressLabel}
                 />
               ) : (
                 <RecipeConditionPanel
@@ -1337,28 +1118,13 @@ function RecipeProcessCanvasContent({
       )}
 
       {exportJson && (
-        <div className="flow-canvas-export-modal-overlay" onClick={() => setExportJson(null)}>
-          <div className="flow-canvas-export-modal" onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid var(--flow-border)' }}>
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--flow-text)' }}>📤 Export Process</div>
-                <div style={{ fontSize: 11, color: 'var(--flow-text-subtle)', marginTop: 2 }}>{nodes.length} nodes · {edges.length} edges</div>
-              </div>
-              <div style={{ display: 'flex', gap: 7 }}>
-                <button onClick={downloadExportJson} style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--flow-success-border)', background: 'var(--flow-success-soft)', color: 'var(--flow-success)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                  ⬇ Download .json
-                </button>
-                <button onClick={copyExportJson} style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--flow-info-border)', background: 'var(--flow-info-soft)', color: 'var(--flow-info)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                  📋 Copy
-                </button>
-                <button onClick={() => setExportJson(null)} style={{ width: 30, height: 30, borderRadius: 7, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text-subtle)', cursor: 'pointer', fontSize: 15 }}>✕</button>
-              </div>
-            </div>
-            <pre style={{ flex: 1, overflow: 'auto', margin: 0, padding: '14px 18px', fontSize: 11, lineHeight: 1.65, color: 'var(--flow-text)', background: 'var(--flow-surface-muted)', fontFamily: "'Fira Code', 'Cascadia Code', monospace" }}>
-              {exportJson}
-            </pre>
-          </div>
-        </div>
+        <ExportProcessModal
+          json={exportJson}
+          nodeCount={nodes.length}
+          edgeCount={edges.length}
+          fileName={`process-${processId}.json`}
+          onClose={() => setExportJson(null)}
+        />
       )}
     </div>
   )

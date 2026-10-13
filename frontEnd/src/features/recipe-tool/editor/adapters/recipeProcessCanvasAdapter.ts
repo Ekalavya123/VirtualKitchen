@@ -135,7 +135,7 @@ const flowViewportToProcessViewport = (viewport?: FlowViewport): ProcessViewport
 /**
  * Builds a `PUT /api/v1/recipes/{recipeId}/processes/{processId}` request
  * body from the canvas's current nodes/edges/viewport (already normalized
- * into FlowData, e.g. via recipeProcessCanvas.helpers.ts's createFlowDataPayload)
+ * into FlowData, e.g. via adapters/canvasFlow.ts's createFlowDataPayload)
  * plus the process's own name/description (which the canvas doesn't own).
  */
 export const buildProcessUpdateRequest = (

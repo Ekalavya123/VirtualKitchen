@@ -5,7 +5,9 @@ import {
   getConditionNodeTitle,
   normalizeConditionNodeData,
 } from '../../model/recipeConditionData'
+import type { Process } from '../../../../types/process'
 import type { FlowData, FlowEdgePayload, FlowNodePayload } from '../model/canvasGraph'
+import { buildProcessUpdateRequest } from './recipeProcessCanvasAdapter'
 
 export type EdgeKind = 'step' | 'yes' | 'no' | 'parallel'
 
@@ -190,4 +192,10 @@ export const applyConditionFieldUpdate = (node: Node, field: string, value: stri
       noLabel: finalized.condition.failureLabel,
     },
   }
+}
+
+/** `process` with the canvas's current nodes and edges in place of its saved ones (name, type and ids unchanged). */
+export const flowToProcess = (process: Process, nodes: Node[], edges: Edge[]): Process => {
+  const { nodes: processNodes, edges: processEdges } = buildProcessUpdateRequest('', undefined, createFlowDataPayload(nodes, edges))
+  return { ...process, nodes: processNodes ?? [], edges: processEdges ?? [] }
 }
