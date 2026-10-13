@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import '../../styles/recipe-tool.css'
-import '../styles/RecipePropertiesPanel.css'
+import '../../../../styles/flow-ui.css'
+import '../../styles/RecipePropertiesPanel.css'
 import SearchableSelect, { type SearchableSelectOption } from '../../../../shared/components/SearchableSelect'
 import {
   CUSTOM_INGREDIENT_ID,

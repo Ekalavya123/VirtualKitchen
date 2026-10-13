@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import '../../styles/recipe-tool.css'
+import '../../../../styles/flow-ui.css'
 import '../styles/recipe-view.css'
 import type { NutritionInfo, RecipeDetail } from '../../../../types/recipe'
 import { useRecipeSession } from '../../session/RecipeSessionContext'

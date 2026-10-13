@@ -13,7 +13,7 @@ import { CUSTOM_FLAME_LEVEL_ID } from '../../../../shared/catalog/flameLevelCata
 import { buildDurationLabel } from '../../../../shared/catalog/stepFieldCatalog'
 import { normalizeConditionNodeData } from '../../model/recipeConditionData'
 import { normalizeRecipeStepNodeData } from '../../model/recipeStepData'
-import { getProcessReadingOrder } from '../../view/model/recipeView'
+import { getProcessReadingOrder } from '../../model/processReadingOrder'
 import { CONDITION_HANDLES } from '../../model/recipeNodeTypes'
 
 const YES_HANDLE = CONDITION_HANDLES.yes

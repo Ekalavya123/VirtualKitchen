@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { errorMessage } from '../../../shared/errors'
-import '../../recipe-tool/styles/recipe-tool.css'
+import '../../../styles/flow-ui.css'
 
 export type RecipeDetailsDraft = { name: string; description: string }
 

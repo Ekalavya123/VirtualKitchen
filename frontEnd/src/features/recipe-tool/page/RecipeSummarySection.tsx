@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import '../styles/recipe-tool.css'
+import '../../../styles/flow-ui.css'
 import type { RecipeDetail } from '../../../types/recipe'
 import { useRecipeSession } from '../session/RecipeSessionContext'
 import { buildRecipePresentation } from '../view/model/recipeView'

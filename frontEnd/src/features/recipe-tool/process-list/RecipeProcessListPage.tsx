@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import '../styles/recipe-tool.css'
+import '../../../styles/flow-ui.css'
 import { ProcessApi, RecipeDetailApi } from '../../../api'
 import type { Process } from '../../../types/process'
 import { useNotifications } from '../../../shared/components/notifications/NotificationProvider'

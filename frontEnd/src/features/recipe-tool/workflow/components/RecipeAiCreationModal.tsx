@@ -32,7 +32,7 @@ import { useDraft } from '../../../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
 import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
 import { useConfirmDiscard } from '../../../../shared/components/confirm/useConfirmDiscard'
-import '../../editor/styles/RecipeProcessCanvas.css'
+import '../../styles/modals.css'
 
 type AiRecipeCreationDraft = { selection: WorkflowTaskSelection; recipeText: string }
 

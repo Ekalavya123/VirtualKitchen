@@ -1,5 +1,5 @@
 import type { RecipeAiTaskType } from '../../../../types/recipeAiWorkflow'
-import { useAiCredit } from '../../components/AiCreditBadge'
+import { useAiCredit } from '../../workflow/components/AiCreditBadge'
 import { useJobsFinishedSignal } from '../../jobs/useJobTracker'
 import ToolbarMenu, { MenuDivider, MenuHeading, MenuItem } from './ToolbarMenu'
 

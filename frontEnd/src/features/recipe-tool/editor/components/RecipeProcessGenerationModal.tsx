@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ProcessGenerationMode } from '../../../../types/recipe'
-import '../styles/RecipeProcessCanvas.css'
+import '../../styles/modals.css'
 import { useDraft } from '../../../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
 import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
@@ -78,7 +78,7 @@ const secondaryButton = {
  * changes the open process from a natural-language instruction (the AI returns only the changes,
  * which the user reviews before they're applied). Reuses the same modal chrome as
  * RecipeProcessCanvas's Export dialog (`.flow-canvas-export-modal*`) and the progress-bar styling
- * (`.recipe-builder-progress*`), both from RecipeProcessCanvas.css, rather than introducing a new
+ * (`.recipe-builder-progress*`), both from styles/modals.css, rather than introducing a new
  * visual pattern. It's a modal because generation is an occasional action, not a constant
  * companion to editing.
  */

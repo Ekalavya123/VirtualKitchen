@@ -1,4 +1,4 @@
-import '../styles/recipe-tool.css'
+import '../../../styles/flow-ui.css'
 import type { Process } from '../../../types/process'
 
 type RecipeProcessSummaryCardProps = {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import '../styles/RecipePropertiesPanel.css'
-import '../../styles/recipe-tool.css'
+import '../../styles/RecipePropertiesPanel.css'
+import '../../../../styles/flow-ui.css'
 import SearchableSelect, { type SearchableSelectOption } from '../../../../shared/components/SearchableSelect'
 import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
 import IngredientSelector from './IngredientSelector'

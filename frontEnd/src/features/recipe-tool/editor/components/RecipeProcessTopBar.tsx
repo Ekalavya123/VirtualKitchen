@@ -1,4 +1,4 @@
-import '../../styles/recipe-tool.css'
+import '../../../../styles/flow-ui.css'
 import '../styles/RecipeEditorToolbar.css'
 import type { ProcessType } from '../../../../types/process'
 import type { RecipeProcessBreadcrumbEntry } from '../../../../types/recipe'

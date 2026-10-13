@@ -24,7 +24,7 @@ import {
   type ActionOnIngredient,
   type RecipeStepFields,
 } from '../../model/recipeStepData'
-import { getProcessReadingOrder } from '../../view/model/recipeView'
+import { getProcessReadingOrder } from '../../model/processReadingOrder'
 import { buildConditionNode, buildStepNode } from './recipeProcessGenerationConverter'
 import { EDIT_START, detachNode, findFreePosition, insertNodeAfter, preferredInsertPosition, type ProcessGraph } from './recipeProcessEditGraph'
 import { DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes'

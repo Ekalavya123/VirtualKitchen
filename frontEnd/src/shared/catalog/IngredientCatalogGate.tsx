@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import '../../features/recipe-tool/styles/recipe-tool.css'
 import { isIngredientCatalogLoaded, loadIngredientCatalog, useIngredientCatalog } from './ingredientCatalog'
-import { errorMessage } from '../../shared/errors'
+import { errorMessage } from '../errors'
 
 type IngredientCatalogGateProps = {
   children: ReactNode

@@ -1,7 +1,7 @@
 import { useRef, type CSSProperties, type ReactNode } from 'react'
 import './HomePage.css'
 import chefLogo from '../../assets/kitchen/blackShadowChef.png'
-import { isAuthenticated } from '../../shared/auth/session'
+import { isAuthenticated } from '../../api/authToken'
 import AppFooter from '../../shared/components/AppFooter'
 import { useTheme } from '../../shared/theme/ThemeProvider'
 import AiDemo from './AiDemo'

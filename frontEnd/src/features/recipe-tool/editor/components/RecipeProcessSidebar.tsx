@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import '../../styles/recipe-tool.css'
+import '../../../../styles/flow-ui.css'
 import '../styles/RecipeEditorToolbar.css'
 import type { Process } from '../../../../types/process'
 import { isPendingProcessId } from '../../session/RecipeSessionContext'

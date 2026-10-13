@@ -4,7 +4,7 @@
  */
 
 import { API_CONFIG } from './config'
-import { getStoredToken } from '../shared/auth/session'
+import { getStoredToken } from './authToken'
 
 interface FetchOptions extends RequestInit {
   params?: Record<string, string | number | boolean>

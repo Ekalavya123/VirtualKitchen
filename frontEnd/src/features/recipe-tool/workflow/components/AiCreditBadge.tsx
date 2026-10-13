@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AiApi, type UserAiCredit } from '../../../api'
+import { AiApi, type UserAiCredit } from '../../../../api'
 
 type AiCreditBadgeProps = {
   /** Bump this (e.g. a counter) after an AI generation completes to force a refetch. */

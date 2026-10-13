@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, NodeResizeControl, useNodeId, useUpdateNodeInternals, useReactFlow } from '@xyflow/react'
-import '../../styles/recipe-tool.css'
+import '../../../../styles/flow-ui.css'
 import { normalizeConditionNodeData, type ConditionNodeData } from '../../model/recipeConditionData'
 import { CONDITION_HANDLES, DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes'
 import { useNodeHandleSides, useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'

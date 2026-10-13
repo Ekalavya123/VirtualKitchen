@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import '../../styles/recipe-tool.css'
-import '../../editor/styles/RecipePropertiesPanel.css'
+import '../../../../styles/flow-ui.css'
+import '../../styles/RecipePropertiesPanel.css'
 import { RecipeDetailApi } from '../../../../api'
 import type { NutritionInfo } from '../../../../types/recipe'
 import { useNotifications } from '../../../../shared/components/notifications/NotificationProvider'

@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Handle, Position, NodeResizeControl, useNodeId, useUpdateNodeInternals } from '@xyflow/react'
-import '../../styles/recipe-tool.css'
+import '../../../../styles/flow-ui.css'
 import {
   getActionOnIngredientDisplayName,
   getRecipeStepActionSummary,

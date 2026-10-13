@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import RecipeProcessCanvas from './RecipeProcessCanvas'
 import type { RecipeAiActions } from './AiActionsMenu'
-import '../../styles/recipe-tool.css'
+import '../../../../styles/flow-ui.css'
 import type { RecipeProcessBreadcrumbEntry } from '../../../../types/recipe'
 
 interface RecipeProcessEditorProps {

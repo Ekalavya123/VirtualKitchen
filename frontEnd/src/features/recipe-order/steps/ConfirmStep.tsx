@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { DeliveryAddressApi, RecipeOrderApi, httpStatusOf } from '../../../api'
 import type { DeliveryAddress } from '../../../types/recipeOrder'
-import { formatTotalMinutes } from '../../recipe-tool/view/model/recipeView'
+import { formatTotalMinutes } from '../../recipe-tool'
 import CancelOrderButton from '../components/CancelOrderButton'
 import DeliveryAddressForm from '../components/DeliveryAddressForm'
 import OrderThumb from '../components/OrderThumb'

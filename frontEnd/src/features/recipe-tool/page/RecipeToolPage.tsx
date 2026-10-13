@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { RecipeApi, RecipeDetailApi } from '../../api'
-import type { NutritionInfo, RecipeDetail } from '../../types/recipe'
-import { RecipeSessionProvider } from './session/RecipeSessionContext'
-import './editor/styles/RecipeProcessCanvas.css'
-import RecipeToolNavbar from './components/RecipeToolNavbar'
-import RecipeEditorView from './editor/components/RecipeEditorView'
-import RecipeViewPage from './view/components/RecipeViewPage'
-import { recipeToolPath, type RecipeToolView } from './recipeToolRoutes'
-import { useStartRecipeOrder } from '../recipe-order/useStartRecipeOrder'
-import EditRecipeDetailsModal, { type RecipeDetailsDraft } from '../recipes/components/EditRecipeDetailsModal'
-import { useConfirm } from '../../shared/components/confirm/confirmContext'
-import { useNotifications } from '../../shared/components/notifications/NotificationProvider'
-import { browserStorage, clearRecovery } from './session/persistence/recoveryStore'
-import { clearRecipeDrafts } from '../../shared/drafts/draftStore'
-import { errorMessage } from '../../shared/errors'
+import { RecipeApi, RecipeDetailApi } from '../../../api'
+import type { NutritionInfo, RecipeDetail } from '../../../types/recipe'
+import { RecipeSessionProvider } from '../session/RecipeSessionContext'
+import '../editor/styles/RecipeProcessCanvas.css'
+import RecipeToolNavbar from './RecipeToolNavbar'
+import RecipeEditorView from '../editor/components/RecipeEditorView'
+import RecipeViewPage from '../view/components/RecipeViewPage'
+import { recipeToolPath, type RecipeToolView } from '../recipeToolRoutes'
+import EditRecipeDetailsModal, { type RecipeDetailsDraft } from './EditRecipeDetailsModal'
+import { useConfirm } from '../../../shared/components/confirm/confirmContext'
+import { useNotifications } from '../../../shared/components/notifications/NotificationProvider'
+import { forgetRecipeLocalState } from '../session/forgetRecipeLocalState'
+import { errorMessage } from '../../../shared/errors'
 
 type RecipeToolPageProps = {
   recipeId: number
@@ -22,6 +20,10 @@ type RecipeToolPageProps = {
   /** From the route; undefined on the bare `/tool` URL, which lands on the owner's editor or a reader's Recipe Process. */
   view?: RecipeToolView
   onBack: () => void
+  /** Starts an order for this recipe; supplied by the app, since ordering is its own feature. Owners only. */
+  onOrderRecipe?: (recipeId: number, servings?: number | null) => void
+  /** Id of the recipe an order is currently being started for, so the button can show progress. */
+  orderingRecipeId?: number | null
 }
 
 /**
@@ -35,11 +37,10 @@ type RecipeToolPageProps = {
  * Both read the one RecipeSessionProvider below, so there's a single source
  * of truth and the Recipe Process always reflects the editor's latest content.
  */
-export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }: RecipeToolPageProps) {
+export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, onOrderRecipe, orderingRecipeId }: RecipeToolPageProps) {
   const [recipe, setRecipe] = useState<RecipeDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const { startOrder, orderingRecipeId } = useStartRecipeOrder()
   const confirm = useConfirm()
   const { notifySuccess, notifyError } = useNotifications()
   const [editingDetails, setEditingDetails] = useState(false)
@@ -145,8 +146,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
     try {
       await RecipeApi.deleteRecipe(recipeId, currentUserId)
       // Unsaved Recipe Tool changes left on this device for a deleted recipe can never be recovered.
-      clearRecovery(browserStorage(), recipeId)
-      clearRecipeDrafts(recipeId)
+      forgetRecipeLocalState(recipeId)
       notifySuccess('Recipe deleted.')
       onBack()
     } catch (error) {
@@ -190,7 +190,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
         <RecipeToolNavbar
           recipe={recipe}
           onBack={onBack}
-          onOrderRecipe={isOwner ? () => void startOrder(recipe.id, recipe.nutrition?.servings) : undefined}
+          onOrderRecipe={isOwner && onOrderRecipe ? () => onOrderRecipe(recipe.id, recipe.nutrition?.servings) : undefined}
           ordering={orderingRecipeId === recipe.id}
           onEditDetails={isOwner ? () => setEditingDetails(true) : undefined}
           onToggleVisibility={isOwner ? () => void toggleVisibility() : undefined}

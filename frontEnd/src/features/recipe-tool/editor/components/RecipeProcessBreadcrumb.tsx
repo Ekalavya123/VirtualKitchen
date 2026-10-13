@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import '../../styles/recipe-tool.css'
+import '../../../../styles/flow-ui.css'
 import type { ProcessType } from '../../../../types/process'
 import type { RecipeProcessBreadcrumbEntry } from '../../../../types/recipe'
 

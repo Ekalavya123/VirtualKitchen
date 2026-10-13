@@ -17,7 +17,7 @@ import {
 } from './persistence/recoveryStore'
 import { mergeRecoveredProcesses, restoreSnapshot } from './persistence/sessionSnapshot'
 import { SessionStore } from './persistence/sessionStore'
-import RecoveryPrompt from '../components/RecoveryPrompt'
+import RecoveryPrompt from './RecoveryPrompt'
 import { errorMessage } from '../../../shared/errors'
 
 /**

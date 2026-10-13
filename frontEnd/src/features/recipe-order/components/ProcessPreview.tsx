@@ -1,7 +1,5 @@
 import { useState } from 'react'
-import { formatTotalMinutes, type RecipePresentation } from '../../recipe-tool/view/model/recipeView'
-import RecipeImage from '../../recipe-tool/view/components/RecipeImage'
-import '../../recipe-tool/view/styles/recipe-view.css'
+import { formatTotalMinutes, RecipeImage, type RecipePresentation } from '../../recipe-tool'
 
 type ProcessPreviewProps = {
   /** The order's recipe snapshot, through the Recipe Process model (see model/orderPresentation.ts). */

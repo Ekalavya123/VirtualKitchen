@@ -1,19 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { RecipeApi, type Recipe } from '../../api'
 import { useNotifications } from '../../shared/components/notifications/NotificationProvider'
-import '../recipe-tool/styles/recipe-tool.css'
+import '../../styles/flow-ui.css'
 import recipeIcon from '../../assets/kitchen/recipeIcon.png'
-import { browserStorage, clearRecovery } from '../recipe-tool/session/persistence/recoveryStore'
-import { clearRecipeDrafts, draftKeys } from '../../shared/drafts/draftStore'
+import { EditRecipeDetailsModal, forgetRecipeLocalState, type RecipeDetailsDraft } from '../recipe-tool'
+import { draftKeys } from '../../shared/drafts/draftStore'
 import { useDraft } from '../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../shared/drafts/DraftRestoredNote'
-import { useStartRecipeOrder } from '../recipe-order/useStartRecipeOrder'
+import { useStartRecipeOrder } from '../recipe-order'
 import { useConfirm } from '../../shared/components/confirm/confirmContext'
 import { useIncrementalReveal } from '../../shared/hooks/useIncrementalReveal'
 import ListEnd from '../../shared/components/ListEnd'
 import ActionMenu, { type ActionMenuItem } from '../../shared/components/ActionMenu'
 import { formatDate } from '../../shared/format/date'
-import EditRecipeDetailsModal, { type RecipeDetailsDraft } from './components/EditRecipeDetailsModal'
 
 type RecipeTab = 'mine' | 'global'
 
@@ -891,8 +890,7 @@ export default function RecipeLibraryPage({
     try {
       await RecipeApi.deleteRecipe(recipeId, userId)
       // Unsaved Recipe Tool changes left on this device for a deleted recipe can never be recovered.
-      clearRecovery(browserStorage(), recipeId)
-      clearRecipeDrafts(recipeId)
+      forgetRecipeLocalState(recipeId)
 
       setRecipes(current =>
         current.filter(recipe => recipe.id !== recipeId),

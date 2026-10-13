@@ -1,5 +1,5 @@
-import '../styles/RecipePropertiesPanel.css'
-import '../../styles/recipe-tool.css'
+import '../../styles/RecipePropertiesPanel.css'
+import '../../../../styles/flow-ui.css'
 import {
   normalizeConditionNodeData,
   type ConditionNodeStructuredFields,

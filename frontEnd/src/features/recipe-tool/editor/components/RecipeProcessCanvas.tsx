@@ -42,7 +42,7 @@ import { normalizeConditionNodeData } from '../../model/recipeConditionData'
 import { type FlowViewport } from '../model/canvasGraph'
 import { ROW_LAYOUT, arrangeRows, findLoopEdges, getHandleSides, planRows, type RowPlan } from '../model/processLayout'
 import { findFreePosition } from '../adapters/recipeProcessEditGraph'
-import { getProcessReadingOrder } from '../../view/model/recipeView'
+import { getProcessReadingOrder } from '../../model/processReadingOrder'
 import { buildStepOutputGraph, getStepOutputLabel } from '../../model/recipeStepOutputs'
 import {
   buildProcessUpdateRequest,
@@ -77,9 +77,10 @@ import type { RecipeAiActions } from './AiActionsMenu'
 import { ProcessSidebarActionsProvider, type ProcessSidebarActions } from '../context/ProcessSidebarActionsContext'
 import RecipeVisualizationSlideshow, { type SlideshowStep } from '../../walkthrough/RecipeVisualizationSlideshow'
 import { errorMessage } from '../../../../shared/errors'
-import '../../styles/recipe-tool.css'
-import '../styles/RecipePropertiesPanel.css'
+import '../../../../styles/flow-ui.css'
+import '../../styles/RecipePropertiesPanel.css'
 import '../styles/RecipeProcessCanvas.css'
+import '../../styles/modals.css'
 
 type GenerateVisualsStatus = { type: 'success' | 'error' | 'info'; text: string }
 

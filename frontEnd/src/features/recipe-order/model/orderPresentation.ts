@@ -5,11 +5,7 @@
  */
 
 import type { Process } from '../../../types/process'
-import {
-  buildRecipePresentation,
-  type RecipePresentation,
-  type RecipeTimelineStep,
-} from '../../recipe-tool/view/model/recipeView'
+import { buildRecipePresentation, type RecipePresentation, type RecipeTimelineStep } from '../../recipe-tool'
 
 const EMPTY_PRESENTATION: RecipePresentation = { sections: [], ingredients: [], stepCount: 0 }
 

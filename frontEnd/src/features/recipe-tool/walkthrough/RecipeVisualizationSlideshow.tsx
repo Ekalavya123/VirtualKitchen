@@ -4,6 +4,7 @@ import type { NarrationPhase } from './narration/narrationPlayer'
 import { useNarrationPlayer } from './narration/useNarrationPlayer'
 import AnimatedInstruction, { type InstructionRevealMode, type ProgressSource } from './AnimatedInstruction'
 import './RecipeVisualizationSlideshow.css'
+import '../styles/modals.css'
 
 export type SlideshowStep = {
   id: string

@@ -15,20 +15,15 @@ import InventoryView from '../features/kitchen/inventory/InventoryView'
 import ShopView from '../features/kitchen/shop/ShopView'
 import OrderHistoryView from '../features/kitchen/orders/OrderHistoryView'
 import RecipeLibraryPage from '../features/recipes/RecipeLibraryPage'
-import RecipeProcessEditor from '../features/recipe-tool/editor/components/RecipeProcessEditor'
-import RecipeProcessListPage from '../features/recipe-tool/process-list/RecipeProcessListPage'
-import RecipeToolPage from '../features/recipe-tool/RecipeToolPage'
-import { isRecipeToolView, recipeToolPath } from '../features/recipe-tool/recipeToolRoutes'
-import { RecipeSessionProvider } from '../features/recipe-tool/session/RecipeSessionContext'
+import { isRecipeToolView, RecipeProcessEditor, RecipeProcessListPage, RecipeSessionProvider, RecipeToolPage, recipeToolPath } from '../features/recipe-tool'
 import IngredientCatalogGate from '../shared/catalog/IngredientCatalogGate'
-import RecipeOrderPage from '../features/recipe-order/RecipeOrderPage'
-import { recipeOrderPath } from '../features/recipe-order/model/orderView'
+import { RecipeOrderPage, recipeOrderPath, useStartRecipeOrder } from '../features/recipe-order'
 import HomePage from '../features/home/HomePage'
 import AiAnalyticsPage from '../features/admin/ai-analytics/AiAnalyticsPage'
 import type { User } from '../types/User'
 import type { RecipeProcessBreadcrumbEntry } from '../types/recipe'
 import { AuthenticationApi, KitchenApi, RecipeOrderApi } from '../api'
-import { clearStoredToken, isAuthenticated } from '../shared/auth/session'
+import { clearStoredToken, isAuthenticated } from '../api/authToken'
 import { clearAllDrafts } from '../shared/drafts/draftStore'
 import type { ShopResumeState } from '../shared/cart/cartStorage'
 import type { Kitchen } from '../types/kitchen'
@@ -112,6 +107,7 @@ function RecipesRoute({ userId }: { userId: number }) {
 
 function RecipeToolRoute({ currentUserId }: { currentUserId: number }) {
   const navigate = useNavigate()
+  const { startOrder, orderingRecipeId } = useStartRecipeOrder()
   const { recipeId: recipeIdParam, view } = useParams()
   const recipeId = Number(recipeIdParam)
 
@@ -143,6 +139,8 @@ function RecipeToolRoute({ currentUserId }: { currentUserId: number }) {
       currentUserId={currentUserId}
       view={view}
       onBack={() => navigate('/kitchen/recipes')}
+      onOrderRecipe={(id, servings) => void startOrder(id, servings)}
+      orderingRecipeId={orderingRecipeId}
     />
   )
 }
