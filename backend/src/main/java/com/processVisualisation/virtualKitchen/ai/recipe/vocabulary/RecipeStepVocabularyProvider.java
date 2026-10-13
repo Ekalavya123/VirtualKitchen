@@ -1,15 +1,12 @@
 package com.processVisualisation.virtualKitchen.ai.recipe.vocabulary;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.processVisualisation.virtualKitchen.store.catalog.IngredientCatalogChangedEvent;
+import com.processVisualisation.virtualKitchen.store.catalog.StepCatalogResource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -38,9 +35,7 @@ import java.util.stream.StreamSupport;
 @Component
 public class RecipeStepVocabularyProvider {
 
-    private static final String CATALOG_RESOURCE = "stepCatalogs.data.json";
-
-    public static final String CUSTOM_ID = "custom";
+    public static final String CUSTOM_ID = StepCatalogResource.CUSTOM_ID;
 
     /** Field keys used in an action's {@code fields} map (see the catalog's {@code fieldDefinitions}). */
     public static final String FIELD_QUANTITY = "quantity";
@@ -180,7 +175,7 @@ public class RecipeStepVocabularyProvider {
     }
 
     private JsonNode loadCatalog() {
-        return readCatalogResource();
+        return StepCatalogResource.read();
     }
 
     /** The ingredient seed list in stepCatalogs.data.json, keyed by catalog slug. */
@@ -194,15 +189,6 @@ public class RecipeStepVocabularyProvider {
                 strings(entry.path("aliases")),
                 entry.has("preparationStyleSets") ? strings(entry.path("preparationStyleSets")) : null
         ));
-    }
-
-    /** The parsed stepCatalogs.data.json, for the ingredient catalog seeder. */
-    public static JsonNode readCatalogResource() {
-        try (InputStream stream = new ClassPathResource(CATALOG_RESOURCE).getInputStream()) {
-            return new ObjectMapper().readTree(stream);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to load " + CATALOG_RESOURCE + " from the classpath", e);
-        }
     }
 
     private IngredientIndex ingredientIndex() {

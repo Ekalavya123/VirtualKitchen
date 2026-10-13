@@ -29,7 +29,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * Default implementation of RecipeTemplateService. Persists recipe templates via
+ * Persists recipe templates via
  * RecipeTemplateRepository, enforces ownership (via requireOwner) on mutating operations,
  * and, when a public template is copied to a user library via copyToUser, deep-clones the
  * template's ingredients, nutrition and Process documents onto the new template so the copy is fully independent of the original. Maps between entities and

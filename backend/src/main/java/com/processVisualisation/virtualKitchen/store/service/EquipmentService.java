@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Default {@link EquipmentService} implementation backed by MongoDB via
+ * Equipment catalog CRUD, backed by MongoDB via
  * {@link EquipmentRepository}. Assigns identifiers using
  * {@link SequenceGeneratorService} and converts between entities and DTOs
  * using {@link EquipmentMapper}.

@@ -1,6 +1,5 @@
-package com.processVisualisation.virtualKitchen.ai.recipe.visualization;
+package com.processVisualisation.virtualKitchen.ai.asset;
 
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAsset;
 import org.springframework.data.mongodb.repository.MongoRepository;
 
 import java.util.Optional;

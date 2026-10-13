@@ -1,5 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.recipe.visualization;
 
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAsset;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAssetRepository;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactService;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.codec.GeneratedImageCodec;
 import com.processVisualisation.virtualKitchen.ai.platform.credit.AiCreditProperties;
@@ -21,7 +23,6 @@ import com.processVisualisation.virtualKitchen.ai.provider.ImageGenerationClient
 import com.processVisualisation.virtualKitchen.ai.provider.ImageStorageClient;
 import com.processVisualisation.virtualKitchen.ai.provider.dto.AiResponse;
 import com.processVisualisation.virtualKitchen.ai.recipe.RecipeProcessAiException;
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVocabularyProvider;
 import com.processVisualisation.virtualKitchen.common.concurrent.ThreadPoolTaskPool;
 import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;

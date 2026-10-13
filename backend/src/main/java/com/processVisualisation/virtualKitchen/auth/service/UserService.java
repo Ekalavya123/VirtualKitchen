@@ -13,7 +13,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 /**
- * Default implementation of UserService. Handles general CRUD operations on
+ * Handles general CRUD operations on
  * user accounts, delegating id generation to SequenceGeneratorService,
  * entity/DTO conversion to UserMapper, persistence to UserRepository, and
  * password hashing to PasswordEncoder.

@@ -12,7 +12,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 /**
- * SMTP-backed implementation of EmailService that sends OTP notification
+ * SMTP-backed service that sends OTP notification
  * emails via a configured JavaMailSender, using the from address in
  * app.mail.from and subject/body text tailored to the OTP purpose
  * (email verification, login, or password reset).

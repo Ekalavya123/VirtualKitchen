@@ -1,7 +1,5 @@
-package com.processVisualisation.virtualKitchen.ai.recipe.visualization.model;
+package com.processVisualisation.virtualKitchen.ai.asset;
 
-import com.processVisualisation.virtualKitchen.ai.globalasset.GlobalAssetStatus;
-import com.processVisualisation.virtualKitchen.ai.globalasset.GlobalResourceType;
 import com.processVisualisation.virtualKitchen.ai.platform.registry.ModelTier;
 import lombok.Data;
 import org.springframework.data.annotation.CreatedDate;

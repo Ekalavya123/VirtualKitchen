@@ -1,6 +1,7 @@
 package com.processVisualisation.virtualKitchen.auth.service;
 
 import com.processVisualisation.virtualKitchen.auth.dto.*;
+import com.processVisualisation.virtualKitchen.auth.event.UserRegisteredEvent;
 import com.processVisualisation.virtualKitchen.auth.exception.AuthException;
 import com.processVisualisation.virtualKitchen.auth.mapper.UserMapper;
 import com.processVisualisation.virtualKitchen.auth.model.AuthProvider;
@@ -10,22 +11,22 @@ import com.processVisualisation.virtualKitchen.auth.model.UserType;
 import com.processVisualisation.virtualKitchen.auth.repository.UserRepository;
 import com.processVisualisation.virtualKitchen.auth.security.JwtService;
 import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
-import com.processVisualisation.virtualKitchen.kitchen.dto.KitchenRequestDTO;
-import com.processVisualisation.virtualKitchen.kitchen.service.KitchenService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 /**
- * Default implementation of AuthService. Coordinates the full authentication
+ * Coordinates the full authentication
  * lifecycle: email/password signup and login, Google OAuth sign-in
  * (delegating token verification to GoogleTokenVerifierService), email
  * verification, OTP-based login, and the forgot/verify/reset password flow
  * (delegating OTP generation and validation to OtpService). Issues JWT access
- * tokens via JwtService on every successful authentication, and provisions a
- * default kitchen for each newly created user via KitchenService.
+ * tokens via JwtService on every successful authentication, and publishes a
+ * {@link UserRegisteredEvent} for each newly created user (the kitchen feature
+ * provisions the user's default kitchen from it).
  */
 @Service
 public class AuthService {
@@ -39,7 +40,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final OtpService otpService;
     private final GoogleTokenVerifierService googleTokenVerifierService;
-    private final KitchenService kitchenService;
+    private final ApplicationEventPublisher eventPublisher;
     private final AdminAllowlist adminAllowlist;
 
     public AuthService(
@@ -50,7 +51,7 @@ public class AuthService {
             JwtService jwtService,
             OtpService otpService,
             GoogleTokenVerifierService googleTokenVerifierService,
-            KitchenService kitchenService,
+            ApplicationEventPublisher eventPublisher,
             AdminAllowlist adminAllowlist
     ) {
         this.adminAllowlist = adminAllowlist;
@@ -61,7 +62,7 @@ public class AuthService {
         this.jwtService = jwtService;
         this.otpService = otpService;
         this.googleTokenVerifierService = googleTokenVerifierService;
-        this.kitchenService = kitchenService;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -92,7 +93,7 @@ public class AuthService {
         user.setId(sequenceGeneratorService.generateSequence(User.SEQUENCE_NAME));
 
         User saved = userRepository.save(user);
-        createKitchenForUser(saved);
+        announceRegistration(saved);
 
         otpService.generateAndSendOtp(saved.getEmail(), OtpPurpose.EMAIL_VERIFICATION);
 
@@ -150,7 +151,7 @@ public class AuthService {
             user.setId(sequenceGeneratorService.generateSequence(User.SEQUENCE_NAME));
 
             user = userRepository.save(user);
-            createKitchenForUser(user);
+            announceRegistration(user);
         } else if (user.getGoogleId() == null) {
             // Link the existing (email/password) account to this Google identity instead of duplicating it.
             user.setGoogleId(googleUser.googleId());
@@ -302,16 +303,13 @@ public class AuthService {
     }
 
     /**
-     * Provisions a default kitchen owned by the given user, invoked once
-     * after a new account is created (via signup or first-time Google sign-in).
+     * Announces a newly created account (via signup or first-time Google sign-in), so other features can set
+     * the user up; the kitchen feature provisions the user's default kitchen. Listeners run synchronously.
      *
-     * @param user the newly created user to provision a kitchen for
+     * @param user the newly created user
      */
-    private void createKitchenForUser(User user) {
-        KitchenRequestDTO kitchenRequest = new KitchenRequestDTO();
-        kitchenRequest.setName(user.getName() + "'s Virtual Kitchen");
-        kitchenRequest.setOwnerId(user.getId());
-        kitchenService.create(kitchenRequest);
+    private void announceRegistration(User user) {
+        eventPublisher.publishEvent(new UserRegisteredEvent(user.getId(), user.getName()));
     }
 
     /**

@@ -22,8 +22,6 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * Default implementation of {@link KitchenInventoryService}.
- * <p>
  * Persists kitchen-to-inventory-item association records via
  * {@link KitchenInventoryRepository}, assigning generated ids through
  * {@link SequenceGeneratorService}. When listing a kitchen's associations,

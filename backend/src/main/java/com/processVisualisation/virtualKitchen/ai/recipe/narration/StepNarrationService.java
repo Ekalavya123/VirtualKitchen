@@ -6,7 +6,6 @@ import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactSe
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactSpec;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.codec.GeneratedAudioCodec;
 import com.processVisualisation.virtualKitchen.ai.platform.dispatch.AiClientResolver;
-import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.ai.platform.logging.OperationLog;
 import com.processVisualisation.virtualKitchen.ai.platform.queue.AiRequestOutcome;
 import com.processVisualisation.virtualKitchen.ai.platform.queue.AiRequestQueueService;
@@ -23,6 +22,7 @@ import com.processVisualisation.virtualKitchen.ai.recipe.visualization.RecipePro
 import com.processVisualisation.virtualKitchen.ai.recipe.visualization.VisualizationKeyBuilder;
 import com.processVisualisation.virtualKitchen.common.concurrent.NamedTask;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskPool;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
 import com.processVisualisation.virtualKitchen.recipe.model.Visibility;

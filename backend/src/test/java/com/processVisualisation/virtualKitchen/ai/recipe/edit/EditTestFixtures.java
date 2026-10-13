@@ -1,6 +1,5 @@
 package com.processVisualisation.virtualKitchen.ai.recipe.edit;
 
-import com.processVisualisation.virtualKitchen.ai.recipe.edit.RecipeProcessEditOutput;
 import com.processVisualisation.virtualKitchen.ai.recipe.edit.dto.EditSubprocessRefDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.edit.dto.EditTargetNodeDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.edit.dto.EditTargetProcessDTO;

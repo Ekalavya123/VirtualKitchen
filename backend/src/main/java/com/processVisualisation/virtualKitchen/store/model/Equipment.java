@@ -1,6 +1,5 @@
 package com.processVisualisation.virtualKitchen.store.model;
 
-import com.processVisualisation.virtualKitchen.kitchen.model.Inventory;
 
 import lombok.Data;
 import org.springframework.data.annotation.Id;
@@ -14,7 +13,7 @@ import java.time.LocalDateTime;
 /**
  * MongoDB document representing a piece of kitchen equipment (e.g. pan,
  * oven, mixer) in the store catalog. Referenced by identifier from
- * {@link Inventory} and {@link ItemCost} via {@link ItemType#EQUIPMENT}.
+ * {@code Inventory} and {@link ItemCost} via {@link ItemType#EQUIPMENT}.
  */
 @Data
 @Document(collection = "equipment")

@@ -1,5 +1,8 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset;
 
+import com.processVisualisation.virtualKitchen.ai.asset.GlobalAssetStatus;
+import com.processVisualisation.virtualKitchen.ai.asset.GlobalResourceType;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.ai.globalasset.dto.GlobalAssetBatchResponseDTO;
 import com.processVisualisation.virtualKitchen.ai.globalasset.dto.GlobalAssetImageResponseDTO;
 import com.processVisualisation.virtualKitchen.ai.globalasset.dto.GlobalAssetImageResponseDTO.Outcome;
@@ -18,7 +21,6 @@ import com.processVisualisation.virtualKitchen.ai.platform.routing.ModelSelectio
 import com.processVisualisation.virtualKitchen.ai.provider.ImageGenerationClient;
 import com.processVisualisation.virtualKitchen.ai.provider.ImageGenerationClient.GeneratedImage;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiCommunicationException;
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.common.concurrent.NamedTask;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskPool;
 import org.junit.jupiter.api.BeforeEach;

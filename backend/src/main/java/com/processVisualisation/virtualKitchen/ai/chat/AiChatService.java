@@ -29,7 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Default {@link AiChatService} implementation that builds a chat request for
+ * Builds a chat request for
  * the configured AI provider (OpenAI or Gemini, selected via the
  * {@code ai.provider} property) and delegates the actual call to
  * {@link AiClient}.

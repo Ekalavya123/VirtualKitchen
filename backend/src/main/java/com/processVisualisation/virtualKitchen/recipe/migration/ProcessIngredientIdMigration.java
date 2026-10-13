@@ -1,8 +1,8 @@
 package com.processVisualisation.virtualKitchen.recipe.migration;
 
-import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVocabularyProvider;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.store.catalog.IngredientCatalogSeeder;
+import com.processVisualisation.virtualKitchen.store.catalog.StepCatalogResource;
 import com.processVisualisation.virtualKitchen.store.model.Ingredient;
 import com.processVisualisation.virtualKitchen.store.repository.IngredientRepository;
 import org.slf4j.Logger;
@@ -107,7 +107,7 @@ public class ProcessIngredientIdMigration implements ApplicationRunner {
                 if (ingredient != null) {
                     entry.put("ingredientId", String.valueOf(ingredient.getId()));
                 } else {
-                    entry.put("ingredientId", RecipeStepVocabularyProvider.CUSTOM_ID);
+                    entry.put("ingredientId", StepCatalogResource.CUSTOM_ID);
                     Object customName = entry.get("customIngredientName");
                     if (!(customName instanceof String name) || name.isBlank()) {
                         entry.put("customIngredientName", labelOf(id));
@@ -121,7 +121,7 @@ public class ProcessIngredientIdMigration implements ApplicationRunner {
 
     static boolean needsMigration(String ingredientId) {
         return !ingredientId.isBlank()
-                && !RecipeStepVocabularyProvider.CUSTOM_ID.equals(ingredientId)
+                && !StepCatalogResource.CUSTOM_ID.equals(ingredientId)
                 && !ingredientId.chars().allMatch(Character::isDigit);
     }
 

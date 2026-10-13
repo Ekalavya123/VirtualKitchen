@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 /**
- * Default implementation of OtpService. Generates six-digit numeric codes,
+ * Generates six-digit numeric codes,
  * stores only their hash (never the plaintext code) via a PasswordEncoder,
  * and persists them through OtpRepository. Enforces three security controls
  * configured via app.otp.* properties: an expiration window

@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Default {@link AiResponseService} implementation backed by
+ * Persisted AI response records, backed by
  * {@link AiResponseRepository}, providing straightforward CRUD/query
  * operations over persisted AI response records.
  */

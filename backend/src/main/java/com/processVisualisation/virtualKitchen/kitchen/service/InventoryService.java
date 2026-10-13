@@ -26,8 +26,6 @@ import java.util.stream.Collectors;
 import static org.springframework.data.mongodb.core.query.Criteria.where;
 
 /**
- * Default implementation of {@link InventoryService}.
- * <p>
  * Manages inventory items that may be scoped to a kitchen or to a user. When
  * adding or updating stock, kitchen-scoped matches are preferred over
  * user-scoped matches; if no existing record is found a new one is created

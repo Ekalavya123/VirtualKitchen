@@ -1,7 +1,8 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.VisualizationAssetRepository;
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAsset;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAsset;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAssetRepository;
+import com.processVisualisation.virtualKitchen.ai.recipe.visualization.VisualizationStepImageLookup;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeThumbnailDTO;
 import com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
@@ -45,7 +46,8 @@ class RecipeThumbnailServiceTest {
         recipeService = mock(RecipeTemplateService.class);
         processRepository = mock(ProcessRepository.class);
         assetRepository = mock(VisualizationAssetRepository.class);
-        service = new RecipeThumbnailService(recipeService, processRepository, assetRepository);
+        service = new RecipeThumbnailService(recipeService, processRepository,
+                new VisualizationStepImageLookup(assetRepository));
         when(assetRepository.findAllById(any())).thenAnswer(invocation -> {
             Collection<Long> ids = new ArrayList<>();
             ((Iterable<Long>) invocation.getArgument(0)).forEach(ids::add);

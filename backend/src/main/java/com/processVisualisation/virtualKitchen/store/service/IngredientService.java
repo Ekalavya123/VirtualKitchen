@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Default {@link IngredientService} implementation backed by MongoDB via
+ * Ingredient catalog CRUD, backed by MongoDB via
  * {@link IngredientRepository}. Assigns identifiers using
  * {@link SequenceGeneratorService} and converts between entities and DTOs
  * using {@link IngredientMapper}.

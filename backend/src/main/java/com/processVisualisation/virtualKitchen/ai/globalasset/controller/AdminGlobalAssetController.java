@@ -1,7 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset.controller;
 
+import com.processVisualisation.virtualKitchen.ai.asset.GlobalResourceType;
 import com.processVisualisation.virtualKitchen.ai.globalasset.GlobalAssetImageService;
-import com.processVisualisation.virtualKitchen.ai.globalasset.GlobalResourceType;
 import com.processVisualisation.virtualKitchen.ai.globalasset.dto.GlobalAssetBatchRequestDTO;
 import com.processVisualisation.virtualKitchen.ai.globalasset.dto.GlobalAssetBatchResponseDTO;
 import com.processVisualisation.virtualKitchen.ai.globalasset.dto.GlobalAssetImageResponseDTO;

@@ -1,7 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.recipe.workflow;
 
 import com.processVisualisation.virtualKitchen.ai.platform.analytics.AiAnalyticsRecorder;
-import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.RecipeProcessGenerationJobRepository;
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.RecipeProcessGenerationJobService;
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.dto.RecipeProcessGenerationJobResponseDTO;
@@ -25,6 +24,7 @@ import com.processVisualisation.virtualKitchen.ai.recipe.workflow.model.RecipeAi
 import com.processVisualisation.virtualKitchen.ai.recipe.workflow.model.RecipeAiWorkflow.ApprovedSnapshot;
 import com.processVisualisation.virtualKitchen.ai.recipe.workflow.model.RecipeAiWorkflow.VisualizationJobRef;
 import com.processVisualisation.virtualKitchen.ai.recipe.workflow.model.RecipeAiWorkflowStatus;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.recipe.exception.RecipeRevisionConflictException;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;

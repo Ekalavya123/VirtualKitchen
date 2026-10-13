@@ -2,13 +2,15 @@ package com.processVisualisation.virtualKitchen.ai.recipe.visualization;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAsset;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAssetRepository;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAssetType;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifact;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactKeyBuilder;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactService;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactSpec;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.codec.GeneratedImageCodec;
 import com.processVisualisation.virtualKitchen.ai.platform.dispatch.AiClientResolver;
-import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.ai.platform.queue.AiRequestOutcome;
 import com.processVisualisation.virtualKitchen.ai.platform.queue.AiRequestQueueService;
 import com.processVisualisation.virtualKitchen.ai.platform.registry.AiCapability;
@@ -18,9 +20,8 @@ import com.processVisualisation.virtualKitchen.ai.provider.ImageGenerationClient
 import com.processVisualisation.virtualKitchen.ai.provider.dto.AiRequest;
 import com.processVisualisation.virtualKitchen.ai.provider.dto.AiResponse;
 import com.processVisualisation.virtualKitchen.ai.recipe.RecipeProcessAiException;
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAsset;
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAssetType;
 import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVocabularyProvider;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.repository.ProcessRepository;

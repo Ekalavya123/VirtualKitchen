@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.provider.gemini;
 
+import com.processVisualisation.virtualKitchen.ai.provider.ProviderCallReporter;
 import com.processVisualisation.virtualKitchen.ai.provider.config.GeminiProperties;
 import com.processVisualisation.virtualKitchen.ai.provider.dto.AiRequest;
 import com.processVisualisation.virtualKitchen.ai.provider.dto.AiResponse;
@@ -166,7 +167,7 @@ class GeminiPromptCachingTest {
     }
 
     private GeminiPromptCacheService cacheService() {
-        return new GeminiPromptCacheService(builder.build(), properties, clock);
+        return new GeminiPromptCacheService(builder.build(), properties, clock, ProviderCallReporter.NONE);
     }
 
     private static AiRequest request() {

@@ -21,8 +21,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Default implementation of {@link OrderService}.
- * <p>
  * Validates and persists new orders, computing the order total from its line
  * items' subtotals and assigning a generated id via
  * {@link SequenceGeneratorService}. After an order is saved, this

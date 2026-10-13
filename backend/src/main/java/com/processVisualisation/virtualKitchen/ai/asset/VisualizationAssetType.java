@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.ai.recipe.visualization.model;
+package com.processVisualisation.virtualKitchen.ai.asset;
 
 /**
  * Classifies a {@link VisualizationAsset} as either a single generated

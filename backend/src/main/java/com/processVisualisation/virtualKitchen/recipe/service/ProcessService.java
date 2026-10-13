@@ -29,7 +29,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Default {@link ProcessService} implementation, backed by MongoDB via
+ * Process (flow graph) CRUD, backed by MongoDB via
  * {@link ProcessRepository}. Every operation is scoped to the recipe named
  * in its {@code recipeId} parameter: a process that exists but belongs to a
  * different recipe is treated as not found ({@link #requireBelongsToRecipe}),

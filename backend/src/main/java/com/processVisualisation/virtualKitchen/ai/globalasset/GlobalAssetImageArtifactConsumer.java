@@ -1,11 +1,11 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset;
 
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.ai.platform.analytics.AiAnalyticsRecorder;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifact;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.consumer.AiArtifactConsumer;
 import com.processVisualisation.virtualKitchen.ai.provider.ImageGenerationClient.GeneratedImage;
 import com.processVisualisation.virtualKitchen.ai.provider.ImageStorageClient;
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAsset;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

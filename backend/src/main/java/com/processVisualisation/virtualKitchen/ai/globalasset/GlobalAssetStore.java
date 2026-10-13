@@ -1,9 +1,10 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset;
 
+import com.processVisualisation.virtualKitchen.ai.asset.GlobalAssetStatus;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAsset;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAssetRepository;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAssetType;
 import com.processVisualisation.virtualKitchen.ai.platform.registry.ModelTier;
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.VisualizationAssetRepository;
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAsset;
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAssetType;
 import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;

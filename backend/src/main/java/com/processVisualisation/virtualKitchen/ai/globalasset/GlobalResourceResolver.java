@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset;
 
+import com.processVisualisation.virtualKitchen.ai.asset.GlobalResourceType;
 import com.processVisualisation.virtualKitchen.store.model.Equipment;
 import com.processVisualisation.virtualKitchen.store.model.Ingredient;
 import com.processVisualisation.virtualKitchen.store.repository.EquipmentRepository;

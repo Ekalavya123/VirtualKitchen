@@ -1,11 +1,11 @@
-package com.processVisualisation.virtualKitchen.ai.globalasset;
+package com.processVisualisation.virtualKitchen.ai.asset;
 
 import java.util.Arrays;
 
 /**
  * The kinds of global (recipe-independent) catalog resources that can own one reusable image.
  * Adding a kind later (actions, system assets) means a constant here plus a branch in
- * {@link GlobalResourceResolver}.
+ * {@code GlobalResourceResolver}.
  */
 public enum GlobalResourceType {
     /** A store catalog {@code Ingredient} (onion, salt). */
@@ -33,13 +33,13 @@ public enum GlobalResourceType {
     }
 
     /**
-     * @throws GlobalAssetException (400) when {@code segment} names no known type
+     * @throws IllegalArgumentException (answered 400) when {@code segment} names no known type
      */
     public static GlobalResourceType fromPathSegment(String segment) {
         return Arrays.stream(values())
                 .filter(type -> type.pathSegment.equalsIgnoreCase(segment))
                 .findFirst()
-                .orElseThrow(() -> GlobalAssetException.badRequest(
+                .orElseThrow(() -> new IllegalArgumentException(
                         "Unknown global asset type: " + segment + " (expected one of: ingredients, equipment)"));
     }
 }

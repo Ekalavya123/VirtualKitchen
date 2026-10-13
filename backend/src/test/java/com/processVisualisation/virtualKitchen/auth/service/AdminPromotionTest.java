@@ -7,8 +7,8 @@ import com.processVisualisation.virtualKitchen.auth.model.UserType;
 import com.processVisualisation.virtualKitchen.auth.repository.UserRepository;
 import com.processVisualisation.virtualKitchen.auth.security.JwtService;
 import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
-import com.processVisualisation.virtualKitchen.kitchen.service.KitchenService;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
@@ -34,7 +34,7 @@ class AdminPromotionTest {
         when(users.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(jwt.generateToken(any(), any(), any())).thenReturn("token");
         return new AuthService(users, mock(SequenceGeneratorService.class), new UserMapper(), encoder, jwt,
-                mock(OtpService.class), mock(GoogleTokenVerifierService.class), mock(KitchenService.class),
+                mock(OtpService.class), mock(GoogleTokenVerifierService.class), mock(ApplicationEventPublisher.class),
                 new AdminAllowlist(allowlist));
     }
 

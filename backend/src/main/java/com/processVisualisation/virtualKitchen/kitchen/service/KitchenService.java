@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Default implementation of {@link KitchenService}, backed by
+ * Kitchen CRUD, backed by
  * {@link KitchenRepository}. Translates between {@link Kitchen} entities and
  * DTOs via {@link KitchenMapper} and generates new kitchen ids using
  * {@link SequenceGeneratorService}.

@@ -11,7 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
- * Default {@link ItemCostService} implementation backed by MongoDB via
+ * Item cost history, backed by MongoDB via
  * {@link ItemCostRepository}. Assigns identifiers using
  * {@link SequenceGeneratorService} and converts between entities and DTOs
  * using {@link ItemCostMapper}.

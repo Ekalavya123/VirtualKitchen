@@ -1,4 +1,4 @@
-package com.processVisualisation.virtualKitchen.ai.globalasset;
+package com.processVisualisation.virtualKitchen.ai.asset;
 
 /** Lifecycle of a global resource's image generation, stored on its {@code VisualizationAsset}. */
 public enum GlobalAssetStatus {

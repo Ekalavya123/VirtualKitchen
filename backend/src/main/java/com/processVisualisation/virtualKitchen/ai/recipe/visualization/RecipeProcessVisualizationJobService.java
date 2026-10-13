@@ -1,9 +1,9 @@
 package com.processVisualisation.virtualKitchen.ai.recipe.visualization;
 
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.ai.platform.logging.OperationLog;
 import com.processVisualisation.virtualKitchen.ai.recipe.RecipeProcessAiException;
 import com.processVisualisation.virtualKitchen.ai.recipe.visualization.dto.VisualizationJobResponseDTO;
-import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationJob;
 import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationJobStatus;
 import com.processVisualisation.virtualKitchen.common.concurrent.BatchResult;
