@@ -200,7 +200,7 @@ export const ProcessApi = {
  * AI-driven recipe process generation (semantic MAIN + subprocesses from free-form recipe text) —
  * async job only. The result is kept only on the job (never saved as a process) by the backend; the
  * frontend loads it into the current Recipe working session (see
- * features/recipe-tool/process/adapters/recipeProcessGenerationConverter.ts and
+ * features/recipe-tool/editor/adapters/recipeProcessGenerationConverter.ts and
  * RecipeSessionContext) and the user Saves explicitly.
  */
 export const RecipeProcessGenerationApi = {
@@ -218,7 +218,7 @@ export const RecipeProcessGenerationApi = {
   },
 }
 
-/** The caller's background AI jobs for a recipe — see features/recipe-tool/context/JobTrackerContext.tsx. */
+/** The caller's background AI jobs for a recipe — see features/recipe-tool/jobs/JobTrackerContext.tsx. */
 export const RecipeJobsApi = {
   async getActive(recipeId: number): Promise<RecipeActiveJobsResponse> {
     return apiGet<RecipeActiveJobsResponse>(API.recipeJobs.active(recipeId))
@@ -243,7 +243,7 @@ export const RecipeProcessVisualizationApi = {
 /**
  * A global ingredient catalog entry (store/dto/IngredientResponseDTO). This DB collection is THE
  * ingredient catalog: recipe steps reference an entry by `String(id)` (see
- * features/recipe-tool/catalog/ingredientCatalog.ts), and the shop sells the same entries. Distinct
+ * shared/catalog/ingredientCatalog.ts), and the shop sells the same entries. Distinct
  * from the looser `ShopItem` type in inventoryApi.ts, which is shared with equipment — this one is
  * typed to exactly what the backend returns for an ingredient.
  */

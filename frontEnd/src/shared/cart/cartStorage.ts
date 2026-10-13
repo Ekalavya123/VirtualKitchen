@@ -1,6 +1,6 @@
 /**
  * The shop cart, persisted per user in localStorage (`virtual-kitchen.cart.<userId>`). Shared by the
- * shop (InventoryShopView) and the recipe-order ingredient check, which adds missing ingredients to
+ * shop (ShopView) and the recipe-order ingredient check, which adds missing ingredients to
  * the same cart before sending the user to the shop.
  *
  * Pure apart from the injectable storage, and free of runtime imports, so node:test can import it.

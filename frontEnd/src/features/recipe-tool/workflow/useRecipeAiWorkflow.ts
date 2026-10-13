@@ -2,9 +2,9 @@ import { useCallback, useState } from 'react'
 import { httpStatusOf } from '../../../api'
 import { RecipeAiWorkflowApi } from '../../../api/recipeAiWorkflowApi'
 import type { RecipeAiTaskType, RecipeAiWorkflowCreateRequest } from '../../../types/recipeAiWorkflow'
-import { useRecipeSession } from '../context/RecipeSessionContext'
-import { workflowJobKey } from '../context/jobTracker'
-import { useJobTracker, useTrackedJob } from '../context/useJobTracker'
+import { useRecipeSession } from '../session/RecipeSessionContext'
+import { workflowJobKey } from '../jobs/jobTracker'
+import { useJobTracker, useTrackedJob } from '../jobs/useJobTracker'
 
 export type WorkflowAction = 'start' | 'approve' | 'retry' | 'discard' | 'dismiss'
 

@@ -2,17 +2,17 @@ import { useCallback, useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { RecipeApi, RecipeDetailApi } from '../../api'
 import type { NutritionInfo, RecipeDetail } from '../../types/recipe'
-import { RecipeSessionProvider } from './context/RecipeSessionContext'
-import './process/styles/RecipeProcessCanvas.css'
+import { RecipeSessionProvider } from './session/RecipeSessionContext'
+import './editor/styles/RecipeProcessCanvas.css'
 import RecipeToolNavbar from './components/RecipeToolNavbar'
-import RecipeEditorView from './process/components/RecipeEditorView'
-import RecipeProcessPage from './presentation/components/RecipeProcessPage'
+import RecipeEditorView from './editor/components/RecipeEditorView'
+import RecipeViewPage from './view/components/RecipeViewPage'
 import { recipeToolPath, type RecipeToolView } from './recipeToolRoutes'
 import { useStartRecipeOrder } from '../recipe-order/useStartRecipeOrder'
-import EditRecipeDetailsModal, { type RecipeDetailsDraft } from '../recipes/EditRecipeDetailsModal'
+import EditRecipeDetailsModal, { type RecipeDetailsDraft } from '../recipes/components/EditRecipeDetailsModal'
 import { useConfirm } from '../../shared/components/confirm/confirmContext'
 import { useNotifications } from '../../shared/components/notifications/NotificationProvider'
-import { browserStorage, clearRecovery } from './persistence/recoveryStore'
+import { browserStorage, clearRecovery } from './session/persistence/recoveryStore'
 import { clearRecipeDrafts } from '../../shared/drafts/draftStore'
 
 type RecipeToolPageProps = {
@@ -30,7 +30,7 @@ type RecipeToolPageProps = {
  * - Recipe Editor — the React Flow process editor (RecipeEditorView), where
  *   the recipe is built and saved;
  * - Recipe Process — the human-readable recipe (ingredients, steps,
- *   nutrition) derived from that same process data (RecipeProcessPage).
+ *   nutrition) derived from that same process data (RecipeViewPage).
  * Both read the one RecipeSessionProvider below, so there's a single source
  * of truth and the Recipe Process always reflects the editor's latest content.
  */
@@ -183,7 +183,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
     // Readers can look around the editor, but only the owner's edits are autosaved/kept for recovery.
     <RecipeSessionProvider recipeId={recipeId} canEdit={isOwner}>
       {/* `flow-canvas-container` strips .kitchen-body's ambient page padding/scroll (see
-          KitchenPage.css) so the editor's canvas can use the full available area edge-to-edge;
+          KitchenLayout.css) so the editor's canvas can use the full available area edge-to-edge;
           the Recipe Process manages its own padding/scroll. */}
       <div className="flow-canvas-container flex h-full w-full flex-col" style={{ background: 'var(--flow-surface-muted)' }}>
         <RecipeToolNavbar
@@ -209,7 +209,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack }
         )}
 
         {view === 'process' && (
-          <RecipeProcessPage recipe={recipe} isOwner={isOwner} onNutritionSaved={handleNutritionSaved} />
+          <RecipeViewPage recipe={recipe} isOwner={isOwner} onNutritionSaved={handleNutritionSaved} />
         )}
       </div>
     </RecipeSessionProvider>

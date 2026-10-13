@@ -6,7 +6,7 @@ import {
   type NarrationPlayerOptions,
   type NarrationSource,
   type PlayerStep,
-} from '../src/features/recipe-tool/process/narration/narrationPlayer.ts'
+} from '../src/features/recipe-tool/walkthrough/narration/narrationPlayer.ts'
 import type { StepNarration } from '../src/types/narration.ts'
 import { FakeClock, deferred, flushMicrotasks } from './fakeClock.ts'
 

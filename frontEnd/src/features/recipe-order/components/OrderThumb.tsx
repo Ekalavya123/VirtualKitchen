@@ -1,5 +1,5 @@
-import RecipeImage from '../../recipe-tool/presentation/components/RecipeImage'
-import '../../recipe-tool/presentation/styles/recipe-process.css'
+import RecipeImage from '../../recipe-tool/view/components/RecipeImage'
+import '../../recipe-tool/view/styles/recipe-view.css'
 import '../recipeOrder.css'
 
 type OrderThumbProps = {

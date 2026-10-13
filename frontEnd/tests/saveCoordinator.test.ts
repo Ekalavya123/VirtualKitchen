@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { SaveCoordinator, classifySaveError, type SaveCoordinatorOptions } from '../src/features/recipe-tool/persistence/saveCoordinator.ts'
+import { SaveCoordinator, classifySaveError, type SaveCoordinatorOptions } from '../src/features/recipe-tool/session/persistence/saveCoordinator.ts'
 import { FakeClock, deferred, flushMicrotasks } from './fakeClock.ts'
 
 class HttpError extends Error {

@@ -1,0 +1,662 @@
+/* FlowCanvas main container: fills its parent (.kitchen-content) edge-to-edge.
+   .kitchen-body strips its own padding for this route (see KitchenLayout.css)
+   so there's no gap under the navbar and no viewport-relative sizing here -
+   that previously made this container taller than the space actually granted
+   by the flex layout, forcing an outer scroll that dragged the "sticky"
+   topbar along with it. */
+.flow-canvas-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* prevent page-level horizontal/vertical scroll */
+  background: var(--flow-bg);
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+/* Body row: sidebar + canvas + properties share the remaining viewport height */
+.flow-canvas-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0; /* allow inner flex children to shrink and scroll instead of pushing the body taller */
+  min-width: 0; /* allow the row to shrink to prevent horizontal overflow */
+}
+
+/* Main content area: canvas (no longer wraps the topbar) */
+.flow-canvas-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0; /* important for flex children to not force horizontal scroll */
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+/* Canvas area */
+.flow-canvas-area {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  min-height: 0; /* prevent flex overflow issues on nested scroll containers */
+}
+
+.flow-canvas-viewport {
+  position: relative;
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Ensure ReactFlow fills the canvas area */
+
+.flow-canvas-area .reactflow {
+  width: 100%;
+  height: 100%;
+}
+
+/* Wrapper classes used in FlowCanvas for observing size changes.
+   These wrappers are the single source of truth for panel width (default size
+   below, or an inline style while dragging/collapsed) — Sidebar.css and
+   PropertiesPanel.css no longer set their own width, so there's nothing left
+   for these to conflict with, and no gap/overflow can appear between them. */
+.flow-sidebar-wrapper,
+.flow-properties-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  box-sizing: border-box; /* ensure padding/border do not increase width unexpectedly */
+}
+
+/* Collapsed panels: show narrow tab */
+.flow-sidebar-wrapper.collapsed {
+  width: 48px;
+  min-width: 48px;
+}
+
+.flow-properties-wrapper.collapsed {
+  width: 48px;
+  min-width: 48px;
+}
+
+.sidebar-collapse-tab,
+.props-collapse-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  cursor: pointer;
+  background: linear-gradient(180deg, var(--flow-surface), var(--flow-surface-muted));
+  border-radius: 8px;
+  margin: 8px;
+  box-shadow: 0 1px 4px rgba(15,23,42,0.06);
+  font-size: 18px;
+  color: var(--flow-accent-strong);
+}
+
+.props-collapse-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  margin: 8px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--flow-border);
+  color: var(--flow-text-muted);
+}
+
+.flow-properties-wrapper.collapsed .flow-properties-panel {
+  display: none;
+}
+
+/* Default panel sizing + the single visual separator for each panel.
+   (Sidebar.css/PropertiesPanel.css previously also drew their own border and
+   fixed width — that produced a doubled edge and made resizing/collapsing
+   inconsistent. This wrapper is now the only place either is set.) */
+.flow-sidebar-wrapper {
+  width: 210px;
+  border-right: 1px solid var(--flow-border);
+  box-shadow: inset -8px 0 12px -12px rgba(15,23,42,0.04);
+}
+
+.flow-properties-wrapper {
+  width: 260px;
+  border-left: 1px solid var(--flow-border);
+  box-shadow: inset 8px 0 12px -12px rgba(15,23,42,0.04);
+}
+
+/* Shared resizer style for the sidebar/properties/recipe-builder dividers.
+   (Previously the main<->properties divider used a separate "flow-resizer"
+   class with no matching CSS at all, rendering as an invisible, near-zero-width,
+   non-discoverable drag target — it now reuses this one, always-styled class.) */
+.flow-inline-resizer {
+  position: relative;
+  width: 10px;
+  height: 100%;
+  flex-shrink: 0;
+  cursor: col-resize;
+}
+
+.flow-inline-resizer::before {
+  content: '';
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(var(--flow-text-muted-rgb), 0.1), rgba(var(--flow-accent-rgb), 0.4), rgba(var(--flow-text-muted-rgb), 0.1));
+}
+
+.flow-inline-resizer:hover::before {
+  background: linear-gradient(180deg, rgba(var(--flow-accent-rgb), 0.12), rgba(var(--flow-accent-strong-rgb), 0.68), rgba(var(--flow-accent-rgb), 0.12));
+}
+
+.recipe-builder-panel {
+  display: flex;
+  height: 100%;
+  flex-shrink: 0;
+  min-width: 0;
+  background: linear-gradient(180deg, rgba(var(--flow-surface-rgb), 0.95), rgba(var(--flow-surface-rgb), 0.98));
+  border-right: 1px solid var(--flow-border);
+  box-shadow: inset -12px 0 24px -24px rgba(15, 23, 42, 0.45);
+}
+
+.recipe-builder-panel-inner {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.recipe-builder-panel-collapsed {
+  width: 3rem;
+  min-width: 3rem;
+  align-items: stretch;
+  justify-content: stretch;
+  background: linear-gradient(180deg, var(--flow-surface), var(--flow-accent-soft));
+}
+
+.recipe-builder-collapse-tab {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border: 0;
+  background: transparent;
+  color: var(--flow-accent-strong);
+  cursor: pointer;
+  padding: 0.75rem 0.25rem;
+}
+
+.recipe-builder-collapse-tab-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.recipe-builder-collapse-tab-icon {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.recipe-builder-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.recipe-builder-kicker {
+  margin-bottom: 0.45rem;
+  color: var(--flow-accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.recipe-builder-title {
+  margin: 0;
+  color: var(--flow-text);
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.recipe-builder-description {
+  margin: 0.45rem 0 0;
+  color: var(--flow-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.recipe-builder-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--flow-border);
+  border-radius: 999px;
+  background: rgba(var(--flow-surface-rgb), 0.96);
+  color: var(--flow-text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+.recipe-builder-surface {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+  padding: 1rem;
+  border: 1px solid rgba(var(--flow-accent-rgb), 0.12);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(180deg, rgba(var(--flow-surface-rgb), 0.92), rgba(var(--flow-accent-rgb), 0.14)),
+    radial-gradient(circle at top right, rgba(var(--flow-accent-rgb), 0.12), transparent 32%);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
+}
+
+.recipe-builder-surface-label {
+  color: var(--flow-text);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.recipe-builder-textarea {
+  width: 100%;
+  flex: 1;
+  min-height: 16rem;
+  resize: vertical;
+  border: 1px solid rgba(var(--flow-text-muted-rgb), 0.44);
+  border-radius: 1rem;
+  background: rgba(var(--flow-surface-rgb), 0.95);
+  color: var(--flow-text);
+  padding: 0.95rem 1rem;
+  font: inherit;
+  font-size: 0.92rem;
+  line-height: 1.65;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.recipe-builder-textarea:focus {
+  border-color: rgba(var(--flow-accent-rgb), 0.75);
+  box-shadow: 0 0 0 4px rgba(var(--flow-accent-rgb), 0.12);
+}
+
+.recipe-builder-helper-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.recipe-builder-helper-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(var(--flow-surface-rgb), 0.88);
+  color: var(--flow-text-muted);
+  padding: 0.38rem 0.68rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.recipe-builder-status {
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--flow-success-border);
+  border-radius: 1rem;
+  background: var(--flow-success-soft);
+  color: var(--flow-success);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.recipe-builder-status-error {
+  border-color: var(--flow-danger-border);
+  background: var(--flow-danger-soft);
+  color: var(--flow-danger);
+}
+
+.recipe-builder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.recipe-builder-primary-action,
+.recipe-builder-secondary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.55rem;
+  min-height: 2.8rem;
+  border-radius: 0.95rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+}
+
+.recipe-builder-primary-action {
+  flex: 1 1 12rem;
+  border: 1px solid rgba(var(--flow-accent-strong-rgb), 0.24);
+  background: linear-gradient(135deg, var(--flow-accent-strong), var(--flow-accent-secondary));
+  box-shadow: 0 16px 36px rgba(var(--flow-accent-strong-rgb), 0.22);
+  color: #ffffff;
+}
+
+.recipe-builder-secondary-action {
+  flex: 0 0 auto;
+  border: 1px solid var(--flow-border);
+  background: rgba(var(--flow-surface-rgb), 0.92);
+  color: var(--flow-text);
+}
+
+.recipe-builder-primary-action:hover:not(:disabled),
+.recipe-builder-secondary-action:hover:not(:disabled),
+.recipe-builder-icon-button:hover,
+.recipe-builder-collapse-tab:hover {
+  transform: translateY(-1px);
+}
+
+.recipe-builder-primary-action:disabled,
+.recipe-builder-secondary-action:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.recipe-builder-spinner {
+  width: 0.95rem;
+  height: 0.95rem;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  border-radius: 999px;
+  animation: recipe-builder-spin 0.85s linear infinite;
+}
+
+@keyframes recipe-builder-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.recipe-builder-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.recipe-builder-progress-track {
+  flex: 1 1 auto;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: rgba(var(--flow-accent-strong-rgb), 0.16);
+  overflow: hidden;
+}
+
+.recipe-builder-progress-fill {
+  height: 100%;
+  background: var(--flow-magic);
+  transition: width 300ms ease;
+}
+
+.recipe-builder-progress-label {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--flow-magic);
+  min-width: 2.2rem;
+  text-align: right;
+}
+
+@media (max-width: 1100px) {
+  .recipe-builder-panel-inner {
+    padding: 0.85rem;
+  }
+
+  .recipe-builder-surface {
+    padding: 0.85rem;
+  }
+}
+
+/* Export modal */
+.flow-canvas-export-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--flow-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.flow-canvas-export-modal {
+  background: var(--flow-surface);
+  border-radius: 16px;
+  width: 740px;
+  max-width: 95vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+/* --- AI edit mode (RecipeProcessGenerationModal) --- */
+
+.recipe-ai-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-md);
+  background: var(--flow-surface-muted);
+}
+
+.recipe-ai-mode-option {
+  flex: 1;
+  padding: 6px 10px;
+  border: none;
+  border-radius: calc(var(--flow-radius-md) - 2px);
+  background: transparent;
+  color: var(--flow-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.recipe-ai-mode-option.is-active {
+  background: var(--flow-surface);
+  color: var(--flow-accent-strong);
+  box-shadow: var(--flow-shadow-card);
+}
+
+.recipe-ai-mode-option:disabled {
+  cursor: not-allowed;
+}
+
+.recipe-ai-edit-review {
+  border: 1px solid var(--flow-magic-border);
+  border-radius: var(--flow-radius-md);
+  background: var(--flow-magic-soft);
+  color: var(--flow-text);
+  font-size: 12.5px;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
+/* --- AI Recipe Creation (RecipeAiCreationModal) --- */
+
+.recipe-ai-task-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recipe-ai-task-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-md);
+  background: var(--flow-surface);
+  cursor: pointer;
+}
+
+.recipe-ai-task-option.is-checked {
+  border-color: var(--flow-accent-soft-border);
+  background: var(--flow-accent-soft);
+}
+
+.recipe-ai-task-option.is-complete {
+  border-style: dashed;
+}
+
+.recipe-ai-task-option input {
+  margin-top: 2px;
+  accent-color: var(--flow-accent);
+}
+
+.recipe-ai-task-option-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--flow-text);
+}
+
+.recipe-ai-task-option-description {
+  font-size: 11.5px;
+  color: var(--flow-text-muted);
+  margin-top: 1px;
+}
+
+.recipe-ai-estimate {
+  border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-md);
+  background: var(--flow-surface-muted);
+  padding: 9px 12px;
+  font-size: 11.5px;
+  color: var(--flow-text-muted);
+}
+
+.recipe-ai-estimate-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+
+.recipe-ai-estimate-total {
+  border-top: 1px solid var(--flow-border);
+  margin-top: 4px;
+  padding-top: 5px;
+  font-weight: 700;
+  color: var(--flow-text);
+}
+
+.recipe-ai-task-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--flow-border);
+  border-radius: var(--flow-radius-md);
+  overflow: hidden;
+}
+
+.recipe-ai-task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--flow-surface);
+}
+
+.recipe-ai-task-row + .recipe-ai-task-row {
+  border-top: 1px solid var(--flow-border);
+}
+
+.recipe-ai-task-icon {
+  width: 22px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.recipe-ai-task-row.tone-done .recipe-ai-task-icon { color: var(--flow-success); }
+.recipe-ai-task-row.tone-running .recipe-ai-task-icon { color: var(--flow-accent); animation: recipe-ai-spin 1.4s linear infinite; }
+.recipe-ai-task-row.tone-waiting .recipe-ai-task-icon { color: var(--flow-warning); }
+.recipe-ai-task-row.tone-failed .recipe-ai-task-icon { color: var(--flow-danger); }
+.recipe-ai-task-row.tone-skipped .recipe-ai-task-icon,
+.recipe-ai-task-row.tone-pending .recipe-ai-task-icon { color: var(--flow-text-subtle); }
+
+@keyframes recipe-ai-spin {
+  to { transform: rotate(360deg); }
+}
+
+.recipe-ai-task-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--flow-text);
+}
+
+.recipe-ai-task-detail {
+  font-size: 11.5px;
+  color: var(--flow-text-muted);
+  margin-top: 1px;
+}
+
+.recipe-ai-task-status {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--flow-text-muted);
+  white-space: nowrap;
+}
+
+.recipe-ai-task-row.tone-failed .recipe-ai-task-detail,
+.recipe-ai-task-row.tone-failed .recipe-ai-task-status { color: var(--flow-danger); }
+
+.recipe-ai-approval {
+  border: 1px solid var(--flow-magic-border);
+  border-radius: var(--flow-radius-md);
+  background: var(--flow-magic-soft);
+  padding: 10px 12px;
+  font-size: 12.5px;
+  color: var(--flow-text);
+  line-height: 1.45;
+}
+
+/* Nodes an applied AI edit just added or changed — a brief pulse, then back to normal. */
+.react-flow__node.flow-node-ai-changed {
+  border-radius: var(--flow-radius-md);
+  animation: flow-node-ai-changed-pulse 1.4s ease-out 2;
+  box-shadow: 0 0 0 3px var(--flow-magic-border);
+}
+
+@keyframes flow-node-ai-changed-pulse {
+  0% { box-shadow: 0 0 0 0 var(--flow-magic); }
+  100% { box-shadow: 0 0 0 10px transparent; }
+}

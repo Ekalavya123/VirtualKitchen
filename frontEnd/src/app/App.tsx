@@ -10,20 +10,20 @@ import {
   useSearchParams,
 } from 'react-router-dom'
 import Auth from '../features/auth/Auth'
-import KitchenLayout from '../features/kitchen/KitchenPage'
-import InventoryView from '../features/kitchen/InventoryView'
-import InventoryShopView from '../features/kitchen/InventoryShopView'
-import OrderHistoryView from '../features/kitchen/OrderHistoryView'
-import RecipeHomePage from '../features/recipes/RecipeHomePage'
-import RecipeProcessEditor from '../features/recipe-tool/process/components/RecipeProcessEditor'
-import RecipeProcessListPage from '../features/recipe-tool/process/components/RecipeProcessListPage'
+import KitchenLayout from '../features/kitchen/layout/KitchenLayout'
+import InventoryView from '../features/kitchen/inventory/InventoryView'
+import ShopView from '../features/kitchen/shop/ShopView'
+import OrderHistoryView from '../features/kitchen/orders/OrderHistoryView'
+import RecipeLibraryPage from '../features/recipes/RecipeLibraryPage'
+import RecipeProcessEditor from '../features/recipe-tool/editor/components/RecipeProcessEditor'
+import RecipeProcessListPage from '../features/recipe-tool/process-list/RecipeProcessListPage'
 import RecipeToolPage from '../features/recipe-tool/RecipeToolPage'
 import { isRecipeToolView, recipeToolPath } from '../features/recipe-tool/recipeToolRoutes'
-import { RecipeSessionProvider } from '../features/recipe-tool/context/RecipeSessionContext'
-import IngredientCatalogGate from '../features/recipe-tool/catalog/IngredientCatalogGate'
+import { RecipeSessionProvider } from '../features/recipe-tool/session/RecipeSessionContext'
+import IngredientCatalogGate from '../shared/catalog/IngredientCatalogGate'
 import RecipeOrderPage from '../features/recipe-order/RecipeOrderPage'
 import { recipeOrderPath } from '../features/recipe-order/model/orderView'
-import HomePage from '../features/HomePage'
+import HomePage from '../features/home/HomePage'
 import AiAnalyticsPage from '../features/admin/ai-analytics/AiAnalyticsPage'
 import type { User } from '../types/User'
 import type { RecipeProcessBreadcrumbEntry } from '../types/recipe'
@@ -68,7 +68,7 @@ function ShopRoute({ userId }: { userId: number }) {
   const resumeOrderCode = stateCode ?? (fetchedCode?.orderId === resumeOrderId ? fetchedCode.code : null)
 
   return (
-    <InventoryShopView
+    <ShopView
       // Remount when the resume target changes, so the cart is re-read from storage.
       key={resumeOrderId ?? 'shop'}
       userId={userId}
@@ -108,7 +108,7 @@ function RecipesRoute({ userId }: { userId: number }) {
 
   // Opening (or just having created) a recipe goes straight to the Recipe Tool.
   return (
-    <RecipeHomePage
+    <RecipeLibraryPage
       userId={userId}
       onCreateRecipe={(recipeId) => navigate(recipeToolPath(recipeId))}
     />

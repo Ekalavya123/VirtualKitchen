@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { readingRevealMs, splitWords, visibleWordCount } from '../src/features/recipe-tool/process/narration/wordReveal.ts'
+import { readingRevealMs, splitWords, visibleWordCount } from '../src/features/recipe-tool/walkthrough/narration/wordReveal.ts'
 
 describe('splitWords', () => {
   it('splits on any whitespace and ignores empty text', () => {

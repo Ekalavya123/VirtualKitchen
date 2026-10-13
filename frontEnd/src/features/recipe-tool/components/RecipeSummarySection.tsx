@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import '../styles/recipe-tool.css'
 import type { RecipeDetail } from '../../../types/recipe'
-import { useRecipeSession } from '../context/RecipeSessionContext'
-import { buildRecipePresentation } from '../presentation/model/recipePresentation'
+import { useRecipeSession } from '../session/RecipeSessionContext'
+import { buildRecipePresentation } from '../view/model/recipeView'
 
 type RecipeSummarySectionProps = {
   recipe: RecipeDetail

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { SessionHistory } from '../src/features/recipe-tool/persistence/sessionHistory.ts'
+import { SessionHistory } from '../src/features/recipe-tool/session/persistence/sessionHistory.ts'
 
 const setup = (options: { limit?: number } = {}) => {
   let now = 0

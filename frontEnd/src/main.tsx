@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './app/App'
 import { NotificationProvider } from './shared/components/notifications/NotificationProvider'
 import { ConfirmProvider } from './shared/components/confirm/ConfirmProvider'
-import { JobTrackerProvider } from './features/recipe-tool/context/JobTrackerContext'
+import { JobTrackerProvider } from './features/recipe-tool/jobs/JobTrackerContext'
 import { ThemeProvider } from './shared/theme/ThemeProvider'
 
 import './styles/global.css'

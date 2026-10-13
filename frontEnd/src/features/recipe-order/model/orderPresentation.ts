@@ -1,6 +1,6 @@
 /**
  * The recipe snapshot of an order, read through the Recipe Process presentation model
- * (recipe-tool/presentation/model/recipePresentation.ts) — the same reading order and step
+ * (recipe-tool/view/model/recipeView.ts) — the same reading order and step
  * numbering the Recipe Process page shows, so "step 3" means the same thing everywhere.
  */
 
@@ -9,7 +9,7 @@ import {
   buildRecipePresentation,
   type RecipePresentation,
   type RecipeTimelineStep,
-} from '../../recipe-tool/presentation/model/recipePresentation'
+} from '../../recipe-tool/view/model/recipeView'
 
 const EMPTY_PRESENTATION: RecipePresentation = { sections: [], ingredients: [], stepCount: 0 }
 

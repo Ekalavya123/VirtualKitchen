@@ -3,13 +3,13 @@
  * requests. Field names and optionality mirror the backend DTOs exactly
  * (recipe/dto/{ProcessResponseDTO,ProcessNodeDTO,ProcessEdgeDTO,ProcessRequestDTO,
  * ProcessUpdateDTO}.java). What a node's `data` means (recipe steps, conditions) lives in
- * features/recipe-tool/process/model; React Flow presentation is bridged by
- * features/recipe-tool/process/adapters/recipeProcessCanvasAdapter.ts.
+ * features/recipe-tool/model; React Flow presentation is bridged by
+ * features/recipe-tool/editor/adapters/recipeProcessCanvasAdapter.ts.
  */
 
 export type ProcessType = 'MAIN' | 'SUBPROCESS'
 
-/** A Process graph never embeds another process as a node — a subprocess is referenced only by id, from a STEP's own Action On data (see features/recipe-tool/process/model/recipeStepData.ts). */
+/** A Process graph never embeds another process as a node — a subprocess is referenced only by id, from a STEP's own Action On data (see features/recipe-tool/model/recipeStepData.ts). */
 export type ProcessNodeKind = 'STEP' | 'CONDITION'
 
 export type ProcessPosition = {
@@ -33,7 +33,7 @@ export type ProcessViewport = {
  * node's own field bag (opaque to the frontend domain layer — the flow
  * editor's node components are what interpret it, including a STEP's
  * Action On ingredient/subprocess references — see
- * features/recipe-tool/process/model/recipeStepData.ts).
+ * features/recipe-tool/model/recipeStepData.ts).
  */
 export type ProcessNode = {
   id: string
