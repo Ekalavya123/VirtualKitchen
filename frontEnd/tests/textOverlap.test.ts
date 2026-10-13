@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
-import { descriptionTail, restatesText } from '../src/features/recipe-tool/presentation/model/textOverlap.ts'
+import { descriptionTail, restatesText } from '../src/features/recipe-tool/view/model/textOverlap.ts'
 
 describe('Recipe Process: saying each thing once', () => {
   it('treats an expected result that repeats the instruction as a restatement', () => {

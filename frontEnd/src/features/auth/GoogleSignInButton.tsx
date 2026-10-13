@@ -8,8 +8,11 @@ type GoogleSignInButtonProps = {
 
 export default function GoogleSignInButton({ onCredential, disabled }: GoogleSignInButtonProps) {
   const buttonRef = useRef<HTMLDivElement>(null)
+  // Google keeps the callback it was initialised with; the ref lets it always call the latest prop.
   const onCredentialRef = useRef(onCredential)
-  onCredentialRef.current = onCredential
+  useEffect(() => {
+    onCredentialRef.current = onCredential
+  }, [onCredential])
 
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID || disabled) {

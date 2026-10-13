@@ -18,7 +18,7 @@ export type DraftStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem' | 
 type DraftEnvelope<T> = { savedAt: number; value: T }
 
 /** The browser's localStorage, or null when it's unavailable (private mode, blocked site data). */
-export const browserDraftStorage = (): DraftStorage | null => {
+const browserDraftStorage = (): DraftStorage | null => {
   try {
     return typeof window !== 'undefined' ? window.localStorage : null
   } catch {

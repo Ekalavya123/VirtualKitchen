@@ -7,7 +7,7 @@ import {
   insertNodeAfter,
   preferredInsertPosition,
   type ProcessGraph,
-} from '../src/features/recipe-tool/process/adapters/recipeProcessEditGraph.ts'
+} from '../src/features/recipe-tool/editor/adapters/recipeProcessEditGraph.ts'
 import type { ProcessEdge, ProcessNode } from '../src/types/process.ts'
 
 const step = (id: string, y: number): ProcessNode => ({ id, kind: 'STEP', position: { x: 120, y }, width: 280, height: 160, data: { title: id } })

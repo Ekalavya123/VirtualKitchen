@@ -1,0 +1,164 @@
+import { useState } from 'react'
+import { NavLink } from 'react-router-dom'
+import '../../../styles/flow-ui.css'
+import type { RecipeDetail } from '../../../types/recipe'
+import { recipeToolPath, type RecipeToolView } from '../recipeToolRoutes'
+import RecipeSummarySection from './RecipeSummarySection'
+import ActionMenu, { type ActionMenuItem } from '../../../shared/components/ActionMenu'
+
+const TABS: { id: RecipeToolView; label: string; icon: string }[] = [
+  { id: 'editor', label: 'Recipe Editor', icon: '🧩' },
+  { id: 'process', label: 'Recipe Process', icon: '📖' },
+]
+
+type RecipeToolNavbarProps = {
+  recipe: RecipeDetail
+  onBack: () => void
+  /** Owners only: "Order Recipe" starts a recipe order (of the last saved version) and opens it. */
+  onOrderRecipe?: () => void
+  /** The order is being created. */
+  ordering?: boolean
+  /** Owners only: the ⋯ menu's recipe actions. */
+  onEditDetails?: () => void
+  onToggleVisibility?: () => void
+  onDeleteRecipe?: () => void
+}
+
+/**
+ * The Recipe Tool's own internal top navbar: compact recipe metadata on the
+ * left (collapsing to just an icon button on narrow viewports, via Tailwind
+ * responsive classes rather than a resize listener) and the two tool tabs
+ * on the right. Each tab is its own route (see recipeToolRoutes.ts), so the
+ * active tab is whichever route is current — NavLink marks it.
+ * There is no recipe-level image in the current backend model (only
+ * ingredients have one), so the compact metadata uses a plain icon rather
+ * than fabricating a thumbnail.
+ */
+export default function RecipeToolNavbar({
+  recipe, onBack, onOrderRecipe, ordering = false, onEditDetails, onToggleVisibility, onDeleteRecipe,
+}: RecipeToolNavbarProps) {
+  const [showDetails, setShowDetails] = useState(false)
+  const menuItems: ActionMenuItem[] = [
+    ...(onEditDetails ? [{ label: '✏️ Edit name & description', onSelect: onEditDetails }] : []),
+    ...(onToggleVisibility
+      ? [{ label: recipe.visibility === 'PUBLIC' ? '🔒 Make private' : '🌐 Make public', onSelect: onToggleVisibility }]
+      : []),
+    ...(onDeleteRecipe ? [{ label: '🗑️ Delete recipe', onSelect: onDeleteRecipe, danger: true }] : []),
+  ]
+
+  return (
+    <div
+      className="h-[3.75rem] flex-shrink-0 items-center gap-3 border-b border-[var(--flow-border)] bg-[var(--flow-surface)] px-4"
+      style={{ position: 'relative', display: 'grid', gridTemplateColumns: '1fr auto 1fr' }}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <button
+          onClick={onBack}
+          style={{ padding: '8px 10px', borderRadius: 8, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text)', cursor: 'pointer', fontSize: 12, fontWeight: 600, flexShrink: 0 }}
+        >
+          ← Back
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowDetails((value) => !value)}
+          className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5"
+          style={{ border: '1px solid transparent', background: showDetails ? 'var(--flow-surface-muted)' : 'transparent', cursor: 'pointer' }}
+          title="View full recipe details"
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+              background: 'linear-gradient(135deg, var(--flow-accent), var(--flow-accent-secondary))',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
+            }}
+          >
+            🍳
+          </span>
+          <span className="hidden min-w-0 flex-col items-start sm:flex">
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--flow-text)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {recipe.name}
+            </span>
+            {recipe.description && (
+              <span className="hidden lg:inline" style={{ fontSize: 10.5, color: 'var(--flow-text-muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {recipe.description}
+              </span>
+            )}
+          </span>
+          <span
+            className="hidden sm:inline"
+            style={{
+              fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 999, flexShrink: 0,
+              background: recipe.visibility === 'PUBLIC' ? '#eff6ff' : 'var(--flow-surface-muted)',
+              border: `1px solid ${recipe.visibility === 'PUBLIC' ? '#bfdbfe' : 'var(--flow-border)'}`,
+              color: recipe.visibility === 'PUBLIC' ? '#1d4ed8' : 'var(--flow-text-muted)',
+            }}
+          >
+            {recipe.visibility === 'PUBLIC' ? '🌐' : '🔒'}
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--flow-text-subtle)', transform: showDetails ? 'rotate(180deg)' : 'none', flexShrink: 0 }} aria-hidden>
+            ▾
+          </span>
+        </button>
+      </div>
+
+      <div className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[var(--flow-border)] bg-[var(--flow-surface-muted)] p-1">
+        {TABS.map((tab) => (
+          <NavLink
+            key={tab.id}
+            to={recipeToolPath(recipe.id, tab.id)}
+            replace
+            style={({ isActive }) => ({
+              padding: '7px 12px',
+              borderRadius: 7,
+              background: isActive ? 'var(--flow-surface)' : 'transparent',
+              boxShadow: isActive ? '0 1px 3px rgba(15,23,42,0.12)' : 'none',
+              color: isActive ? 'var(--flow-accent-strong)' : 'var(--flow-text-muted)',
+              fontSize: 12,
+              fontWeight: 700,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            })}
+          >
+            <span className="hidden sm:inline">{tab.icon} {tab.label}</span>
+            <span className="sm:hidden" aria-label={tab.label}>{tab.icon}</span>
+          </NavLink>
+        ))}
+      </div>
+
+      <div className="flex min-w-0 items-center justify-end gap-2">
+        {onOrderRecipe && (
+          <button
+            type="button"
+            onClick={onOrderRecipe}
+            disabled={ordering}
+            aria-label={ordering ? 'Starting recipe order' : 'Order Recipe'}
+            title="Order this recipe from your kitchen — uses the last saved version (simulated preparation and delivery)"
+            style={{
+              padding: '8px 12px', borderRadius: 8, border: 0, flexShrink: 0, whiteSpace: 'nowrap',
+              background: 'linear-gradient(135deg, var(--flow-accent), var(--flow-accent-secondary))',
+              color: 'white', fontSize: 12, fontWeight: 700, cursor: ordering ? 'progress' : 'pointer', opacity: ordering ? 0.7 : 1,
+            }}
+          >
+            <span aria-hidden>🛒</span>
+            <span className="hidden md:inline"> {ordering ? 'Starting…' : 'Order Recipe'}</span>
+          </button>
+        )}
+
+        <ActionMenu items={menuItems} label={`More actions for ${recipe.name}`} placement="down" />
+      </div>
+
+      {showDetails && (
+        <div
+          style={{
+            position: 'absolute', top: '100%', left: 12, marginTop: 6, zIndex: 30,
+            width: 'min(420px, calc(100vw - 24px))', boxShadow: '0 12px 28px rgba(15,23,42,0.18)',
+          }}
+        >
+          <RecipeSummarySection recipe={recipe} />
+        </div>
+      )}
+    </div>
+  )
+}

@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { RecipeOrderApi, httpStatusOf } from '../../api'
 import type { RecipeOrder } from '../../types/recipeOrder'
-import { useNotifications } from '../../shared/components/notifications/NotificationProvider'
-import '../recipe-tool/styles/recipe-tool.css'
+import { useNotifications } from '../../shared/components/notifications/notificationContext'
+import '../../styles/flow-ui.css'
 import './recipeOrder.css'
 import OrderStatusBadge from './components/OrderStatusBadge'
 import OrderStepper from './components/OrderStepper'
@@ -14,6 +14,7 @@ import PaymentStep from './steps/PaymentStep'
 import ReceiptView from './steps/ReceiptView'
 import TrackingView from './steps/TrackingView'
 import type { OrderStepProps } from './steps/stepProps'
+import { errorMessage } from '../../shared/errors'
 
 type RecipeOrderPageProps = {
   orderId: number
@@ -65,7 +66,7 @@ export default function RecipeOrderPage({ orderId, view, userId }: RecipeOrderPa
       .catch((error: unknown) => {
         if (cancelled) return
         setLoadError({
-          message: error instanceof Error ? error.message : 'Unable to load this order',
+          message: errorMessage(error, 'Unable to load this order'),
           notFound: httpStatusOf(error) === 404,
         })
       })
@@ -88,7 +89,7 @@ export default function RecipeOrderPage({ orderId, view, userId }: RecipeOrderPa
   }, [orderId])
 
   const onError = useCallback((error: unknown) => {
-    notifyError(error instanceof Error ? error.message : 'Something went wrong')
+    notifyError(errorMessage(error, 'Something went wrong'))
     // A conflict means our copy is stale: show what the server has now.
     if (httpStatusOf(error) === 409) void onRefetch()
   }, [notifyError, onRefetch])

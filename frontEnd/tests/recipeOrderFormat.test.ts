@@ -3,13 +3,13 @@ import assert from 'node:assert/strict'
 import {
   cleanAddress,
   formatAddressLines,
-  formatNumber,
   formatQuantity,
   getStatusDisplay,
   missingAddressFields,
   sameAddress,
   timeValue,
 } from '../src/features/recipe-order/model/orderFormat.ts'
+import { formatNumber } from '../src/shared/format/number.ts'
 
 describe('recipe order formatting', () => {
   it('formats quantities in inventory units', () => {

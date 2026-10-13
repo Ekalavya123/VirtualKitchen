@@ -36,7 +36,7 @@ import java.util.Set;
  * and comes before the consuming step — an edge path leads from it to the consumer and not back,
  * with node order breaking the tie when the edges don't decide it (both reach each other through a
  * loop, or neither reaches the other because the steps aren't connected yet). This mirrors the frontend's
- * recipe-tool/process/model/recipeStepOutputs.ts, so a reference the editor offers always saves.
+ * recipe-tool/model/recipeStepOutputs.ts, so a reference the editor offers always saves.
  */
 @Component
 public class ProcessValidator {
@@ -231,7 +231,7 @@ public class ProcessValidator {
         return false;
     }
 
-    /** {@code data.step.actionOn.steps[].stepId} — the shape recipe-tool/process/model/recipeStepData.ts writes. */
+    /** {@code data.step.actionOn.steps[].stepId} — the shape recipe-tool/model/recipeStepData.ts writes. */
     private List<String> stepOutputReferences(ProcessNode node) {
         List<String> ids = new ArrayList<>();
         if (!(stepData(node).get("actionOn") instanceof Map<?, ?> actionOn)) return ids;

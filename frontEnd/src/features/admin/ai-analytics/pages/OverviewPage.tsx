@@ -2,7 +2,7 @@ import { AiAnalyticsApi } from '../api/aiAnalyticsApi'
 import type { GroupMetrics } from '../api/aiAnalyticsApi'
 import { BarList, LineChart } from '../components/charts'
 import { CostCell, DataNotes, LoadState, MetricsTable, Stat, StatusBadge } from '../components/common'
-import { useApiData } from '../hooks/useApiData'
+import { useApiData } from '../../../../shared/hooks/useApiData'
 import {
   conversionNote,
   displayCurrency,

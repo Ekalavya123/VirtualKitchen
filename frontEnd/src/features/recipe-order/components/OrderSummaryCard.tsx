@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { RecipeOrder } from '../../../types/recipeOrder'
-import { formatAddressLines, formatDateTime, formatServings } from '../model/orderFormat'
+import { formatAddressLines, formatServings } from '../model/orderFormat'
+import { formatDateTime } from '../../../shared/format/date'
 import OrderStatusBadge from './OrderStatusBadge'
 import OrderThumb from './OrderThumb'
 

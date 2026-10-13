@@ -5,17 +5,15 @@
  * NutritionInfoDTO, RecipeProcessGeneration*DTO, Generated*DTO, VisualizationJobResponseDTO).
  */
 
+import type { UnitType } from './kitchen'
 import type { RecipeAiWorkflowResponse } from './recipeAiWorkflow'
-
-/** Mirrors the backend's UnitType enum (also duplicated locally in orderApi.ts as OrderUnitType — there is no single shared source for it yet). */
-export type UnitType = 'KG' | 'GRAM' | 'LITER' | 'ML' | 'COUNT'
 
 /**
  * AI-generated recipe process structures (recipe/dto/Generated*.java) — semantic
  * data only, no React Flow node/edge ids, positions, or dimensions. A
  * subprocess reference is a temporary generation-scoped `ref` string
  * (resolved to a real or client-temporary process id by
- * features/recipe-tool/process/adapters/recipeProcessGenerationConverter.ts), never a
+ * features/recipe-tool/editor/adapters/recipeProcessGenerationConverter.ts), never a
  * database id.
  */
 export interface GeneratedActionOnIngredient {
@@ -72,7 +70,7 @@ export type ProcessGenerationMode = 'CREATE' | 'EDIT'
 
 /**
  * One validated AI edit operation (recipe/dto/ProcessEditOperationDTO.java), applied in list order by
- * features/recipe-tool/process/adapters/recipeProcessEditApplier.ts. Node references are real node ids, the
+ * features/recipe-tool/editor/adapters/recipeProcessEditApplier.ts. Node references are real node ids, the
  * `ref` of a node an earlier operation added, or 'START'.
  */
 export type ProcessEditOperationType =

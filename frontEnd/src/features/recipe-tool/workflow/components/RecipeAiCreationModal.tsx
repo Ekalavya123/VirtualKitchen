@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { RecipeAiWorkflowApi } from '../../../../api/recipeAiWorkflowApi'
 import type { RecipeAiTaskType, RecipeAiWorkflowEstimate, RecipeAiWorkflowResponse } from '../../../../types/recipeAiWorkflow'
-import { isWorkflowOpen } from '../../context/jobTracker'
-import { useRecipeSession } from '../../context/RecipeSessionContext'
+import { isWorkflowOpen } from '../../jobs/jobTracker'
+import { useRecipeSession } from '../../session/sessionContext'
 import {
   createWorkflowTaskSelection,
   isCompleteExperience,
@@ -31,8 +31,8 @@ import { draftKeys } from '../../../../shared/drafts/draftStore'
 import { useDraft } from '../../../../shared/drafts/useDraft'
 import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
 import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
-import { useConfirmDiscard } from '../../components/useConfirmDiscard'
-import '../../process/styles/RecipeProcessCanvas.css'
+import { useConfirmDiscard } from '../../../../shared/components/confirm/useConfirmDiscard'
+import '../../styles/modals.css'
 
 type AiRecipeCreationDraft = { selection: WorkflowTaskSelection; recipeText: string }
 

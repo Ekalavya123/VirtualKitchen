@@ -6,8 +6,10 @@ import { withMinimumDuration } from '../../../shared/components/payment/withMini
 import CancelOrderButton from '../components/CancelOrderButton'
 import DemoNotice from '../components/DemoNotice'
 import OrderThumb from '../components/OrderThumb'
-import { formatMoney, formatQuantity, formatServings } from '../model/orderFormat'
+import { formatQuantity, formatServings } from '../model/orderFormat'
+import { formatMoney } from '../../../shared/format/money'
 import type { OrderStepProps } from './stepProps'
+import { errorMessage } from '../../../shared/errors'
 
 const METHODS: { id: PaymentMethod; title: string; description: string }[] = [
   { id: 'DEMO_APPROVE', title: 'Demo · Approve payment', description: 'Simulates a successful payment. The order is confirmed and preparation can start.' },
@@ -73,7 +75,7 @@ export default function PaymentStep({ order, onOrderChange, onNavigate, onError 
         // No answer (offline/timeout): keep the key so "Try again" repeats this same attempt.
         setInterrupted(true)
       }
-      setGateway({ phase: 'failure', error, message: error instanceof Error ? error.message : 'The payment could not be completed.' })
+      setGateway({ phase: 'failure', error, message: errorMessage(error, 'The payment could not be completed.') })
     } finally {
       setPaying(false)
     }

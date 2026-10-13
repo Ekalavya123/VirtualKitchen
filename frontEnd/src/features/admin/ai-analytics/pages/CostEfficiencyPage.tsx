@@ -4,7 +4,7 @@ import type { GroupMetrics } from '../api/aiAnalyticsApi'
 import { BarList } from '../components/charts'
 import { DataNotes, LoadState, MetricsTable } from '../components/common'
 import { DEFAULT_METRIC_COLUMNS, METRIC_COLUMNS } from '../model/metricColumns'
-import { useApiData } from '../hooks/useApiData'
+import { useApiData } from '../../../../shared/hooks/useApiData'
 import { dimensionLabel, displayCurrency, formatCost, formatCount } from '../model/analyticsFormat'
 import { GROUP_BY_LABELS, requestKey } from '../model/analyticsQuery'
 

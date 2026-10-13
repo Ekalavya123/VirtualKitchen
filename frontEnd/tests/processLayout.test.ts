@@ -8,7 +8,7 @@ import {
   planRows,
   type LayoutBox,
   type LayoutEdge,
-} from '../src/features/recipe-tool/process/model/processLayout.ts'
+} from '../src/features/recipe-tool/editor/model/processLayout.ts'
 
 const edge = (source: string, target: string, sourceHandle?: string): LayoutEdge =>
   ({ id: `${source}->${target}${sourceHandle ? `:${sourceHandle}` : ''}`, source, target, sourceHandle })

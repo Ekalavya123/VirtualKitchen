@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { AiAnalyticsApi } from '../api/aiAnalyticsApi'
 import type { AnalyticsRequest } from '../api/aiAnalyticsApi'
 import { CostCell, LoadState, StatusBadge } from '../components/common'
-import { useApiData } from '../hooks/useApiData'
+import { useApiData } from '../../../../shared/hooks/useApiData'
 import { formatDateTime, formatMs, formatTokens, humanize, shortId } from '../model/analyticsFormat'
 import { requestKey } from '../model/analyticsQuery'
 

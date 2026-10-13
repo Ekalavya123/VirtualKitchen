@@ -10,7 +10,7 @@ import {
   setIngredientCatalog,
   subscribeIngredientCatalog,
   toIngredientDefinition,
-} from '../src/features/recipe-tool/catalog/ingredientCatalogStore.ts'
+} from '../src/shared/catalog/ingredientCatalogStore.ts'
 import type { GlobalIngredient } from '../src/api/recipeApi.ts'
 
 // Fixture entries shaped like GET /api/v1/ingredients (the database catalog).

@@ -7,7 +7,8 @@
  */
 
 import type { Process } from './process'
-import type { NutritionInfo, UnitType } from './recipe'
+import type { UnitType } from './kitchen'
+import type { NutritionInfo } from './recipe'
 
 /** Dates are ISO local date-times ("2026-10-10T14:03:22.123") as serialized by the backend, or null. */
 export type IsoDateTime = string

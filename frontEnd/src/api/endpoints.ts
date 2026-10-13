@@ -6,9 +6,6 @@
 export const API = {
   // Authentication & Users
   auth: {
-    users: '/api/v1/users',
-    userByEmail: (email: string) => `/api/v1/users/email/${email}`,
-
     signup: '/api/v1/auth/signup',
     login: '/api/v1/auth/login',
     google: '/api/v1/auth/google',

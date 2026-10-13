@@ -90,7 +90,7 @@ public final class ProcessGraphCloner {
 
     /**
      * Rewrites a STEP's Action On subprocess references ({@code data.step.actionOn.processes[].processId},
-     * the shape the frontend's recipe-tool/process/model/recipeStepData.ts writes) to the copied processes. A reference to a process
+     * the shape the frontend's recipe-tool/model/recipeStepData.ts writes) to the copied processes. A reference to a process
      * that isn't in {@code processIdMap} — i.e. not part of the recipe being copied — is dropped
      * rather than kept, since keeping it would be a live link from the copy into another recipe.
      */

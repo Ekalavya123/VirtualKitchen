@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { RecipeOrderTimestamps } from '../../../types/recipeOrder'
-import { formatDateTime } from '../model/orderFormat'
+import { formatDateTime } from '../../../shared/format/date'
 import type { TrackingStage } from '../model/trackingModel'
 
 type TrackingTimelineProps = {

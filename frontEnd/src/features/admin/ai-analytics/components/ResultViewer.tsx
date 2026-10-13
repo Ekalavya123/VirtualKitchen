@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { API_CONFIG } from '../../../../api/config'
 import { AiAnalyticsApi } from '../api/aiAnalyticsApi'
 import type { AiResult } from '../api/aiAnalyticsApi'
-import { useApiData } from '../hooks/useApiData'
+import { useApiData } from '../../../../shared/hooks/useApiData'
 import {
   costBasisLabel,
   formatBytes,

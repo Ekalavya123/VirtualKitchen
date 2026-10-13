@@ -1,17 +1,16 @@
 import { apiGet, apiPost } from './client'
 import { API } from './endpoints'
+import type { ItemType, UnitType } from '../types/kitchen'
 
-export type OrderItemType = 'INGREDIENT' | 'EQUIPMENT'
-export type OrderUnitType = 'KG' | 'GRAM' | 'LITER' | 'ML' | 'COUNT'
 export type OrderStatus = 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'FAILED'
 export type PaymentStatus = 'PENDING' | 'PAID' | 'FAILED'
 
 export interface OrderItemRequest {
   itemId: number
-  itemType: OrderItemType
+  itemType: ItemType
   itemName: string
   quantity: number
-  unit: OrderUnitType
+  unit: UnitType
   price: number
 }
 
@@ -23,10 +22,10 @@ export interface OrderCreateRequest {
 
 export interface OrderItemResponse {
   itemId: number
-  itemType: OrderItemType
+  itemType: ItemType
   itemName: string
   quantity: number
-  unit: OrderUnitType
+  unit: UnitType
   price: number
   subTotal: number
 }

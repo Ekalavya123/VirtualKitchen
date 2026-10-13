@@ -7,8 +7,8 @@ import {
   recoveryKey,
   writeRecovery,
   type StorageLike,
-} from '../src/features/recipe-tool/persistence/recoveryStore.ts'
-import { mergeRecoveredProcesses, restoreSnapshot } from '../src/features/recipe-tool/persistence/sessionSnapshot.ts'
+} from '../src/features/recipe-tool/session/persistence/recoveryStore.ts'
+import { mergeRecoveredProcesses, restoreSnapshot } from '../src/features/recipe-tool/session/persistence/sessionSnapshot.ts'
 import type { Process } from '../src/types/process.ts'
 
 class MemoryStorage implements StorageLike {

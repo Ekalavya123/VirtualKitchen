@@ -6,8 +6,6 @@ import type { RecipeProcessGenerationJobResponse, RecipeProcessVisualizationJobR
 
 export type RecipeAiTaskType = 'PROCESS' | 'VISUALS' | 'NARRATION'
 
-export const RECIPE_AI_TASK_TYPES: readonly RecipeAiTaskType[] = ['PROCESS', 'VISUALS', 'NARRATION']
-
 export type RecipeAiTaskStatus =
   | 'PENDING'
   | 'QUEUED'

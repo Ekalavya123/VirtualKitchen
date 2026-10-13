@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import type { User } from '../../types/User'
-import { AuthenticationApi, KitchenApi, type Kitchen } from '../../api'
-import { setStoredToken } from '../../shared/auth/session'
+import { AuthenticationApi, KitchenApi } from '../../api'
+import type { Kitchen } from '../../types/kitchen'
+import { setStoredToken } from '../../api/authToken'
 import GoogleSignInButton from './GoogleSignInButton'
 import chefLogo from '../../assets/kitchen/blackShadowChef.png'
+import { errorMessage } from '../../shared/errors'
 import './Auth.css'
 
 interface LoginPageProps {
@@ -69,7 +71,7 @@ export default function Auth({ onLoginSuccess, onClose }: LoginPageProps) {
     try {
       await action()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      setError(errorMessage(err, 'An error occurred'))
     } finally {
       setLoading(false)
     }

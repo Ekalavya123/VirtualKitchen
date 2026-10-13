@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { DeliveryAddressApi, RecipeOrderApi, httpStatusOf } from '../../../api'
 import type { DeliveryAddress } from '../../../types/recipeOrder'
-import { formatTotalMinutes } from '../../recipe-tool/presentation/model/recipePresentation'
+import { formatTotalMinutes } from '../../recipe-tool'
 import CancelOrderButton from '../components/CancelOrderButton'
 import DeliveryAddressForm from '../components/DeliveryAddressForm'
 import OrderThumb from '../components/OrderThumb'
@@ -10,8 +10,7 @@ import ServingsStepper from '../components/ServingsStepper'
 import { cleanAddress, missingAddressFields, sameAddress } from '../model/orderFormat'
 import { buildOrderPresentation } from '../model/orderPresentation'
 import type { OrderStepProps } from './stepProps'
-
-const errorMessage = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback)
+import { errorMessage } from '../../../shared/errors'
 
 /**
  * Step 1: check the recipe being ordered (its snapshot) and the order details — servings (saved on

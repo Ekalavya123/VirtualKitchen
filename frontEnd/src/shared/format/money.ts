@@ -1,5 +1,5 @@
 /** The currency every price in the app is shown in. */
-export const APP_CURRENCY = 'INR'
+const APP_CURRENCY = 'INR'
 
 /**
  * A price for display, in Indian rupees by default: `formatMoney(1250)` → "₹1,250.00". An order

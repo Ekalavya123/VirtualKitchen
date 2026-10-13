@@ -7,7 +7,7 @@ import {
   remapProcessIds,
   type PersistenceApi,
   type ProcessNodesRemapper,
-} from '../src/features/recipe-tool/persistence/snapshotPersistence.ts'
+} from '../src/features/recipe-tool/session/persistence/snapshotPersistence.ts'
 import type { Process, ProcessBatchUpdateItem } from '../src/types/process.ts'
 
 const process = (id: number, type: Process['type'] = 'SUBPROCESS', refs: number[] = []): Process => ({
