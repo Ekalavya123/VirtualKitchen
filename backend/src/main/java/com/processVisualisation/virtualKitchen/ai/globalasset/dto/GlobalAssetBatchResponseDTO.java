@@ -1,6 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset.dto;
 
-import com.processVisualisation.virtualKitchen.ai.globalasset.GlobalResourceType;
+import com.processVisualisation.virtualKitchen.ai.asset.GlobalResourceType;
 import lombok.Builder;
 import lombok.Data;
 

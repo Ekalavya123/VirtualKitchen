@@ -2,8 +2,8 @@ package com.processVisualisation.virtualKitchen.common.logging;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
-import com.processVisualisation.virtualKitchen.common.exception.RecipeProcessAiException;
-import com.processVisualisation.virtualKitchen.restclient.exception.AITimeoutException;
+import com.processVisualisation.virtualKitchen.ai.provider.exception.AiTimeoutException;
+import com.processVisualisation.virtualKitchen.ai.recipe.RecipeProcessAiException;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +25,7 @@ class FailureLoggerTest {
 
     @Test
     void knownExternalFailureIsErrorWithoutStack() {
-        ILoggingEvent event = logOne(new AITimeoutException("timed out", new java.net.SocketTimeoutException()));
+        ILoggingEvent event = logOne(new AiTimeoutException("timed out", new java.net.SocketTimeoutException()));
         assertThat(event.getLevel()).isEqualTo(Level.ERROR);
         assertThat(event.getThrowableProxy()).isNull();
     }

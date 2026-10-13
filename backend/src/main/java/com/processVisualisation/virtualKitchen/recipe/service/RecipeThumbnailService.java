@@ -1,12 +1,10 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
-import com.processVisualisation.virtualKitchen.ai.model.VisualizationAsset;
-import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationAssetRepository;
-import com.processVisualisation.virtualKitchen.common.utils.ProcessStepOrder;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeThumbnailDTO;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
 import com.processVisualisation.virtualKitchen.recipe.repository.ProcessRepository;
+import com.processVisualisation.virtualKitchen.recipe.service.StepImageLookup.StepImage;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -19,7 +17,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -47,24 +44,24 @@ public class RecipeThumbnailService {
             .comparing(Visual::generatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
             .thenComparing(Visual::assetId, Comparator.nullsLast(Comparator.reverseOrder()));
 
-    private final IProcessTemplateService recipeService;
+    private final RecipeTemplateService recipeService;
     private final ProcessRepository processRepository;
-    private final AIVisualizationAssetRepository assetRepository;
+    private final StepImageLookup stepImageLookup;
 
     public RecipeThumbnailService(
-            IProcessTemplateService recipeService,
+            RecipeTemplateService recipeService,
             ProcessRepository processRepository,
-            AIVisualizationAssetRepository assetRepository) {
+            StepImageLookup stepImageLookup) {
         this.recipeService = recipeService;
         this.processRepository = processRepository;
-        this.assetRepository = assetRepository;
+        this.stepImageLookup = stepImageLookup;
     }
 
     /**
      * Resolves one recipe's thumbnail, following the recipe's visibility (owner, or public).
      *
      * @throws NoSuchElementException when the recipe doesn't exist
-     * @throws com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException
+     * @throws com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException
      *         when the viewer may not read it
      */
     public RecipeThumbnailDTO resolve(Long recipeId, Long viewerId) {
@@ -87,7 +84,7 @@ public class RecipeThumbnailService {
         List<Process> processes = processRepository.findByRecipeIdIn(recipeIds).stream()
                 .filter(process -> process.getRecipeId() != null)
                 .toList();
-        Map<Long, VisualizationAsset> assetsById = loadAssets(processes);
+        Map<Long, StepImage> assetsById = loadAssets(processes);
         Map<Long, List<Process>> processesByRecipe = processes.stream()
                 .collect(Collectors.groupingBy(Process::getRecipeId));
 
@@ -99,7 +96,7 @@ public class RecipeThumbnailService {
         return thumbnails;
     }
 
-    private Map<Long, VisualizationAsset> loadAssets(List<Process> processes) {
+    private Map<Long, StepImage> loadAssets(List<Process> processes) {
         List<Long> assetIds = processes.stream()
                 .filter(process -> process.getNodes() != null)
                 .flatMap(process -> process.getNodes().stream())
@@ -111,12 +108,11 @@ public class RecipeThumbnailService {
         if (assetIds.isEmpty()) {
             return Map.of();
         }
-        return assetRepository.findAllById(assetIds).stream()
-                .collect(Collectors.toMap(VisualizationAsset::getId, Function.identity(), (a, b) -> a));
+        return stepImageLookup.findByIds(assetIds);
     }
 
     /** The MAIN process's last illustrated step; failing that, the newest of the subprocesses' last illustrated steps. */
-    private static Optional<Visual> pickThumbnail(List<Process> processes, Map<Long, VisualizationAsset> assetsById) {
+    private static Optional<Visual> pickThumbnail(List<Process> processes, Map<Long, StepImage> assetsById) {
         Optional<Visual> main = processes.stream()
                 .filter(process -> process.getType() == ProcessType.MAIN)
                 .map(process -> lastIllustratedStep(process, assetsById))
@@ -132,7 +128,7 @@ public class RecipeThumbnailService {
                 .min(LATEST_FIRST);
     }
 
-    private static Optional<Visual> lastIllustratedStep(Process process, Map<Long, VisualizationAsset> assetsById) {
+    private static Optional<Visual> lastIllustratedStep(Process process, Map<Long, StepImage> assetsById) {
         List<Process.ProcessNode> steps = ProcessStepOrder.orderedSteps(process);
         for (int i = steps.size() - 1; i >= 0; i--) {
             Optional<Visual> visual = visualOf(steps.get(i), assetsById);
@@ -148,17 +144,17 @@ public class RecipeThumbnailService {
      * the source of truth (its URL, or nothing if its generation failed); a step whose asset record
      * is gone or was never recorded falls back to the image URL stored on the node itself.
      */
-    private static Optional<Visual> visualOf(Process.ProcessNode node, Map<Long, VisualizationAsset> assetsById) {
+    private static Optional<Visual> visualOf(Process.ProcessNode node, Map<Long, StepImage> assetsById) {
         Map<String, Object> data = node.getData();
         if (data == null) {
             return Optional.empty();
         }
         Long assetId = assetId(data);
-        VisualizationAsset asset = assetId == null ? null : assetsById.get(assetId);
-        if (asset != null) {
-            boolean usable = StringUtils.hasText(asset.getImageUrl()) && asset.getImageFailureReason() == null;
+        StepImage image = assetId == null ? null : assetsById.get(assetId);
+        if (image != null) {
+            boolean usable = StringUtils.hasText(image.imageUrl()) && !image.failed();
             return usable
-                    ? Optional.of(new Visual(node.getId(), asset.getId(), asset.getImageUrl(), generatedAt(asset)))
+                    ? Optional.of(new Visual(node.getId(), image.assetId(), image.imageUrl(), image.generatedAt()))
                     : Optional.empty();
         }
         String nodeUrl = imageUrl(data);
@@ -201,10 +197,6 @@ public class RecipeThumbnailService {
             }
         }
         return null;
-    }
-
-    private static LocalDateTime generatedAt(VisualizationAsset asset) {
-        return asset.getUpdatedAt() != null ? asset.getUpdatedAt() : asset.getCreatedAt();
     }
 
     private static RecipeThumbnailDTO generated(Long recipeId, Visual visual) {

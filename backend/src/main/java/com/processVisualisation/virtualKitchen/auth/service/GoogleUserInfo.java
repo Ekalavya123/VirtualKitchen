@@ -2,7 +2,7 @@ package com.processVisualisation.virtualKitchen.auth.service;
 
 /**
  * Verified identity information extracted from a Google OAuth ID token,
- * returned by GoogleTokenVerifierService and used by AuthServiceImpl to
+ * returned by GoogleTokenVerifierService and used by AuthService to
  * find or provision the corresponding local user account.
  *
  * @param googleId the stable Google account identifier (subject claim) for the user

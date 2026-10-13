@@ -1,7 +1,6 @@
 package com.processVisualisation.virtualKitchen.auth.security;
 
 import com.processVisualisation.virtualKitchen.auth.model.UserType;
-import com.processVisualisation.virtualKitchen.auth.service.JwtService;
 import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;

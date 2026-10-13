@@ -1,11 +1,10 @@
 package com.processVisualisation.virtualKitchen.store.catalog;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocabularyProvider;
-import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
+import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.store.model.Ingredient;
 import com.processVisualisation.virtualKitchen.store.repository.IngredientRepository;
+import com.processVisualisation.virtualKitchen.store.units.UnitType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,7 +31,7 @@ import java.util.Objects;
  * Idempotent and non-destructive: an entry is matched to an existing document by catalog slug,
  * else by name/alias (linking e.g. an existing "Olive Oil"); only fields that are still empty are
  * filled, so edits made in the database are never overwritten. Runs before
- * {@link ProcessIngredientIdMigration}, which needs the slug → id mapping.
+ * {@code ProcessIngredientIdMigration}, which needs the slug → id mapping.
  */
 @Component
 @Order(1)
@@ -78,7 +77,7 @@ public class IngredientCatalogSeeder implements ApplicationRunner {
     }
 
     public SeedResult seed() {
-        JsonNode root = RecipeStepVocabularyProvider.readCatalogResource();
+        JsonNode root = StepCatalogResource.read();
         Map<String, String> unitCategories = new HashMap<>();
         root.path("units").forEach(unit -> unitCategories.put(unit.path("id").asText(), unit.path("category").asText()));
         SeedResult result = seed(readEntries(root), unitCategories);
@@ -182,7 +181,7 @@ public class IngredientCatalogSeeder implements ApplicationRunner {
         List<SeedEntry> entries = new ArrayList<>();
         root.path("ingredients").forEach(node -> {
             String slug = node.path("id").asText();
-            if (slug.isBlank() || RecipeStepVocabularyProvider.CUSTOM_ID.equals(slug)) return;
+            if (slug.isBlank() || StepCatalogResource.CUSTOM_ID.equals(slug)) return;
             entries.add(new SeedEntry(
                     slug,
                     node.path("name").asText(),
@@ -202,7 +201,7 @@ public class IngredientCatalogSeeder implements ApplicationRunner {
         return values;
     }
 
-    static String normalize(String value) {
+    public static String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
     }
 

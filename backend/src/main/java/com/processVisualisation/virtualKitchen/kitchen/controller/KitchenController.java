@@ -1,10 +1,10 @@
 package com.processVisualisation.virtualKitchen.kitchen.controller;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 import com.processVisualisation.virtualKitchen.kitchen.dto.KitchenRequestDTO;
 import com.processVisualisation.virtualKitchen.kitchen.dto.KitchenResponseDTO;
 import com.processVisualisation.virtualKitchen.kitchen.dto.KitchenUpdateDTO;
-import com.processVisualisation.virtualKitchen.kitchen.service.IKitchenService;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import com.processVisualisation.virtualKitchen.kitchen.service.KitchenService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -15,14 +15,14 @@ import java.util.List;
 /**
  * REST controller exposing CRUD endpoints for kitchens under
  * {@code /api/v1/kitchens}: creation, lookup by id or owner, update, and
- * deletion. Delegates all business logic to {@link IKitchenService}.
+ * deletion. Delegates all business logic to {@link KitchenService}.
  */
 @RestController
 @RequestMapping("/api/v1/kitchens")
 public class KitchenController {
 
     @Autowired
-    private IKitchenService service;
+    private KitchenService service;
 
     /**
      * Creates a new kitchen. Handles {@code POST /api/v1/kitchens}.

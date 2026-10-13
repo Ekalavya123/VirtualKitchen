@@ -1,13 +1,13 @@
 package com.processVisualisation.virtualKitchen.recipe.controller;
 
-import com.processVisualisation.virtualKitchen.common.exception.AuthException;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import com.processVisualisation.virtualKitchen.auth.exception.AuthException;
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchUpdateRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchUpdateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessUpdateDTO;
-import com.processVisualisation.virtualKitchen.recipe.service.IProcessService;
+import com.processVisualisation.virtualKitchen.recipe.service.ProcessService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -29,14 +29,14 @@ import java.util.List;
  * recipe's MAIN process and its nested SUBPROCESS documents). Every
  * endpoint is scoped under a recipe id; the authenticated user is resolved
  * from the security context (never trusted from a request parameter) and
- * ownership/visibility is enforced by {@link IProcessService}.
+ * ownership/visibility is enforced by {@link ProcessService}.
  */
 @RestController
 @RequestMapping("/api/v1/recipes/{recipeId}/processes")
 public class ProcessController {
 
     @Autowired
-    private IProcessService processService;
+    private ProcessService processService;
 
     /**
      * Lists every process (MAIN and any SUBPROCESS documents) belonging to a recipe.

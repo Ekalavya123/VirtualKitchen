@@ -1,0 +1,63 @@
+package com.processVisualisation.virtualKitchen.ai.platform.response;
+
+import lombok.Data;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.mongodb.core.index.Indexed;
+import org.springframework.data.mongodb.core.mapping.Document;
+
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * MongoDB document persisting a single AI interaction record (chat, flow
+ * generation, etc.) in the {@code ai_responses} collection, used for
+ * analytics and training purposes.
+ */
+@Data
+@Document(collection = "ai_responses")
+public class AiResponseDocument {
+
+    @Id
+    private String id;
+
+    /**
+     * Logical context for this response (e.g. "flow-generation").
+     */
+    @Indexed
+    private String context;
+
+    /**
+     * The raw input/prompt that produced this response.
+     */
+    private String input;
+
+    /**
+     * Whether the generation was considered a success.
+     */
+    @Indexed
+    private Boolean success;
+
+    /**
+     * The full response payload from the AI / generator including metrics (tokens, time, raw response, etc.)
+     * Stored as a flexible JSON-like map.
+     */
+    private Map<String, Object> responseData = new LinkedHashMap<>();
+
+    /** The analytics request ({@code ai_request_analytics}) this output belongs to; null for older records. */
+    @Indexed(sparse = true)
+    private String analyticsRequestId;
+
+    /** The provider call (analytics attempt) that produced this output; null for older records. */
+    private String attemptId;
+
+    // Auditing is not enabled, so these are set explicitly on save; records written before that have neither.
+    @CreatedDate
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+}
+

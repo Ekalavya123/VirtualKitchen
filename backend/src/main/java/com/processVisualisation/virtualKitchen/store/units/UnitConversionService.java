@@ -2,7 +2,6 @@ package com.processVisualisation.virtualKitchen.store.units;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
 import com.processVisualisation.virtualKitchen.store.model.Ingredient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;

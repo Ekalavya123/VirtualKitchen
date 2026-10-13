@@ -1,6 +1,5 @@
 package com.processVisualisation.virtualKitchen.recipe.validation;
 
-import com.processVisualisation.virtualKitchen.common.exception.ProcessValidationException;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.model.Process.ProcessEdge;
 import com.processVisualisation.virtualKitchen.recipe.model.Process.ProcessNode;

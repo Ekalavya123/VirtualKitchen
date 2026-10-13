@@ -1,10 +1,11 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset;
 
-import com.processVisualisation.virtualKitchen.ai.model.VisualizationAsset;
-import com.processVisualisation.virtualKitchen.ai.model.VisualizationAssetType;
-import com.processVisualisation.virtualKitchen.ai.registry.ModelTier;
-import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationAssetRepository;
-import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
+import com.processVisualisation.virtualKitchen.ai.asset.GlobalAssetStatus;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAsset;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAssetRepository;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAssetType;
+import com.processVisualisation.virtualKitchen.ai.platform.registry.ModelTier;
+import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -29,12 +30,12 @@ import static org.springframework.data.mongodb.core.query.Query.query;
 @Component
 public class GlobalAssetStore {
 
-    private final AIVisualizationAssetRepository assetRepository;
+    private final VisualizationAssetRepository assetRepository;
     private final SequenceGeneratorService sequenceGeneratorService;
     private final MongoTemplate mongoTemplate;
 
     public GlobalAssetStore(
-            AIVisualizationAssetRepository assetRepository,
+            VisualizationAssetRepository assetRepository,
             SequenceGeneratorService sequenceGeneratorService,
             MongoTemplate mongoTemplate) {
         this.assetRepository = assetRepository;

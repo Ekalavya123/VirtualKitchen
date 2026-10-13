@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset;
 
+import com.processVisualisation.virtualKitchen.ai.asset.GlobalResourceType;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;

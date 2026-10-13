@@ -1,9 +1,9 @@
 package com.processVisualisation.virtualKitchen.store.catalog;
 
-import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
+import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.store.model.Ingredient;
 import com.processVisualisation.virtualKitchen.store.repository.IngredientRepository;
+import com.processVisualisation.virtualKitchen.store.units.UnitType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.ApplicationEventPublisher;

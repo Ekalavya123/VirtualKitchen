@@ -17,9 +17,7 @@ class LoggingHygieneTest {
 
     @Test
     void applicationCodeLogsThroughSlf4jNotSystemOut() throws IOException {
-        // PresetUp is a standalone command-line seeding tool, not part of the running application.
-        assertThat(sourcesContaining("System.out.print", "System.err.print", "printStackTrace()"))
-                .allMatch(path -> path.endsWith("PresetUp.java"));
+        assertThat(sourcesContaining("System.out.print", "System.err.print", "printStackTrace()")).isEmpty();
     }
 
     @Test

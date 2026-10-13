@@ -1,13 +1,13 @@
 package com.processVisualisation.virtualKitchen.recipe.controller;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateUpdateDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeThumbnailDTO;
 import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
-import com.processVisualisation.virtualKitchen.recipe.service.IProcessTemplateService;
+import com.processVisualisation.virtualKitchen.recipe.service.RecipeTemplateService;
 import com.processVisualisation.virtualKitchen.recipe.service.RecipeThumbnailService;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -28,7 +28,7 @@ import java.util.Objects;
 public class RecipeTemplateController {
 
     @Autowired
-    private IProcessTemplateService service;
+    private RecipeTemplateService service;
 
     @Autowired
     private RecipeThumbnailService thumbnailService;
@@ -102,7 +102,7 @@ public class RecipeTemplateController {
      * @param dto    the new name/description values
      * @return an ApiResponse wrapping the updated template
      * @throws java.util.NoSuchElementException if no template exists with the given id
-     * @throws com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException if userId does not own the template
+     * @throws com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException if userId does not own the template
      */
     @PutMapping("/{id}")
     public ApiResponse<RecipeTemplateResponseDTO> update(@PathVariable Long id,
@@ -120,7 +120,7 @@ public class RecipeTemplateController {
      * @param visibility the new visibility value
      * @return an ApiResponse wrapping the updated template
      * @throws java.util.NoSuchElementException if no template exists with the given id
-     * @throws com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException if userId does not own the template
+     * @throws com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException if userId does not own the template
      */
     @PutMapping("/{id}/visibility")
     public ApiResponse<RecipeTemplateResponseDTO> updateVisibility(@PathVariable Long id,
@@ -137,7 +137,7 @@ public class RecipeTemplateController {
      * @param userId the id of the user the copy will be owned by
      * @return an ApiResponse wrapping the newly created copy
      * @throws java.util.NoSuchElementException if no template exists with the given id
-     * @throws com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException if the source template is not public
+     * @throws com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException if the source template is not public
      */
     @PostMapping("/{id}/copy")
     public ApiResponse<RecipeTemplateResponseDTO> copy(@PathVariable Long id,
@@ -153,7 +153,7 @@ public class RecipeTemplateController {
      * @param userId the id of the user requesting the deletion, used for ownership verification
      * @return an ApiResponse with no data, confirming deletion
      * @throws java.util.NoSuchElementException if no template exists with the given id
-     * @throws com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException if userId does not own the template
+     * @throws com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException if userId does not own the template
      */
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable Long id, @RequestParam Long userId){

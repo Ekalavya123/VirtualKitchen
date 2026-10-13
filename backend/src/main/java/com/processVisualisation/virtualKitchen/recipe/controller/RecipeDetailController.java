@@ -1,13 +1,13 @@
 package com.processVisualisation.virtualKitchen.recipe.controller;
 
-import com.processVisualisation.virtualKitchen.common.exception.AuthException;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import com.processVisualisation.virtualKitchen.auth.exception.AuthException;
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 import com.processVisualisation.virtualKitchen.recipe.dto.NutritionInfoDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeDetailResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeIngredientDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeThumbnailDTO;
-import com.processVisualisation.virtualKitchen.recipe.service.IProcessTemplateService;
+import com.processVisualisation.virtualKitchen.recipe.service.RecipeTemplateService;
 import com.processVisualisation.virtualKitchen.recipe.service.RecipeThumbnailService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,7 +38,7 @@ import java.util.List;
 public class RecipeDetailController {
 
     @Autowired
-    private IProcessTemplateService recipeService;
+    private RecipeTemplateService recipeService;
 
     @Autowired
     private RecipeThumbnailService thumbnailService;

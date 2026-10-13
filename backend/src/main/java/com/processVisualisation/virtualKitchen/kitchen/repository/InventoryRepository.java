@@ -1,6 +1,6 @@
 package com.processVisualisation.virtualKitchen.kitchen.repository;
 
-import com.processVisualisation.virtualKitchen.store.model.Inventory;
+import com.processVisualisation.virtualKitchen.kitchen.model.Inventory;
 import com.processVisualisation.virtualKitchen.store.model.ItemType;
 import org.springframework.data.mongodb.repository.MongoRepository;
 

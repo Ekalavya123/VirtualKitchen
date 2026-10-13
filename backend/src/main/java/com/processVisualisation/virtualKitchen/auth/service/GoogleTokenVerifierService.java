@@ -1,6 +1,6 @@
 package com.processVisualisation.virtualKitchen.auth.service;
 
-import com.processVisualisation.virtualKitchen.common.exception.AuthException;
+import com.processVisualisation.virtualKitchen.auth.exception.AuthException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;

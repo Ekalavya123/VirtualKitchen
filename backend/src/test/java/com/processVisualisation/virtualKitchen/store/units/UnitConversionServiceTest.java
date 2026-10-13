@@ -1,6 +1,5 @@
 package com.processVisualisation.virtualKitchen.store.units;
 
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
 import com.processVisualisation.virtualKitchen.store.model.Ingredient;
 import com.processVisualisation.virtualKitchen.store.units.UnitConversionService.Basis;
 import com.processVisualisation.virtualKitchen.store.units.UnitConversionService.ConversionResult;

@@ -1,9 +1,9 @@
 package com.processVisualisation.virtualKitchen.kitchen.controller;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 import com.processVisualisation.virtualKitchen.kitchen.dto.KitchenInventoryRequestDTO;
 import com.processVisualisation.virtualKitchen.kitchen.dto.KitchenInventoryResponseDTO;
-import com.processVisualisation.virtualKitchen.kitchen.service.IKitchenInventoryService;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import com.processVisualisation.virtualKitchen.kitchen.service.KitchenInventoryService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -16,14 +16,14 @@ import java.util.List;
  * under {@code /api/v1/kitchen-inventory}: linking an inventory item to a
  * kitchen, listing a kitchen's inventory allocations, and removing an
  * association. Delegates all business logic to
- * {@link IKitchenInventoryService}.
+ * {@link KitchenInventoryService}.
  */
 @RestController
 @RequestMapping("/api/v1/kitchen-inventory")
 public class KitchenInventoryController {
 
     @Autowired
-    private IKitchenInventoryService service;
+    private KitchenInventoryService service;
 
     /**
      * Creates a new kitchen-inventory association. Handles

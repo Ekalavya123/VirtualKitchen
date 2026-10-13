@@ -1,13 +1,14 @@
 package com.processVisualisation.virtualKitchen.auth.service;
 
 import com.processVisualisation.virtualKitchen.auth.dto.LoginRequestDTO;
+import com.processVisualisation.virtualKitchen.auth.mapper.UserMapper;
 import com.processVisualisation.virtualKitchen.auth.model.User;
 import com.processVisualisation.virtualKitchen.auth.model.UserType;
 import com.processVisualisation.virtualKitchen.auth.repository.UserRepository;
-import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
-import com.processVisualisation.virtualKitchen.common.mapper.UserMapper;
-import com.processVisualisation.virtualKitchen.kitchen.service.IKitchenService;
+import com.processVisualisation.virtualKitchen.auth.security.JwtService;
+import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.util.Optional;
@@ -28,12 +29,12 @@ class AdminPromotionTest {
     private final PasswordEncoder encoder = mock(PasswordEncoder.class);
     private final JwtService jwt = mock(JwtService.class);
 
-    private AuthServiceImpl service(String allowlist) {
+    private AuthService service(String allowlist) {
         when(encoder.matches(anyString(), anyString())).thenReturn(true);
         when(users.save(any())).thenAnswer(inv -> inv.getArgument(0));
         when(jwt.generateToken(any(), any(), any())).thenReturn("token");
-        return new AuthServiceImpl(users, mock(SequenceGeneratorService.class), new UserMapper(), encoder, jwt,
-                mock(OtpService.class), mock(GoogleTokenVerifierService.class), mock(IKitchenService.class),
+        return new AuthService(users, mock(SequenceGeneratorService.class), new UserMapper(), encoder, jwt,
+                mock(OtpService.class), mock(GoogleTokenVerifierService.class), mock(ApplicationEventPublisher.class),
                 new AdminAllowlist(allowlist));
     }
 

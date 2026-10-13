@@ -1,27 +1,28 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset;
 
-import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifact;
-import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactService;
-import com.processVisualisation.virtualKitchen.ai.artifact.AiArtifactSpec;
-import com.processVisualisation.virtualKitchen.ai.artifact.codec.GeneratedImageCodec;
-import com.processVisualisation.virtualKitchen.ai.dispatch.AiClientResolver;
+import com.processVisualisation.virtualKitchen.ai.asset.GlobalAssetStatus;
+import com.processVisualisation.virtualKitchen.ai.asset.GlobalResourceType;
+import com.processVisualisation.virtualKitchen.ai.asset.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.ai.globalasset.dto.GlobalAssetBatchResponseDTO;
 import com.processVisualisation.virtualKitchen.ai.globalasset.dto.GlobalAssetImageResponseDTO;
 import com.processVisualisation.virtualKitchen.ai.globalasset.dto.GlobalAssetImageResponseDTO.Outcome;
-import com.processVisualisation.virtualKitchen.ai.model.VisualizationAsset;
-import com.processVisualisation.virtualKitchen.ai.queue.AiRequestOutcome;
-import com.processVisualisation.virtualKitchen.ai.queue.AiRequestQueueService;
-import com.processVisualisation.virtualKitchen.ai.queue.AiWork;
-import com.processVisualisation.virtualKitchen.ai.registry.AiCapability;
-import com.processVisualisation.virtualKitchen.ai.registry.ModelDefinition;
-import com.processVisualisation.virtualKitchen.ai.registry.ModelTier;
-import com.processVisualisation.virtualKitchen.ai.routing.ModelSelectionOutcome;
+import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifact;
+import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactService;
+import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactSpec;
+import com.processVisualisation.virtualKitchen.ai.platform.artifact.codec.GeneratedImageCodec;
+import com.processVisualisation.virtualKitchen.ai.platform.dispatch.AiClientResolver;
+import com.processVisualisation.virtualKitchen.ai.platform.queue.AiRequestOutcome;
+import com.processVisualisation.virtualKitchen.ai.platform.queue.AiRequestQueueService;
+import com.processVisualisation.virtualKitchen.ai.platform.queue.AiWork;
+import com.processVisualisation.virtualKitchen.ai.platform.registry.AiCapability;
+import com.processVisualisation.virtualKitchen.ai.platform.registry.ModelDefinition;
+import com.processVisualisation.virtualKitchen.ai.platform.registry.ModelTier;
+import com.processVisualisation.virtualKitchen.ai.platform.routing.ModelSelectionOutcome;
+import com.processVisualisation.virtualKitchen.ai.provider.ImageGenerationClient;
+import com.processVisualisation.virtualKitchen.ai.provider.ImageGenerationClient.GeneratedImage;
+import com.processVisualisation.virtualKitchen.ai.provider.exception.AiCommunicationException;
 import com.processVisualisation.virtualKitchen.common.concurrent.NamedTask;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskPool;
-import com.processVisualisation.virtualKitchen.common.exception.GlobalAssetException;
-import com.processVisualisation.virtualKitchen.restclient.client.ImageGenerationClient;
-import com.processVisualisation.virtualKitchen.restclient.client.ImageGenerationClient.GeneratedImage;
-import com.processVisualisation.virtualKitchen.restclient.exception.AICommunicationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -162,7 +163,7 @@ class GlobalAssetImageServiceTest {
     @Test
     void request_requeuesAPreviouslyFailedGeneration() {
         VisualizationAsset failed = asset(7L, GlobalAssetStatus.FAILED, null);
-        failed.setImageFailureReason("AICommunicationException: down");
+        failed.setImageFailureReason("AiCommunicationException: down");
         when(store.find(ONION_KEY)).thenReturn(Optional.of(failed));
         when(store.claim(any(), any(), any(), any(), any()))
                 .thenReturn(Optional.of(asset(7L, GlobalAssetStatus.QUEUED, null)));
@@ -259,13 +260,13 @@ class GlobalAssetImageServiceTest {
     void generate_recordsProviderFailureOnTheAsset() {
         when(store.markGenerating(eq(ONION_KEY), eq("tok"), anyString())).thenReturn(true);
         when(queueService.executeInline(any(), any(), any(), any(), any(), any(), any(AiArtifactSpec.class), any(AiWork.class)))
-                .thenThrow(new AICommunicationException("provider unavailable"));
+                .thenThrow(new AiCommunicationException("provider unavailable"));
 
         service.generate(ONION, ONION_KEY, "tok", ADMIN_ID);
 
         ArgumentCaptor<String> reason = ArgumentCaptor.forClass(String.class);
         verify(store).markFailed(eq(ONION_KEY), eq("tok"), reason.capture());
-        assertThat(reason.getValue()).contains("AICommunicationException").contains("provider unavailable");
+        assertThat(reason.getValue()).contains("AiCommunicationException").contains("provider unavailable");
         verify(artifactService, never()).markConsumed(anyString());
     }
 
