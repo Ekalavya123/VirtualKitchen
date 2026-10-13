@@ -137,17 +137,18 @@ export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMain
   // it pinned to whatever's currently selected otherwise — including across every later session
   // mutation (edits, saves), since this only actually changes state when the current selection no
   // longer resolves: a save gave a pending process its real id (follow it), or it's gone (an undo
-  // removed it — fall back to MAIN).
-  useEffect(() => {
-    if (!session || session.loading) return
-    setSelectedProcessId((current) => {
+  // removed it — fall back to MAIN). Adjusted while rendering, like the focus request below.
+  if (session && !session.loading) {
+    const resolveSelection = (current: number | null) => {
       if (current != null && session.getProcess(current)) return current
       if (current != null && session.getProcess(session.resolveProcessId(current))) return session.resolveProcessId(current)
       const list = session.getProcesses()
       const main = list.find((process) => process.type === 'MAIN')
       return main ? main.id : (list[0]?.id ?? null)
-    })
-  }, [session])
+    }
+    const resolvedSelection = resolveSelection(selectedProcessId)
+    if (resolvedSelection !== selectedProcessId) setSelectedProcessId(resolvedSelection)
+  }
 
   // Undo/redo of a change made in another process brings that process into view — adjusted while
   // rendering (not in an effect), so the canvas never renders a frame for a process the undo removed.
