@@ -8,7 +8,7 @@ import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactSe
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactSpec;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.codec.GeneratedImageCodec;
 import com.processVisualisation.virtualKitchen.ai.platform.dispatch.AiClientResolver;
-import com.processVisualisation.virtualKitchen.ai.platform.logging.FailureLogger;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.ai.platform.queue.AiRequestOutcome;
 import com.processVisualisation.virtualKitchen.ai.platform.queue.AiRequestQueueService;
 import com.processVisualisation.virtualKitchen.ai.platform.registry.AiCapability;

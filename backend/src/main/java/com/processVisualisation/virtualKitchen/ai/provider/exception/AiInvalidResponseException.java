@@ -1,5 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.provider.exception;
 
+import org.springframework.http.HttpStatus;
+
 /**
  * Thrown when an AI provider returns a response that cannot be used —
  * for example, an empty response, a response with no usable message or
@@ -13,7 +15,7 @@ public class AiInvalidResponseException extends AiClientException {
      * @param message a message describing the failure
      */
     public AiInvalidResponseException(String message) {
-        super(message);
+        super(message, null, HttpStatus.BAD_GATEWAY, "AI Invalid Response");
     }
 
     /**
@@ -24,6 +26,6 @@ public class AiInvalidResponseException extends AiClientException {
      * @param cause the underlying exception that caused this failure
      */
     public AiInvalidResponseException(String message, Throwable cause) {
-        super(message, cause);
+        super(message, cause, HttpStatus.BAD_GATEWAY, "AI Invalid Response");
     }
 }

@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiException;
 import com.processVisualisation.virtualKitchen.common.web.GlobalExceptionHandler;
 
 import org.springframework.http.HttpStatus;
@@ -9,13 +10,10 @@ import org.springframework.http.HttpStatus;
  * invalid id list (400), or a resource that isn't eligible for image generation (422). Handled
  * by {@link GlobalExceptionHandler}.
  */
-public class GlobalAssetException extends RuntimeException {
-
-    private final HttpStatus status;
+public class GlobalAssetException extends ApiException {
 
     public GlobalAssetException(HttpStatus status, String message) {
-        super(message);
-        this.status = status;
+        super(message, status, null, Outcome.CLIENT_ERROR);
     }
 
     public static GlobalAssetException badRequest(String message) {
@@ -24,9 +22,5 @@ public class GlobalAssetException extends RuntimeException {
 
     public static GlobalAssetException notEligible(String message) {
         return new GlobalAssetException(HttpStatus.UNPROCESSABLE_ENTITY, message);
-    }
-
-    public HttpStatus getStatus() {
-        return status;
     }
 }

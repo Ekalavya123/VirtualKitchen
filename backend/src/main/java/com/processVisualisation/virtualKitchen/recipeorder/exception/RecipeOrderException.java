@@ -1,5 +1,7 @@
 package com.processVisualisation.virtualKitchen.recipeorder.exception;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiException;
+
 import org.springframework.http.HttpStatus;
 
 /**
@@ -8,17 +10,10 @@ import org.springframework.http.HttpStatus;
  * or a recipe that cannot be ordered as it stands (422). Carries its own HTTP status, like
  * {@code AuthException}.
  */
-public class RecipeOrderException extends RuntimeException {
-
-    private final HttpStatus status;
+public class RecipeOrderException extends ApiException {
 
     public RecipeOrderException(String message, HttpStatus status) {
-        super(message);
-        this.status = status;
-    }
-
-    public HttpStatus getStatus() {
-        return status;
+        super(message, status, null, status == HttpStatus.CONFLICT ? Outcome.REJECTED : Outcome.CLIENT_ERROR);
     }
 
     public static RecipeOrderException notFound() {

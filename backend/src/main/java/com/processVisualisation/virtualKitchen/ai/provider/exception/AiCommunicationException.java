@@ -1,5 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.provider.exception;
 
+import org.springframework.http.HttpStatus;
+
 /**
  * Thrown when an AI provider client cannot successfully complete a request
  * for reasons other than authentication, timeout, or invalid response
@@ -14,7 +16,7 @@ public class AiCommunicationException extends AiClientException {
      * @param message a message describing the failure
      */
     public AiCommunicationException(String message) {
-        super(message);
+        super(message, null, HttpStatus.BAD_GATEWAY, "AI Communication Failed");
     }
 
     /**
@@ -25,6 +27,6 @@ public class AiCommunicationException extends AiClientException {
      * @param cause the underlying exception that caused this failure
      */
     public AiCommunicationException(String message, Throwable cause) {
-        super(message, cause);
+        super(message, cause, HttpStatus.BAD_GATEWAY, "AI Communication Failed");
     }
 }

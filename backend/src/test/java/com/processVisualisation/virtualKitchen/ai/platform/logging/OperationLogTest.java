@@ -7,6 +7,7 @@ import com.processVisualisation.virtualKitchen.ai.platform.usage.AiUsageSummary;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiCommunicationException;
 import com.processVisualisation.virtualKitchen.ai.recipe.RecipeProcessAiException;
 import com.processVisualisation.virtualKitchen.common.logging.LogCapture;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

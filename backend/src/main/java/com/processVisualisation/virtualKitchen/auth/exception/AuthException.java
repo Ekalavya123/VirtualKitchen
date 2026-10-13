@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.auth.exception;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiException;
 import com.processVisualisation.virtualKitchen.common.web.GlobalExceptionHandler;
 
 import org.springframework.http.HttpStatus;
@@ -11,9 +12,7 @@ import org.springframework.http.HttpStatus;
  * {@link GlobalExceptionHandler}, which reads {@link #getStatus()} to build
  * the response status and reason phrase rather than using a fixed status.
  */
-public class AuthException extends RuntimeException {
-
-    private final HttpStatus status;
+public class AuthException extends ApiException {
 
     /**
      * Creates the exception with a descriptive message and the HTTP status
@@ -23,8 +22,7 @@ public class AuthException extends RuntimeException {
      * @param status the HTTP status to return for this failure
      */
     public AuthException(String message, HttpStatus status) {
-        super(message);
-        this.status = status;
+        super(message, status, null, Outcome.REJECTED);
     }
 
     /**
@@ -32,7 +30,4 @@ public class AuthException extends RuntimeException {
      *
      * @return the {@link HttpStatus} to use when responding to the client
      */
-    public HttpStatus getStatus() {
-        return status;
-    }
 }

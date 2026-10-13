@@ -1,6 +1,9 @@
 package com.processVisualisation.virtualKitchen.ai.platform.routing;
 
 import com.processVisualisation.virtualKitchen.ai.platform.registry.AiCapability;
+import com.processVisualisation.virtualKitchen.common.web.ApiException;
+
+import org.springframework.http.HttpStatus;
 
 /**
  * Thrown when a user's preferred/default model requires credits they don't
@@ -9,10 +12,11 @@ import com.processVisualisation.virtualKitchen.ai.platform.registry.AiCapability
  * scoped to the single AI operation that triggered it and never blocks any
  * other feature.
  */
-public class NoAvailableModelException extends RuntimeException {
+public class NoAvailableModelException extends ApiException {
 
     public NoAvailableModelException(AiCapability capability) {
         super("No available AI model for " + capability
-                + ": premium credits are exhausted and no standard model is configured as a fallback");
+                + ": premium credits are exhausted and no standard model is configured as a fallback",
+                HttpStatus.SERVICE_UNAVAILABLE, "AI Model Unavailable", Outcome.UPSTREAM_FAILURE);
     }
 }

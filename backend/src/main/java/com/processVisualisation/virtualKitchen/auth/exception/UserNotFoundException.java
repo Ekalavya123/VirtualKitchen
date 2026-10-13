@@ -1,19 +1,22 @@
 package com.processVisualisation.virtualKitchen.auth.exception;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiException;
 import com.processVisualisation.virtualKitchen.common.web.GlobalExceptionHandler;
+
+import org.springframework.http.HttpStatus;
 
 /**
  * Thrown when a lookup for a user (e.g. by id or email) finds no matching
  * record. Handled by {@link GlobalExceptionHandler}, which returns an HTTP
  * 400 Bad Request response.
  */
-public class UserNotFoundException extends RuntimeException {
+public class UserNotFoundException extends ApiException {
     /**
      * Creates the exception with a descriptive message.
      *
      * @param message description of which user lookup failed
      */
     public UserNotFoundException(String message) {
-        super(message);
+        super(message, HttpStatus.BAD_REQUEST, null, Outcome.CLIENT_ERROR);
     }
 }

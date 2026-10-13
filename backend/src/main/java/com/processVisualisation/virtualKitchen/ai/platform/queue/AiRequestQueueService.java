@@ -7,7 +7,7 @@ import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifact;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactService;
 import com.processVisualisation.virtualKitchen.ai.platform.artifact.AiArtifactSpec;
 import com.processVisualisation.virtualKitchen.ai.platform.credit.CreditService;
-import com.processVisualisation.virtualKitchen.ai.platform.logging.FailureLogger;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.ai.platform.registry.AiCapability;
 import com.processVisualisation.virtualKitchen.ai.platform.registry.AiModelRegistry;
 import com.processVisualisation.virtualKitchen.ai.platform.registry.ModelDefinition;

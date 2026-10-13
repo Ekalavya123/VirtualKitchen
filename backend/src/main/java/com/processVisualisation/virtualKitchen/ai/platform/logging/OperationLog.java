@@ -1,6 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.platform.logging;
 
 import com.processVisualisation.virtualKitchen.ai.platform.usage.AiCostLedger;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.common.logging.MdcKeys;
 import org.slf4j.Logger;
 import org.slf4j.MDC;

@@ -1,20 +1,16 @@
-package com.processVisualisation.virtualKitchen.ai.platform.logging;
+package com.processVisualisation.virtualKitchen.common.logging;
 
-import com.processVisualisation.virtualKitchen.ai.platform.queue.AiQueueFullException;
-import com.processVisualisation.virtualKitchen.ai.platform.queue.AiRequestTimeoutException;
-import com.processVisualisation.virtualKitchen.ai.platform.routing.NoAvailableModelException;
-import com.processVisualisation.virtualKitchen.ai.provider.exception.AiClientException;
-import com.processVisualisation.virtualKitchen.ai.recipe.RecipeProcessAiException;
-import com.processVisualisation.virtualKitchen.recipe.validation.ProcessValidationException;
+import com.processVisualisation.virtualKitchen.common.web.ApiException;
 import org.slf4j.Logger;
 
 /**
  * Logs a failure once, at the boundary that finally handles it (an async job's catch block), with a severity
- * that matches what kind of failure it is:
+ * that matches what kind of failure it is, read from the {@link ApiException.Outcome} the exception carries:
  * <ul>
- *   <li>business outcomes (the AI produced an invalid process) — WARN, no stack;</li>
- *   <li>known external/AI failures (provider error, timeout, no model, queue full) — ERROR, no stack, since the
- *       exception type and message already say what happened;</li>
+ *   <li>business outcomes and rejections (the AI produced an invalid process, a conflict, a full queue) — WARN,
+ *       no stack;</li>
+ *   <li>known external/AI failures (provider error, timeout, no model) — ERROR, no stack, since the exception
+ *       type and message already say what happened;</li>
  *   <li>anything else is a bug — ERROR with the full stack trace.</li>
  * </ul>
  */
@@ -58,13 +54,10 @@ public final class FailureLogger {
     }
 
     static boolean isBusinessFailure(Throwable error) {
-        return error instanceof RecipeProcessAiException || error instanceof ProcessValidationException;
+        return error instanceof ApiException api && api.getOutcome() != ApiException.Outcome.UPSTREAM_FAILURE;
     }
 
     static boolean isKnownExternalFailure(Throwable error) {
-        return error instanceof AiClientException
-                || error instanceof AiRequestTimeoutException
-                || error instanceof NoAvailableModelException
-                || error instanceof AiQueueFullException;
+        return error instanceof ApiException api && api.getOutcome() == ApiException.Outcome.UPSTREAM_FAILURE;
     }
 }

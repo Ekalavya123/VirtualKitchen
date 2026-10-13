@@ -3,6 +3,7 @@ package com.processVisualisation.virtualKitchen.common.web;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiCommunicationException;
+import com.processVisualisation.virtualKitchen.ai.provider.exception.AiTimeoutException;
 import com.processVisualisation.virtualKitchen.common.logging.LogCapture;
 import com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.recipe.exception.RecipeRevisionConflictException;
@@ -46,7 +47,7 @@ class GlobalExceptionHandlerLoggingTest {
     @Test
     void upstreamAiFailureIsErrorWithoutStack() {
         try (LogCapture logs = LogCapture.of(GlobalExceptionHandler.class)) {
-            handler.handleAICommunication(new AiCommunicationException("Gemini API request failed with status: 500"));
+            handler.handleApiException(new AiCommunicationException("Gemini API request failed with status: 500"));
 
             ILoggingEvent event = single(logs);
             assertThat(event.getLevel()).isEqualTo(Level.ERROR);
@@ -57,7 +58,7 @@ class GlobalExceptionHandlerLoggingTest {
     @Test
     void rejectedRequestIsWarnWithoutStack() {
         try (LogCapture logs = LogCapture.of(GlobalExceptionHandler.class)) {
-            handler.handleRecipeAccessDenied(new RecipeAccessDeniedException("no permission"));
+            handler.handleApiException(new RecipeAccessDeniedException("no permission"));
 
             ILoggingEvent event = single(logs);
             assertThat(event.getLevel()).isEqualTo(Level.WARN);
@@ -68,7 +69,7 @@ class GlobalExceptionHandlerLoggingTest {
     @Test
     void revisionConflictIsAnswered409AndLoggedAsRejected() {
         try (LogCapture logs = LogCapture.of(GlobalExceptionHandler.class)) {
-            ResponseEntity<ErrorResponse> response = handler.handleRecipeRevisionConflict(
+            ResponseEntity<ErrorResponse> response = handler.handleApiException(
                     new RecipeRevisionConflictException("changed elsewhere"));
 
             assertThat(response.getStatusCode().value()).isEqualTo(409);
@@ -95,6 +96,28 @@ class GlobalExceptionHandlerLoggingTest {
                     "E11000 duplicate key error collection: users index: email dup key: { email: \"person@example.org\" }"));
 
             assertThat(logs.allMessages()).doesNotContain("person@example.org").contains("status=409");
+        }
+    }
+
+    @Test
+    void apiExceptionIsAnsweredWithItsOwnStatusAndTitle() {
+        ResponseEntity<ErrorResponse> response = handler.handleApiException(new AiTimeoutException("slow provider"));
+
+        assertThat(response.getStatusCode().value()).isEqualTo(504);
+        assertThat(response.getBody().getStatus()).isEqualTo(504);
+        assertThat(response.getBody().getError()).isEqualTo("AI Timeout");
+        assertThat(response.getBody().getMessage()).isEqualTo("slow provider");
+    }
+
+    @Test
+    void rejectedArgumentIsAnswered400AndLoggedAsClientError() {
+        try (LogCapture logs = LogCapture.of(GlobalExceptionHandler.class)) {
+            ResponseEntity<ErrorResponse> response =
+                    handler.handleIllegalArgument(new IllegalArgumentException("quantity must be positive"));
+
+            assertThat(response.getStatusCode().value()).isEqualTo(400);
+            assertThat(response.getBody().getMessage()).isEqualTo("quantity must be positive");
+            assertThat(single(logs).getLevel()).isEqualTo(Level.INFO);
         }
     }
 

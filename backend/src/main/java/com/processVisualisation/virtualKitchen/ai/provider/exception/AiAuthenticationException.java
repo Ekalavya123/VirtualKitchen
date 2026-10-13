@@ -1,5 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.provider.exception;
 
+import org.springframework.http.HttpStatus;
+
 /**
  * Thrown when an AI provider rejects a request due to invalid or missing
  * credentials, typically in response to an HTTP 401 or 403 status returned
@@ -13,7 +15,7 @@ public class AiAuthenticationException extends AiClientException {
      * @param message a message describing the failure
      */
     public AiAuthenticationException(String message) {
-        super(message);
+        super(message, null, HttpStatus.UNAUTHORIZED, "AI Authentication Failed");
     }
 
     /**
@@ -24,6 +26,6 @@ public class AiAuthenticationException extends AiClientException {
      * @param cause the underlying exception that caused this failure
      */
     public AiAuthenticationException(String message, Throwable cause) {
-        super(message, cause);
+        super(message, cause, HttpStatus.UNAUTHORIZED, "AI Authentication Failed");
     }
 }

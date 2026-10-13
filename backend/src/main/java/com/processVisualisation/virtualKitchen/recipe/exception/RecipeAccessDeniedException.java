@@ -1,6 +1,9 @@
 package com.processVisualisation.virtualKitchen.recipe.exception;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiException;
 import com.processVisualisation.virtualKitchen.common.web.GlobalExceptionHandler;
+
+import org.springframework.http.HttpStatus;
 
 /**
  * Thrown when a user attempts to view or act on a recipe/recipe resource
@@ -8,13 +11,13 @@ import com.processVisualisation.virtualKitchen.common.web.GlobalExceptionHandler
  * Handled by {@link GlobalExceptionHandler}, which returns an HTTP 403
  * Forbidden response.
  */
-public class RecipeAccessDeniedException extends RuntimeException {
+public class RecipeAccessDeniedException extends ApiException {
     /**
      * Creates the exception with a descriptive message.
      *
      * @param message description of the access-denied condition
      */
     public RecipeAccessDeniedException(String message) {
-        super(message);
+        super(message, HttpStatus.FORBIDDEN, null, Outcome.REJECTED);
     }
 }

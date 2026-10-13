@@ -1,5 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.provider.exception;
 
+import org.springframework.http.HttpStatus;
+
 /**
  * Thrown when a request to an AI provider times out or the provider cannot
  * be reached, typically wrapping a connectivity failure raised by the
@@ -13,7 +15,7 @@ public class AiTimeoutException extends AiClientException {
      * @param message a message describing the failure
      */
     public AiTimeoutException(String message) {
-        super(message);
+        super(message, null, HttpStatus.GATEWAY_TIMEOUT, "AI Timeout");
     }
 
     /**
@@ -24,6 +26,6 @@ public class AiTimeoutException extends AiClientException {
      * @param cause the underlying exception that caused this failure
      */
     public AiTimeoutException(String message, Throwable cause) {
-        super(message, cause);
+        super(message, cause, HttpStatus.GATEWAY_TIMEOUT, "AI Timeout");
     }
 }

@@ -1,10 +1,9 @@
-package com.processVisualisation.virtualKitchen.ai.platform.logging;
+package com.processVisualisation.virtualKitchen.common.logging;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiTimeoutException;
 import com.processVisualisation.virtualKitchen.ai.recipe.RecipeProcessAiException;
-import com.processVisualisation.virtualKitchen.common.logging.LogCapture;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

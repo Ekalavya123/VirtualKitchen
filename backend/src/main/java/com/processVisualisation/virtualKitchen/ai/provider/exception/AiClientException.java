@@ -1,5 +1,9 @@
 package com.processVisualisation.virtualKitchen.ai.provider.exception;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiException;
+
+import org.springframework.http.HttpStatus;
+
 /**
  * Base unchecked exception for all failures raised by the AI provider and
  * storage clients in this package. Provider-specific failure conditions
@@ -7,7 +11,7 @@ package com.processVisualisation.virtualKitchen.ai.provider.exception;
  * responses) are represented by the dedicated subclasses in this package
  * rather than being thrown directly as this type.
  */
-public class AiClientException extends RuntimeException {
+public class AiClientException extends ApiException {
 
     /**
      * Creates the exception with a descriptive message and no cause.
@@ -15,7 +19,7 @@ public class AiClientException extends RuntimeException {
      * @param message a message describing the failure
      */
     public AiClientException(String message) {
-        super(message);
+        super(message, HttpStatus.INTERNAL_SERVER_ERROR, "AI Client Error", Outcome.UPSTREAM_FAILURE);
     }
 
     /**
@@ -26,6 +30,11 @@ public class AiClientException extends RuntimeException {
      * @param cause the underlying exception that caused this failure
      */
     public AiClientException(String message, Throwable cause) {
-        super(message, cause);
+        super(message, cause, HttpStatus.INTERNAL_SERVER_ERROR, "AI Client Error", Outcome.UPSTREAM_FAILURE);
+    }
+
+    /** For subclasses: a provider failure answered with its own status and error title. */
+    protected AiClientException(String message, Throwable cause, HttpStatus status, String error) {
+        super(message, cause, status, error, Outcome.UPSTREAM_FAILURE);
     }
 }

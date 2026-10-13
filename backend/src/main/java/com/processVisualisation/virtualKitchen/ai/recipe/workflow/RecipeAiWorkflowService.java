@@ -1,7 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.recipe.workflow;
 
 import com.processVisualisation.virtualKitchen.ai.platform.analytics.AiAnalyticsRecorder;
-import com.processVisualisation.virtualKitchen.ai.platform.logging.FailureLogger;
+import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.RecipeProcessGenerationJobRepository;
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.RecipeProcessGenerationJobService;
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.dto.RecipeProcessGenerationJobResponseDTO;

@@ -1,6 +1,9 @@
 package com.processVisualisation.virtualKitchen.ai.recipe;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiException;
 import com.processVisualisation.virtualKitchen.common.web.GlobalExceptionHandler;
+
+import org.springframework.http.HttpStatus;
 
 /**
  * Thrown when generating a recipe's process-visualization flow fails (e.g.
@@ -8,7 +11,7 @@ import com.processVisualisation.virtualKitchen.common.web.GlobalExceptionHandler
  * template/step data). Handled by {@link GlobalExceptionHandler}, which
  * translates it into an HTTP 422 Unprocessable Entity response.
  */
-public class RecipeProcessAiException extends RuntimeException {
+public class RecipeProcessAiException extends ApiException {
 
     /**
      * Creates the exception with a descriptive message and no underlying cause.
@@ -16,7 +19,7 @@ public class RecipeProcessAiException extends RuntimeException {
      * @param message description of why flow generation failed
      */
     public RecipeProcessAiException(String message) {
-        super(message);
+        super(message, HttpStatus.UNPROCESSABLE_ENTITY, "Recipe Flow Generation Failed", Outcome.REJECTED);
     }
 
     /**
@@ -27,6 +30,6 @@ public class RecipeProcessAiException extends RuntimeException {
      * @param cause the underlying exception that triggered this failure
      */
     public RecipeProcessAiException(String message, Throwable cause) {
-        super(message, cause);
+        super(message, cause, HttpStatus.UNPROCESSABLE_ENTITY, "Recipe Flow Generation Failed", Outcome.REJECTED);
     }
 }

@@ -1,6 +1,9 @@
 package com.processVisualisation.virtualKitchen.recipe.validation;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiException;
 import com.processVisualisation.virtualKitchen.common.web.GlobalExceptionHandler;
+
+import org.springframework.http.HttpStatus;
 
 /**
  * Thrown when a {@code Process} fails structural validation (e.g. an invalid
@@ -9,7 +12,7 @@ import com.processVisualisation.virtualKitchen.common.web.GlobalExceptionHandler
  * recipe). Handled by {@link GlobalExceptionHandler}, which returns an HTTP
  * 422 Unprocessable Entity response.
  */
-public class ProcessValidationException extends RuntimeException {
+public class ProcessValidationException extends ApiException {
 
     /**
      * Creates the exception with a descriptive message, typically the
@@ -18,6 +21,6 @@ public class ProcessValidationException extends RuntimeException {
      * @param message description of why validation failed
      */
     public ProcessValidationException(String message) {
-        super(message);
+        super(message, HttpStatus.UNPROCESSABLE_ENTITY, "Process Validation Failed", Outcome.REJECTED);
     }
 }
