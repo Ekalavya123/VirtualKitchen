@@ -1,8 +1,8 @@
 package com.processVisualisation.virtualKitchen.recipe.model;
 
 /**
- * Unit of measure for the quantity of an ingredient used in a recipe step, as
- * recorded on {@link RecipeIngredientUsage}.
+ * Unit of measure for an ingredient quantity (recipe ingredients, inventory,
+ * store orders), converted between units by {@code UnitConversionService}.
  */
 public enum UnitType {
     KG,
