@@ -62,7 +62,7 @@ import {
   type ActionOnIngredient,
 } from '../../model/recipeStepData'
 import { RecipeProcessGraphProvider } from '../context/RecipeProcessGraphContext'
-import { useRecipeSession, type RecipeSessionContextValue } from '../../session/RecipeSessionContext'
+import { useRecipeSession, type RecipeSessionContextValue } from '../../session/sessionContext'
 import type { Process } from '../../../../types/process'
 import type { RecipeProcessBreadcrumbEntry, RecipeProcessVisualizationStepResult } from '../../../../types/recipe'
 import { useNotifications } from '../../../../shared/components/notifications/notificationContext'

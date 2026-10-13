@@ -5,7 +5,7 @@
  * way deleting a step strips other steps' step-output references to it.
  */
 
-import type { Process } from '../../../types/process'
+import type { Process, ProcessNode } from '../../../types/process'
 import { normalizeRecipeStepNodeData, withRecipeStepActionOnProcesses } from './recipeStepData'
 
 const referencesProcess = (data: unknown, processId: number) =>
@@ -29,4 +29,37 @@ export const withoutSubprocessReferences = (process: Process, processId: number)
       return { ...node, data: withRecipeStepActionOnProcesses(node.data, remaining) as unknown as Record<string, unknown> }
     }),
   }
+}
+
+/**
+ * A process not yet created on the backend (e.g. from AI generation — see
+ * recipeProcessGenerationConverter.ts) is held in the session under a temporary
+ * negative id; a real Process id is always a positive sequence number, so
+ * the two can never collide.
+ */
+export const isPendingProcessId = (id: number) => id < 0
+
+/**
+ * Rewrites every STEP node's Action On subprocess references (`processId`) through `idMap` — used
+ * whenever a save creates processes for real (temporary/undone ids -> real ids), so any step that
+ * referenced one of them, in any process, points at the real id. Returns `nodes` itself when
+ * nothing referenced a remapped id.
+ */
+export const remapActionOnProcessRefs = (nodes: ProcessNode[], idMap: Map<number, number>): ProcessNode[] => {
+  let anyChanged = false
+  const next = nodes.map((node) => {
+    if (node.kind !== 'STEP') return node
+
+    const { step } = normalizeRecipeStepNodeData(node.data)
+    const references = step.actionOn.processes
+    if (references.length === 0) return node
+
+    const remapped = references.map((entry) => idMap.get(entry.processId) ?? entry.processId)
+    const changed = remapped.some((id, index) => id !== references[index].processId)
+    if (!changed) return node
+
+    anyChanged = true
+    return { ...node, data: withRecipeStepActionOnProcesses(node.data, remapped) as unknown as Record<string, unknown> }
+  })
+  return anyChanged ? next : nodes
 }

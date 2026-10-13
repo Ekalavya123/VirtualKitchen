@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import '../../../styles/flow-ui.css'
 import type { RecipeDetail } from '../../../types/recipe'
-import { useRecipeSession } from '../session/RecipeSessionContext'
+import { useRecipeSession } from '../session/sessionContext'
 import { buildRecipePresentation } from '../view/model/recipeView'
 
 type RecipeSummarySectionProps = {

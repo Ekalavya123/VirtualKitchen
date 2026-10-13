@@ -6,7 +6,7 @@ import { useNotifications } from '../../../../shared/components/notifications/no
 import RecipeProcessEditor from './RecipeProcessEditor'
 import RecipeProcessSidebar from './RecipeProcessSidebar'
 import RecipeProcessGenerationModal, { type PendingProcessEdit } from './RecipeProcessGenerationModal'
-import { useRecipeSession } from '../../session/RecipeSessionContext'
+import { useRecipeSession } from '../../session/sessionContext'
 import { convertGeneratedResultToProcesses } from '../adapters/recipeProcessGenerationConverter'
 import { applyProcessEdit, describeProcessEdit, ProcessEditConflictError } from '../adapters/recipeProcessEditApplier'
 import { serializeProcessForEdit } from '../adapters/recipeProcessEditSerializer'

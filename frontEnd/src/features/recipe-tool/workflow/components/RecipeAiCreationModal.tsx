@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { RecipeAiWorkflowApi } from '../../../../api/recipeAiWorkflowApi'
 import type { RecipeAiTaskType, RecipeAiWorkflowEstimate, RecipeAiWorkflowResponse } from '../../../../types/recipeAiWorkflow'
 import { isWorkflowOpen } from '../../jobs/jobTracker'
-import { useRecipeSession } from '../../session/RecipeSessionContext'
+import { useRecipeSession } from '../../session/sessionContext'
 import {
   createWorkflowTaskSelection,
   isCompleteExperience,
