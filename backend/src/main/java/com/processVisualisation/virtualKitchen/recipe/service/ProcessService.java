@@ -20,12 +20,10 @@ import com.processVisualisation.virtualKitchen.recipe.validation.ProcessValidato
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -333,234 +331,38 @@ public class ProcessService {
 
     /**
      * Clones {@code original} into {@code targetRecipeId} under {@code newProcessId}, keeping its
-     * type/name/description, with freshly generated node/edge ids and every node's data deep-copied
-     * so the copy shares nothing with the source. Action On subprocess references are rewritten
-     * through {@code processIdMap}; see {@link #remapActionOnProcessRefs}.
+     * type/name/description; see {@link ProcessGraphCloner#cloneGraph} for how the graph is copied.
      */
     private Process cloneIntoRecipe(Process original, Long newProcessId, Long targetRecipeId, Map<Long, Long> processIdMap) {
-        Map<String, String> nodeIdMap = new HashMap<>();
-        for (Process.ProcessNode node : safeNodes(original)) {
-            nodeIdMap.put(node.getId(), UUID.randomUUID().toString());
-        }
-
-        List<Process.ProcessNode> copiedNodes = new ArrayList<>();
-        for (Process.ProcessNode node : safeNodes(original)) {
-            Process.ProcessNode nodeCopy = cloneNode(node);
-            nodeCopy.setId(nodeIdMap.get(node.getId()));
-            if (node.getParentId() != null) {
-                nodeCopy.setParentId(nodeIdMap.getOrDefault(node.getParentId(), node.getParentId()));
-            }
-            Map<String, Object> data = deepCopyMap(node.getData());
-            remapActionOnProcessRefs(data, processIdMap);
-            remapActionOnStepRefs(data, nodeIdMap);
-            nodeCopy.setData(data);
-            copiedNodes.add(nodeCopy);
-        }
-
-        List<Process.ProcessEdge> copiedEdges = new ArrayList<>();
-        for (Process.ProcessEdge edge : safeEdges(original)) {
-            Process.ProcessEdge edgeCopy = cloneEdge(edge);
-            edgeCopy.setId(UUID.randomUUID().toString());
-            edgeCopy.setSource(nodeIdMap.getOrDefault(edge.getSource(), edge.getSource()));
-            edgeCopy.setTarget(nodeIdMap.getOrDefault(edge.getTarget(), edge.getTarget()));
-            edgeCopy.setStyle(edge.getStyle() != null ? deepCopyMap(edge.getStyle()) : null);
-            edgeCopy.setData(deepCopyMap(edge.getData()));
-            copiedEdges.add(edgeCopy);
-        }
-
-        Process copy = new Process();
+        Process copy = ProcessGraphCloner.cloneGraph(original, processIdMap);
         copy.setId(newProcessId);
         copy.setType(original.getType());
         copy.setRecipeId(targetRecipeId);
         copy.setName(original.getName());
         copy.setDescription(original.getDescription());
-        copy.setNodes(copiedNodes);
-        copy.setEdges(copiedEdges);
-        copy.setViewport(cloneViewport(original.getViewport()));
         return copy;
-    }
-
-    /**
-     * Rewrites a STEP's Action On subprocess references ({@code data.step.actionOn.processes[].processId},
-     * the shape the frontend's recipe-tool/process/model/recipeStepData.ts writes) to the copied processes. A reference to a process
-     * that isn't in {@code processIdMap} — i.e. not part of the recipe being copied — is dropped
-     * rather than kept, since keeping it would be a live link from the copy into another recipe.
-     */
-    @SuppressWarnings("unchecked")
-    private void remapActionOnProcessRefs(Map<String, Object> data, Map<Long, Long> processIdMap) {
-        if (!(data.get("step") instanceof Map<?, ?> step)) return;
-        if (!(step.get("actionOn") instanceof Map<?, ?> actionOn)) return;
-        if (!(actionOn.get("processes") instanceof List<?> references)) return;
-
-        List<Object> remapped = new ArrayList<>();
-        for (Object reference : references) {
-            if (!(reference instanceof Map<?, ?> entry)) continue;
-            Long newId = processIdMap.get(asLong(entry.get("processId")));
-            if (newId == null) continue;
-            Map<String, Object> entryCopy = new LinkedHashMap<>((Map<String, Object>) entry);
-            entryCopy.put("processId", newId);
-            remapped.add(entryCopy);
-        }
-        ((Map<String, Object>) actionOn).put("processes", remapped);
-    }
-
-    /**
-     * Rewrites a STEP's Action On step-output references ({@code data.step.actionOn.steps[].stepId})
-     * to the copied nodes' new ids, since a copy regenerates every node id. A reference to a node
-     * outside this process is kept as-is, so {@code ProcessValidator} still reports it.
-     */
-    @SuppressWarnings("unchecked")
-    private void remapActionOnStepRefs(Map<String, Object> data, Map<String, String> nodeIdMap) {
-        if (!(data.get("step") instanceof Map<?, ?> step)) return;
-        if (!(step.get("actionOn") instanceof Map<?, ?> actionOn)) return;
-        if (!(actionOn.get("steps") instanceof List<?> references)) return;
-
-        List<Object> remapped = new ArrayList<>();
-        for (Object reference : references) {
-            if (!(reference instanceof Map<?, ?> entry)) continue;
-            Map<String, Object> entryCopy = new LinkedHashMap<>((Map<String, Object>) entry);
-            Object stepId = entry.get("stepId");
-            if (stepId != null) entryCopy.put("stepId", nodeIdMap.getOrDefault(String.valueOf(stepId), String.valueOf(stepId)));
-            remapped.add(entryCopy);
-        }
-        ((Map<String, Object>) actionOn).put("steps", remapped);
-    }
-
-    private Long asLong(Object value) {
-        if (value instanceof Number number) {
-            return number.longValue();
-        }
-        if (value instanceof String text && !text.isBlank()) {
-            try {
-                return Long.parseLong(text.trim());
-            } catch (NumberFormatException ignored) {
-                return null;
-            }
-        }
-        return null;
-    }
-
-    private Map<String, Object> deepCopyMap(Map<String, Object> source) {
-        Map<String, Object> copy = new LinkedHashMap<>();
-        if (source != null) {
-            source.forEach((key, value) -> copy.put(key, deepCopyValue(value)));
-        }
-        return copy;
-    }
-
-    private Object deepCopyValue(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> copy = new LinkedHashMap<>();
-            map.forEach((key, nested) -> copy.put(String.valueOf(key), deepCopyValue(nested)));
-            return copy;
-        }
-        if (value instanceof List<?> list) {
-            List<Object> copy = new ArrayList<>(list.size());
-            list.forEach(nested -> copy.add(deepCopyValue(nested)));
-            return copy;
-        }
-        return value;
     }
 
     /**
      * Clones {@code original} into a new, independently-owned {@link Process}
-     * document with freshly generated node/edge ids, so the copy shares no
-     * live reference back to the source. A process is now always a single,
-     * self-contained STEP/CONDITION graph — it never embeds another process
-     * as a node — so this is a flat clone, not a recursive one.
+     * document in the same recipe, with freshly generated node/edge ids, so the
+     * copy shares no live reference back to the source. A process is always a
+     * single, self-contained STEP/CONDITION graph — it never embeds another
+     * process as a node — so this is a flat clone, not a recursive one.
      *
      * @param original the process to copy
      * @return the saved copy
      */
     private Process copyProcess(Process original) {
-        Map<String, String> nodeIdMap = new HashMap<>();
-        for (Process.ProcessNode node : safeNodes(original)) {
-            nodeIdMap.put(node.getId(), UUID.randomUUID().toString());
-        }
-
-        List<Process.ProcessNode> copiedNodes = new ArrayList<>();
-        for (Process.ProcessNode node : safeNodes(original)) {
-            Process.ProcessNode nodeCopy = cloneNode(node);
-            nodeCopy.setId(nodeIdMap.get(node.getId()));
-            // Deep-copied (cloneNode's copy is shallow) so rewriting step-output references to the
-            // copy's new node ids never touches the source process's own data.
-            Map<String, Object> data = deepCopyMap(node.getData());
-            remapActionOnStepRefs(data, nodeIdMap);
-            nodeCopy.setData(data);
-            copiedNodes.add(nodeCopy);
-        }
-
-        List<Process.ProcessEdge> copiedEdges = new ArrayList<>();
-        for (Process.ProcessEdge edge : safeEdges(original)) {
-            Process.ProcessEdge edgeCopy = cloneEdge(edge);
-            edgeCopy.setId(UUID.randomUUID().toString());
-            edgeCopy.setSource(nodeIdMap.getOrDefault(edge.getSource(), edge.getSource()));
-            edgeCopy.setTarget(nodeIdMap.getOrDefault(edge.getTarget(), edge.getTarget()));
-            copiedEdges.add(edgeCopy);
-        }
-
-        Process copy = new Process();
+        Process copy = ProcessGraphCloner.cloneGraph(original, null);
         copy.setId(sequenceGeneratorService.generateSequence(Process.SEQUENCE_NAME));
         copy.setType(original.getType());
         copy.setRecipeId(original.getRecipeId());
         copy.setName(original.getName() + COPY_SUFFIX);
         copy.setDescription(original.getDescription());
-        copy.setNodes(copiedNodes);
-        copy.setEdges(copiedEdges);
-        copy.setViewport(cloneViewport(original.getViewport()));
 
         processValidator.validateOrThrow(copy);
         return processRepository.save(copy);
-    }
-
-    private List<Process.ProcessNode> safeNodes(Process process) {
-        return process.getNodes() == null ? List.of() : process.getNodes();
-    }
-
-    private List<Process.ProcessEdge> safeEdges(Process process) {
-        return process.getEdges() == null ? List.of() : process.getEdges();
-    }
-
-    private Process.ProcessNode cloneNode(Process.ProcessNode node) {
-        Process.ProcessNode copy = new Process.ProcessNode();
-        copy.setKind(node.getKind());
-        copy.setData(node.getData() != null ? new HashMap<>(node.getData()) : new HashMap<>());
-        copy.setType(node.getType());
-        copy.setPosition(node.getPosition());
-        copy.setMeasured(node.getMeasured());
-        copy.setWidth(node.getWidth());
-        copy.setHeight(node.getHeight());
-        copy.setParentId(node.getParentId());
-        copy.setExtent(node.getExtent());
-        copy.setDraggable(node.getDraggable());
-        copy.setSelectable(node.getSelectable());
-        copy.setDeletable(node.getDeletable());
-        return copy;
-    }
-
-    private Process.ProcessEdge cloneEdge(Process.ProcessEdge edge) {
-        Process.ProcessEdge copy = new Process.ProcessEdge();
-        copy.setSource(edge.getSource());
-        copy.setTarget(edge.getTarget());
-        copy.setSourceHandle(edge.getSourceHandle());
-        copy.setTargetHandle(edge.getTargetHandle());
-        copy.setType(edge.getType());
-        copy.setAnimated(edge.getAnimated());
-        copy.setStyle(edge.getStyle() != null ? new HashMap<>(edge.getStyle()) : null);
-        copy.setData(edge.getData() != null ? new HashMap<>(edge.getData()) : new HashMap<>());
-        copy.setLabel(edge.getLabel());
-        return copy;
-    }
-
-    private Process.ProcessViewport cloneViewport(Process.ProcessViewport viewport) {
-        if (viewport == null) {
-            return null;
-        }
-        Process.ProcessViewport copy = new Process.ProcessViewport();
-        copy.setX(viewport.getX());
-        copy.setY(viewport.getY());
-        copy.setZoom(viewport.getZoom());
-        return copy;
     }
 
     private Process findProcessOrThrow(Long processId) {

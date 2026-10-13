@@ -1,13 +1,15 @@
 package com.processVisualisation.virtualKitchen.recipeorder.service;
 
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
+import com.processVisualisation.virtualKitchen.recipe.service.ProcessGraphCloner;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
-/** Deep copies of process graphs, so an order's snapshot shares no mutable state with the live recipe. */
+/**
+ * Deep copies of process graphs, so an order's snapshot shares no mutable state with the live recipe. Unlike a
+ * recipe copy, a snapshot keeps the source ids and only the fields reading an order needs (no editor layout).
+ */
 final class ProcessSnapshots {
 
     private ProcessSnapshots() {
@@ -35,7 +37,7 @@ final class ProcessSnapshots {
                 Process.ProcessNode nodeCopy = new Process.ProcessNode();
                 nodeCopy.setId(node.getId());
                 nodeCopy.setKind(node.getKind());
-                nodeCopy.setData(copyMap(node.getData()));
+                nodeCopy.setData(ProcessGraphCloner.deepCopy(node.getData()));
                 nodeCopy.setType(node.getType());
                 nodeCopy.setParentId(node.getParentId());
                 if (node.getPosition() != null) {
@@ -61,31 +63,11 @@ final class ProcessSnapshots {
                 edgeCopy.setTargetHandle(edge.getTargetHandle());
                 edgeCopy.setType(edge.getType());
                 edgeCopy.setLabel(edge.getLabel());
-                edgeCopy.setData(copyMap(edge.getData()));
+                edgeCopy.setData(ProcessGraphCloner.deepCopy(edge.getData()));
                 edges.add(edgeCopy);
             }
         }
         copy.setEdges(edges);
         return copy;
-    }
-
-    private static Map<String, Object> copyMap(Map<String, Object> source) {
-        Map<String, Object> copy = new LinkedHashMap<>();
-        if (source != null) source.forEach((key, value) -> copy.put(key, copyValue(value)));
-        return copy;
-    }
-
-    private static Object copyValue(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> copy = new LinkedHashMap<>();
-            map.forEach((key, item) -> copy.put(String.valueOf(key), copyValue(item)));
-            return copy;
-        }
-        if (value instanceof List<?> list) {
-            List<Object> copy = new ArrayList<>();
-            list.forEach(item -> copy.add(copyValue(item)));
-            return copy;
-        }
-        return value;
     }
 }

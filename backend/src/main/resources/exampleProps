@@ -39,8 +39,10 @@ spring.mail.properties.mail.smtp.starttls.enable=true
 # Must match the frontend's VITE_GOOGLE_CLIENT_ID.
 google.oauth.client-id=${GOOGLE_CLIENT_ID:REPLACE_WITH_GOOGLE_OAUTH_CLIENT_ID}
 
-supabase.url=REPLACE_WITH_YOUR_SUPABASE_URL
-supabase.serviceKey=REPLACE_WITH_YOUR_SUPABASE_SERVICE_KEY
+# Supabase storage for generated images and narration audio. The service key is a server-side secret: supply it
+# as an environment variable rather than writing it here.
+supabase.url=${SUPABASE_URL:REPLACE_WITH_YOUR_SUPABASE_URL}
+supabase.serviceKey=${SUPABASE_SERVICE_KEY:REPLACE_WITH_YOUR_SUPABASE_SERVICE_KEY}
 supabase.bucket=recipe-images
 supabase.timeoutMs=300000
 
