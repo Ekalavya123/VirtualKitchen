@@ -1,7 +1,5 @@
 package com.processVisualisation.virtualKitchen.ai.globalasset;
 
-import com.processVisualisation.virtualKitchen.common.exception.GlobalAssetException;
-
 import java.util.Arrays;
 
 /**

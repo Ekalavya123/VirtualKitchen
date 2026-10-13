@@ -1,7 +1,7 @@
 package com.processVisualisation.virtualKitchen.kitchen.model;
 
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
 import com.processVisualisation.virtualKitchen.store.model.ItemType;
+import com.processVisualisation.virtualKitchen.store.units.UnitType;
 import lombok.Data;
 
 /**

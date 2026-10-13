@@ -1,6 +1,6 @@
 package com.processVisualisation.virtualKitchen.store.dto;
 
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
+import com.processVisualisation.virtualKitchen.store.units.UnitType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;

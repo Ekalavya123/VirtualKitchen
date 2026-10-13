@@ -1,9 +1,9 @@
 package com.processVisualisation.virtualKitchen.auth.controller;
 
 import com.processVisualisation.virtualKitchen.auth.dto.*;
-import com.processVisualisation.virtualKitchen.auth.service.IAuthService;
-import com.processVisualisation.virtualKitchen.common.exception.AuthException;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import com.processVisualisation.virtualKitchen.auth.exception.AuthException;
+import com.processVisualisation.virtualKitchen.auth.service.AuthService;
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,9 +27,9 @@ import java.time.LocalDateTime;
 @RequestMapping("/api/v1/auth")
 public class AuthController {
 
-    private final IAuthService authService;
+    private final AuthService authService;
 
-    public AuthController(IAuthService authService) {
+    public AuthController(AuthService authService) {
         this.authService = authService;
     }
 

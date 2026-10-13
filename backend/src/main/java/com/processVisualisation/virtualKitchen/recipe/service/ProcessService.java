@@ -1,0 +1,597 @@
+package com.processVisualisation.virtualKitchen.recipe.service;
+
+import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchItemDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessBatchUpdateResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessRequestDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.ProcessUpdateDTO;
+import com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException;
+import com.processVisualisation.virtualKitchen.recipe.exception.RecipeRevisionConflictException;
+import com.processVisualisation.virtualKitchen.recipe.mapper.ProcessMapper;
+import com.processVisualisation.virtualKitchen.recipe.model.Process;
+import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
+import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
+import com.processVisualisation.virtualKitchen.recipe.repository.ProcessRepository;
+import com.processVisualisation.virtualKitchen.recipe.repository.RecipeTemplateRepository;
+import com.processVisualisation.virtualKitchen.recipe.validation.ProcessValidationException;
+import com.processVisualisation.virtualKitchen.recipe.validation.ProcessValidator;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+/**
+ * Default {@link ProcessService} implementation, backed by MongoDB via
+ * {@link ProcessRepository}. Every operation is scoped to the recipe named
+ * in its {@code recipeId} parameter: a process that exists but belongs to a
+ * different recipe is treated as not found ({@link #requireBelongsToRecipe}),
+ * matching the "recipe-scoped process references only" Phase 1 rule that
+ * {@link ProcessValidator} also enforces at the graph level.
+ */
+@Service
+public class ProcessService {
+
+    private static final String COPY_SUFFIX = " (copy)";
+
+    private final ProcessRepository processRepository;
+    private final RecipeTemplateRepository recipeTemplateRepository;
+    private final SequenceGeneratorService sequenceGeneratorService;
+    private final ProcessValidator processValidator;
+    private final ProcessMapper processMapper;
+
+    public ProcessService(
+            ProcessRepository processRepository,
+            RecipeTemplateRepository recipeTemplateRepository,
+            SequenceGeneratorService sequenceGeneratorService,
+            ProcessValidator processValidator,
+            ProcessMapper processMapper
+    ) {
+        this.processRepository = processRepository;
+        this.recipeTemplateRepository = recipeTemplateRepository;
+        this.sequenceGeneratorService = sequenceGeneratorService;
+        this.processValidator = processValidator;
+        this.processMapper = processMapper;
+    }
+
+    /**
+     * Creates a new process (MAIN or SUBPROCESS, per {@code dto.getType()})
+     * under a recipe, after verifying the requesting user owns it and
+     * validating the result via {@code ProcessValidator} (which rejects,
+     * among other things, a second MAIN process for the same recipe).
+     *
+     * @param recipeId the id of the owning recipe
+     * @param userId   the id of the user requesting the creation, used for ownership verification
+     * @param dto      the process type/name/description to persist
+     * @return the created process
+     */
+    public ProcessResponseDTO create(Long recipeId, Long userId, ProcessRequestDTO dto) {
+        requireOwnedRecipe(recipeId, userId);
+
+        Process process = new Process();
+        process.setId(sequenceGeneratorService.generateSequence(Process.SEQUENCE_NAME));
+        process.setType(dto.getType());
+        process.setRecipeId(recipeId);
+        process.setName(dto.getName());
+        process.setDescription(dto.getDescription());
+
+        processValidator.validateOrThrow(process);
+        Process saved = processRepository.save(process);
+        return processMapper.toDTO(saved);
+    }
+
+    /**
+     * Retrieves a single process by id, scoped to a recipe.
+     *
+     * @param recipeId         the id of the recipe the process is expected to belong to
+     * @param processId        the id of the process to fetch
+     * @param requestingUserId the id of the requesting user, or null if unauthenticated; used for
+     *                         visibility on a private recipe
+     * @return the matching process
+     */
+    public ProcessResponseDTO get(Long recipeId, Long processId, Long requestingUserId) {
+        requireAccessibleRecipe(recipeId, requestingUserId);
+        Process process = findProcessOrThrow(processId);
+        requireBelongsToRecipe(process, recipeId);
+        return processMapper.toDTO(process);
+    }
+
+    /**
+     * Retrieves every process (MAIN and any SUBPROCESS documents) belonging to a recipe.
+     *
+     * @param recipeId         the id of the owning recipe
+     * @param requestingUserId the id of the requesting user, or null if unauthenticated; used for
+     *                         visibility on a private recipe
+     * @return the recipe's processes
+     */
+    public List<ProcessResponseDTO> listByRecipe(Long recipeId, Long requestingUserId) {
+        requireAccessibleRecipe(recipeId, requestingUserId);
+        return processRepository.findByRecipeId(recipeId)
+                .stream()
+                .map(processMapper::toDTO)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Updates a process's name/description and replaces its node/edge graph
+     * and viewport, after verifying the requesting user owns the recipe and
+     * validating the result via {@code ProcessValidator}.
+     *
+     * @param recipeId  the id of the recipe the process is expected to belong to
+     * @param processId the id of the process to update
+     * @param userId    the id of the user requesting the update, used for ownership verification
+     * @param dto       the replacement name/description/nodes/edges/viewport
+     * @return the updated process
+     */
+    public ProcessResponseDTO update(Long recipeId, Long processId, Long userId, ProcessUpdateDTO dto) {
+        requireOwnedRecipe(recipeId, userId);
+        Process process = findProcessOrThrow(processId);
+        requireBelongsToRecipe(process, recipeId);
+
+        process.setName(dto.getName());
+        process.setDescription(dto.getDescription());
+        if (dto.getNodes() != null) {
+            process.setNodes(processMapper.toNodeEntities(dto.getNodes()));
+        }
+        if (dto.getEdges() != null) {
+            process.setEdges(processMapper.toEdgeEntities(dto.getEdges()));
+        }
+        if (dto.getViewport() != null) {
+            process.setViewport(processMapper.toViewportEntity(dto.getViewport()));
+        }
+
+        processValidator.validateOrThrow(process);
+        Process saved = processRepository.save(process);
+        return processMapper.toDTO(saved);
+    }
+
+    /**
+     * Recipe-level save: replaces name/description/nodes/edges/viewport for every process named in
+     * {@code items} (typically the recipe's MAIN process plus every SUBPROCESS the Recipe Tool's
+     * unified editing session currently has loaded), after verifying the requesting user owns the
+     * recipe. Every item is validated via {@code ProcessValidator} before any of them are persisted —
+     * one invalid process rejects the whole batch — so the Recipe Tool can expose this as a single
+     * "Save" action instead of one independent save per process.
+     *
+     * @param recipeId the id of the recipe every listed process is expected to belong to
+     * @param userId   the id of the user requesting the update, used for ownership verification
+     * <p>
+     * Optimistic concurrency: when {@code baseRevision} is given, the save only goes through if the
+     * recipe's process revision still equals it (otherwise {@code RecipeRevisionConflictException},
+     * HTTP 409, and nothing is persisted); either way every successful save bumps the revision.</p>
+     *
+     * @param items        the replacement content for each process, keyed by its own {@code processId}
+     * @param baseRevision the recipe process revision the client's snapshot was based on, or null to skip the check
+     * @return the updated processes, in the same order as {@code items}, plus the recipe's new revision
+     */
+    public ProcessBatchUpdateResponseDTO updateAll(Long recipeId, Long userId, List<ProcessBatchItemDTO> items, Long baseRevision) {
+        requireOwnedRecipe(recipeId, userId);
+
+        List<Process> toSave = new ArrayList<>();
+        for (ProcessBatchItemDTO item : items) {
+            Process process = findProcessOrThrow(item.getProcessId());
+            requireBelongsToRecipe(process, recipeId);
+
+            process.setName(item.getName());
+            process.setDescription(item.getDescription());
+            if (item.getNodes() != null) {
+                process.setNodes(processMapper.toNodeEntities(item.getNodes()));
+            }
+            if (item.getEdges() != null) {
+                process.setEdges(processMapper.toEdgeEntities(item.getEdges()));
+            }
+            if (item.getViewport() != null) {
+                process.setViewport(processMapper.toViewportEntity(item.getViewport()));
+            }
+
+            // Validates every item before any of them are saved below — a single invalid process
+            // throws here and aborts the whole batch, leaving nothing partially persisted.
+            processValidator.validateOrThrow(process);
+            toSave.add(process);
+        }
+
+        // Claimed only once every item is known to be valid, so a rejected batch never moves the revision.
+        Long revision = claimRevision(recipeId, baseRevision);
+        List<Process> saved;
+        try {
+            saved = processRepository.saveAll(toSave);
+        } catch (RuntimeException e) {
+            // No Mongo transactions here: give the claimed revision back (if nobody claimed a newer
+            // one meanwhile) so the client's retry from the same base isn't a conflict with itself.
+            // Resending the full snapshot then repairs any process this partial saveAll did write.
+            if (baseRevision != null) {
+                recipeTemplateRepository.releaseProcessRevision(recipeId, revision);
+            }
+            throw e;
+        }
+        return new ProcessBatchUpdateResponseDTO(
+                revision,
+                saved.stream().map(processMapper::toDTO).collect(Collectors.toList()));
+    }
+
+    /**
+     * Atomically advances the recipe's process revision from {@code baseRevision} (see
+     * {@code RecipeTemplateRepository.claimProcessRevision}), failing with a 409 if another save got
+     * there first. A null base (older clients) bumps it unconditionally.
+     *
+     * @return the recipe's new revision
+     */
+    private Long claimRevision(Long recipeId, Long baseRevision) {
+        if (baseRevision == null) {
+            recipeTemplateRepository.incrementProcessRevision(recipeId);
+            return recipeTemplateRepository.findById(recipeId)
+                    .map(RecipeTemplate::getProcessRevision)
+                    .orElse(null);
+        }
+        long claimed = baseRevision == 0L
+                ? recipeTemplateRepository.claimInitialProcessRevision(recipeId)
+                : recipeTemplateRepository.claimProcessRevision(recipeId, baseRevision);
+        if (claimed == 0) {
+            throw new RecipeRevisionConflictException(
+                    "This recipe was changed elsewhere (another tab or device) since it was opened here");
+        }
+        return baseRevision + 1;
+    }
+
+    /**
+     * Deletes a process, after verifying the requesting user owns the
+     * recipe. Rejects deleting the recipe's MAIN process while it is still
+     * referenced by {@code RecipeTemplate.mainProcessId}, and rejects
+     * deleting any process still referenced by a PROCESS-kind node in
+     * another process belonging to the same recipe.
+     *
+     * @param recipeId  the id of the recipe the process is expected to belong to
+     * @param processId the id of the process to delete
+     * @param userId    the id of the user requesting the deletion, used for ownership verification
+     */
+    public void delete(Long recipeId, Long processId, Long userId) {
+        RecipeTemplate recipe = requireOwnedRecipe(recipeId, userId);
+        Process process = findProcessOrThrow(processId);
+        requireBelongsToRecipe(process, recipeId);
+
+        if (recipe.getMainProcessId() != null && recipe.getMainProcessId().equals(processId)) {
+            throw new ProcessValidationException(
+                    "Cannot delete process " + processId + ": it is the recipe's MAIN process (referenced by mainProcessId)");
+        }
+
+        processRepository.deleteById(processId);
+    }
+
+    /**
+     * Copy-on-insert reuse (Phase 1 scope): deep-clones a SUBPROCESS
+     * (recursively, including any nested subprocess references) into a new,
+     * independent process within the same recipe. Does not create a live
+     * link to the source process. The MAIN process cannot be copied.
+     *
+     * @param recipeId  the id of the recipe both the source and the copy belong to
+     * @param processId the id of the SUBPROCESS to copy
+     * @param userId    the id of the user requesting the copy, used for ownership verification
+     * @return the newly created copy
+     */
+    public ProcessResponseDTO copy(Long recipeId, Long processId, Long userId) {
+        requireOwnedRecipe(recipeId, userId);
+        Process source = findProcessOrThrow(processId);
+
+        if (!recipeId.equals(source.getRecipeId())) {
+            throw new ProcessValidationException(
+                    "Cannot copy process " + processId + ": it belongs to a different recipe");
+        }
+        if (source.getType() == ProcessType.MAIN) {
+            throw new ProcessValidationException("The MAIN process cannot be copied");
+        }
+
+        Process copy = copyProcess(source);
+        return processMapper.toDTO(copy);
+    }
+
+    /**
+     * Recipe copy: deep-clones every process of {@code sourceRecipeId} (MAIN and every SUBPROCESS)
+     * into {@code targetRecipeId} as new, independent documents. Every copy gets a new process id
+     * and new node/edge ids, and every STEP's Action On subprocess reference is rewritten to the
+     * matching copy, so nothing in the target recipe points back at the source recipe (a reference
+     * to a process outside the source recipe is dropped). Every copy is validated before any of
+     * them are saved. Performs no ownership checks — callers (recipe copy) are responsible for
+     * authorizing both recipes.
+     *
+     * @param sourceRecipeId the recipe whose processes are copied
+     * @param targetRecipeId the (already persisted) recipe the copies belong to
+     * @return the source-to-copy process id map, and the id of the copied MAIN process
+     */
+    public RecipeProcessCopyResult copyAllToRecipe(Long sourceRecipeId, Long targetRecipeId) {
+        List<Process> sources = processRepository.findByRecipeId(sourceRecipeId);
+
+        // Every id is allocated up front so a STEP's Action On reference can be rewritten to its
+        // copy regardless of which order the processes are copied in.
+        Map<Long, Long> processIdMap = new LinkedHashMap<>();
+        for (Process source : sources) {
+            processIdMap.put(source.getId(), sequenceGeneratorService.generateSequence(Process.SEQUENCE_NAME));
+        }
+
+        List<Process> copies = new ArrayList<>();
+        Long copiedMainId = null;
+        for (Process source : sources) {
+            Process copy = cloneIntoRecipe(source, processIdMap.get(source.getId()), targetRecipeId, processIdMap);
+            // Validates every copy before any of them are saved below, so an invalid source
+            // process aborts the whole copy without leaving a partial set of processes behind.
+            processValidator.validateOrThrow(copy);
+            copies.add(copy);
+            if (copy.getType() == ProcessType.MAIN) {
+                copiedMainId = copy.getId();
+            }
+        }
+
+        processRepository.saveAll(copies);
+        return new RecipeProcessCopyResult(processIdMap, copiedMainId);
+    }
+
+    /**
+     * Clones {@code original} into {@code targetRecipeId} under {@code newProcessId}, keeping its
+     * type/name/description, with freshly generated node/edge ids and every node's data deep-copied
+     * so the copy shares nothing with the source. Action On subprocess references are rewritten
+     * through {@code processIdMap}; see {@link #remapActionOnProcessRefs}.
+     */
+    private Process cloneIntoRecipe(Process original, Long newProcessId, Long targetRecipeId, Map<Long, Long> processIdMap) {
+        Map<String, String> nodeIdMap = new HashMap<>();
+        for (Process.ProcessNode node : safeNodes(original)) {
+            nodeIdMap.put(node.getId(), UUID.randomUUID().toString());
+        }
+
+        List<Process.ProcessNode> copiedNodes = new ArrayList<>();
+        for (Process.ProcessNode node : safeNodes(original)) {
+            Process.ProcessNode nodeCopy = cloneNode(node);
+            nodeCopy.setId(nodeIdMap.get(node.getId()));
+            if (node.getParentId() != null) {
+                nodeCopy.setParentId(nodeIdMap.getOrDefault(node.getParentId(), node.getParentId()));
+            }
+            Map<String, Object> data = deepCopyMap(node.getData());
+            remapActionOnProcessRefs(data, processIdMap);
+            remapActionOnStepRefs(data, nodeIdMap);
+            nodeCopy.setData(data);
+            copiedNodes.add(nodeCopy);
+        }
+
+        List<Process.ProcessEdge> copiedEdges = new ArrayList<>();
+        for (Process.ProcessEdge edge : safeEdges(original)) {
+            Process.ProcessEdge edgeCopy = cloneEdge(edge);
+            edgeCopy.setId(UUID.randomUUID().toString());
+            edgeCopy.setSource(nodeIdMap.getOrDefault(edge.getSource(), edge.getSource()));
+            edgeCopy.setTarget(nodeIdMap.getOrDefault(edge.getTarget(), edge.getTarget()));
+            edgeCopy.setStyle(edge.getStyle() != null ? deepCopyMap(edge.getStyle()) : null);
+            edgeCopy.setData(deepCopyMap(edge.getData()));
+            copiedEdges.add(edgeCopy);
+        }
+
+        Process copy = new Process();
+        copy.setId(newProcessId);
+        copy.setType(original.getType());
+        copy.setRecipeId(targetRecipeId);
+        copy.setName(original.getName());
+        copy.setDescription(original.getDescription());
+        copy.setNodes(copiedNodes);
+        copy.setEdges(copiedEdges);
+        copy.setViewport(cloneViewport(original.getViewport()));
+        return copy;
+    }
+
+    /**
+     * Rewrites a STEP's Action On subprocess references ({@code data.step.actionOn.processes[].processId},
+     * the shape the frontend's recipe-tool/process/model/recipeStepData.ts writes) to the copied processes. A reference to a process
+     * that isn't in {@code processIdMap} — i.e. not part of the recipe being copied — is dropped
+     * rather than kept, since keeping it would be a live link from the copy into another recipe.
+     */
+    @SuppressWarnings("unchecked")
+    private void remapActionOnProcessRefs(Map<String, Object> data, Map<Long, Long> processIdMap) {
+        if (!(data.get("step") instanceof Map<?, ?> step)) return;
+        if (!(step.get("actionOn") instanceof Map<?, ?> actionOn)) return;
+        if (!(actionOn.get("processes") instanceof List<?> references)) return;
+
+        List<Object> remapped = new ArrayList<>();
+        for (Object reference : references) {
+            if (!(reference instanceof Map<?, ?> entry)) continue;
+            Long newId = processIdMap.get(asLong(entry.get("processId")));
+            if (newId == null) continue;
+            Map<String, Object> entryCopy = new LinkedHashMap<>((Map<String, Object>) entry);
+            entryCopy.put("processId", newId);
+            remapped.add(entryCopy);
+        }
+        ((Map<String, Object>) actionOn).put("processes", remapped);
+    }
+
+    /**
+     * Rewrites a STEP's Action On step-output references ({@code data.step.actionOn.steps[].stepId})
+     * to the copied nodes' new ids, since a copy regenerates every node id. A reference to a node
+     * outside this process is kept as-is, so {@code ProcessValidator} still reports it.
+     */
+    @SuppressWarnings("unchecked")
+    private void remapActionOnStepRefs(Map<String, Object> data, Map<String, String> nodeIdMap) {
+        if (!(data.get("step") instanceof Map<?, ?> step)) return;
+        if (!(step.get("actionOn") instanceof Map<?, ?> actionOn)) return;
+        if (!(actionOn.get("steps") instanceof List<?> references)) return;
+
+        List<Object> remapped = new ArrayList<>();
+        for (Object reference : references) {
+            if (!(reference instanceof Map<?, ?> entry)) continue;
+            Map<String, Object> entryCopy = new LinkedHashMap<>((Map<String, Object>) entry);
+            Object stepId = entry.get("stepId");
+            if (stepId != null) entryCopy.put("stepId", nodeIdMap.getOrDefault(String.valueOf(stepId), String.valueOf(stepId)));
+            remapped.add(entryCopy);
+        }
+        ((Map<String, Object>) actionOn).put("steps", remapped);
+    }
+
+    private Long asLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Long.parseLong(text.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private Map<String, Object> deepCopyMap(Map<String, Object> source) {
+        Map<String, Object> copy = new LinkedHashMap<>();
+        if (source != null) {
+            source.forEach((key, value) -> copy.put(key, deepCopyValue(value)));
+        }
+        return copy;
+    }
+
+    private Object deepCopyValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> copy = new LinkedHashMap<>();
+            map.forEach((key, nested) -> copy.put(String.valueOf(key), deepCopyValue(nested)));
+            return copy;
+        }
+        if (value instanceof List<?> list) {
+            List<Object> copy = new ArrayList<>(list.size());
+            list.forEach(nested -> copy.add(deepCopyValue(nested)));
+            return copy;
+        }
+        return value;
+    }
+
+    /**
+     * Clones {@code original} into a new, independently-owned {@link Process}
+     * document with freshly generated node/edge ids, so the copy shares no
+     * live reference back to the source. A process is now always a single,
+     * self-contained STEP/CONDITION graph — it never embeds another process
+     * as a node — so this is a flat clone, not a recursive one.
+     *
+     * @param original the process to copy
+     * @return the saved copy
+     */
+    private Process copyProcess(Process original) {
+        Map<String, String> nodeIdMap = new HashMap<>();
+        for (Process.ProcessNode node : safeNodes(original)) {
+            nodeIdMap.put(node.getId(), UUID.randomUUID().toString());
+        }
+
+        List<Process.ProcessNode> copiedNodes = new ArrayList<>();
+        for (Process.ProcessNode node : safeNodes(original)) {
+            Process.ProcessNode nodeCopy = cloneNode(node);
+            nodeCopy.setId(nodeIdMap.get(node.getId()));
+            // Deep-copied (cloneNode's copy is shallow) so rewriting step-output references to the
+            // copy's new node ids never touches the source process's own data.
+            Map<String, Object> data = deepCopyMap(node.getData());
+            remapActionOnStepRefs(data, nodeIdMap);
+            nodeCopy.setData(data);
+            copiedNodes.add(nodeCopy);
+        }
+
+        List<Process.ProcessEdge> copiedEdges = new ArrayList<>();
+        for (Process.ProcessEdge edge : safeEdges(original)) {
+            Process.ProcessEdge edgeCopy = cloneEdge(edge);
+            edgeCopy.setId(UUID.randomUUID().toString());
+            edgeCopy.setSource(nodeIdMap.getOrDefault(edge.getSource(), edge.getSource()));
+            edgeCopy.setTarget(nodeIdMap.getOrDefault(edge.getTarget(), edge.getTarget()));
+            copiedEdges.add(edgeCopy);
+        }
+
+        Process copy = new Process();
+        copy.setId(sequenceGeneratorService.generateSequence(Process.SEQUENCE_NAME));
+        copy.setType(original.getType());
+        copy.setRecipeId(original.getRecipeId());
+        copy.setName(original.getName() + COPY_SUFFIX);
+        copy.setDescription(original.getDescription());
+        copy.setNodes(copiedNodes);
+        copy.setEdges(copiedEdges);
+        copy.setViewport(cloneViewport(original.getViewport()));
+
+        processValidator.validateOrThrow(copy);
+        return processRepository.save(copy);
+    }
+
+    private List<Process.ProcessNode> safeNodes(Process process) {
+        return process.getNodes() == null ? List.of() : process.getNodes();
+    }
+
+    private List<Process.ProcessEdge> safeEdges(Process process) {
+        return process.getEdges() == null ? List.of() : process.getEdges();
+    }
+
+    private Process.ProcessNode cloneNode(Process.ProcessNode node) {
+        Process.ProcessNode copy = new Process.ProcessNode();
+        copy.setKind(node.getKind());
+        copy.setData(node.getData() != null ? new HashMap<>(node.getData()) : new HashMap<>());
+        copy.setType(node.getType());
+        copy.setPosition(node.getPosition());
+        copy.setMeasured(node.getMeasured());
+        copy.setWidth(node.getWidth());
+        copy.setHeight(node.getHeight());
+        copy.setParentId(node.getParentId());
+        copy.setExtent(node.getExtent());
+        copy.setDraggable(node.getDraggable());
+        copy.setSelectable(node.getSelectable());
+        copy.setDeletable(node.getDeletable());
+        return copy;
+    }
+
+    private Process.ProcessEdge cloneEdge(Process.ProcessEdge edge) {
+        Process.ProcessEdge copy = new Process.ProcessEdge();
+        copy.setSource(edge.getSource());
+        copy.setTarget(edge.getTarget());
+        copy.setSourceHandle(edge.getSourceHandle());
+        copy.setTargetHandle(edge.getTargetHandle());
+        copy.setType(edge.getType());
+        copy.setAnimated(edge.getAnimated());
+        copy.setStyle(edge.getStyle() != null ? new HashMap<>(edge.getStyle()) : null);
+        copy.setData(edge.getData() != null ? new HashMap<>(edge.getData()) : new HashMap<>());
+        copy.setLabel(edge.getLabel());
+        return copy;
+    }
+
+    private Process.ProcessViewport cloneViewport(Process.ProcessViewport viewport) {
+        if (viewport == null) {
+            return null;
+        }
+        Process.ProcessViewport copy = new Process.ProcessViewport();
+        copy.setX(viewport.getX());
+        copy.setY(viewport.getY());
+        copy.setZoom(viewport.getZoom());
+        return copy;
+    }
+
+    private Process findProcessOrThrow(Long processId) {
+        return processRepository.findById(processId)
+                .orElseThrow(() -> new NoSuchElementException("Process not found: " + processId));
+    }
+
+    private void requireBelongsToRecipe(Process process, Long recipeId) {
+        if (!recipeId.equals(process.getRecipeId())) {
+            throw new NoSuchElementException("Process " + process.getId() + " does not belong to recipe " + recipeId);
+        }
+    }
+
+    private RecipeTemplate requireOwnedRecipe(Long recipeId, Long userId) {
+        RecipeTemplate recipe = recipeTemplateRepository.findById(recipeId)
+                .orElseThrow(() -> new NoSuchElementException("Recipe not found: " + recipeId));
+        if (userId == null || !userId.equals(recipe.getCreatedBy())) {
+            throw new RecipeAccessDeniedException("You do not have permission to modify this recipe");
+        }
+        return recipe;
+    }
+
+    private RecipeTemplate requireAccessibleRecipe(Long recipeId, Long requestingUserId) {
+        RecipeTemplate recipe = recipeTemplateRepository.findById(recipeId)
+                .orElseThrow(() -> new NoSuchElementException("Recipe not found: " + recipeId));
+        if (recipe.getVisibility() == Visibility.PUBLIC) {
+            return recipe;
+        }
+        if (requestingUserId != null && requestingUserId.equals(recipe.getCreatedBy())) {
+            return recipe;
+        }
+        throw new RecipeAccessDeniedException("You do not have permission to view this recipe");
+    }
+}

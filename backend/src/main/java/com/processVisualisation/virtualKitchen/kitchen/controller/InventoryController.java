@@ -1,9 +1,9 @@
 package com.processVisualisation.virtualKitchen.kitchen.controller;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 import com.processVisualisation.virtualKitchen.kitchen.dto.InventoryRequestDTO;
 import com.processVisualisation.virtualKitchen.kitchen.dto.InventoryResponseDTO;
-import com.processVisualisation.virtualKitchen.kitchen.service.IInventoryService;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import com.processVisualisation.virtualKitchen.kitchen.service.InventoryService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -15,14 +15,14 @@ import java.util.List;
  * REST controller exposing inventory management endpoints under
  * {@code /api/v1/inventory}. Supports adding/updating an inventory item and
  * retrieving inventory scoped either to a user or to a kitchen, delegating
- * all business logic to {@link IInventoryService}.
+ * all business logic to {@link InventoryService}.
  */
 @RestController
 @RequestMapping("/api/v1/inventory")
 public class InventoryController {
 
     @Autowired
-    private IInventoryService service;
+    private InventoryService service;
 
     /**
      * Adds a new inventory item or increments the quantity of a matching

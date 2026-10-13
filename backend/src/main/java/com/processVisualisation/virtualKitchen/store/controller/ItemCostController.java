@@ -1,9 +1,9 @@
 package com.processVisualisation.virtualKitchen.store.controller;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 import com.processVisualisation.virtualKitchen.store.dto.ItemCostRequestDTO;
 import com.processVisualisation.virtualKitchen.store.dto.ItemCostResponseDTO;
-import com.processVisualisation.virtualKitchen.store.service.IItemCostService;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import com.processVisualisation.virtualKitchen.store.service.ItemCostService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
  * {@code /api/v1/item-cost}. A cost entry records the price per unit,
  * effective from a given date, for either an ingredient or a piece of
  * equipment (see {@link com.processVisualisation.virtualKitchen.store.model.ItemType}).
- * Delegates persistence to {@link IItemCostService} and wraps the response
+ * Delegates persistence to {@link ItemCostService} and wraps the response
  * in a standard {@link ApiResponse} envelope.
  */
 @RestController
@@ -23,7 +23,7 @@ import java.time.LocalDateTime;
 public class ItemCostController {
 
     @Autowired
-    private IItemCostService service;
+    private ItemCostService service;
 
     /**
      * Creates a new cost record for an ingredient or equipment item.

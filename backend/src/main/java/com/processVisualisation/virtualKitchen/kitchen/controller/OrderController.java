@@ -1,11 +1,11 @@
 package com.processVisualisation.virtualKitchen.kitchen.controller;
 
+import com.processVisualisation.virtualKitchen.auth.exception.AuthException;
+import com.processVisualisation.virtualKitchen.auth.security.CurrentUser;
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 import com.processVisualisation.virtualKitchen.kitchen.dto.OrderCreateRequestDTO;
 import com.processVisualisation.virtualKitchen.kitchen.dto.OrderResponseDTO;
-import com.processVisualisation.virtualKitchen.kitchen.service.IOrderService;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
-import com.processVisualisation.virtualKitchen.common.exception.AuthException;
-import com.processVisualisation.virtualKitchen.common.security.CurrentUser;
+import com.processVisualisation.virtualKitchen.kitchen.service.OrderService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
@@ -17,14 +17,14 @@ import java.util.List;
  * REST controller exposing order endpoints under {@code /api/v1/orders}:
  * placing a new order and retrieving a user's order history. Both act only
  * for the authenticated caller. Delegates all business logic to
- * {@link IOrderService}.
+ * {@link OrderService}.
  */
 @RestController
 @RequestMapping("/api/v1/orders")
 public class OrderController {
 
     @Autowired
-    private IOrderService orderService;
+    private OrderService orderService;
 
     /**
      * Places a new order for the requested items. Handles

@@ -1,6 +1,6 @@
 package com.processVisualisation.virtualKitchen.kitchen.reservation;
 
-import com.processVisualisation.virtualKitchen.store.model.Inventory;
+import com.processVisualisation.virtualKitchen.kitchen.model.Inventory;
 import com.processVisualisation.virtualKitchen.store.model.ItemType;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;

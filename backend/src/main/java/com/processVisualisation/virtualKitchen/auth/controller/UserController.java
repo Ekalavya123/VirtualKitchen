@@ -3,8 +3,8 @@ package com.processVisualisation.virtualKitchen.auth.controller;
 import com.processVisualisation.virtualKitchen.auth.dto.UserRequestDTO;
 import com.processVisualisation.virtualKitchen.auth.dto.UserResponseDTO;
 import com.processVisualisation.virtualKitchen.auth.dto.UserUpdateDTO;
-import com.processVisualisation.virtualKitchen.auth.service.IUserService;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import com.processVisualisation.virtualKitchen.auth.service.UserService;
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 
 import jakarta.validation.Valid;
 
@@ -20,14 +20,14 @@ import java.time.LocalDateTime;
  * Provides CRUD operations over user accounts (create, fetch by id or email,
  * update, delete) independent of the authentication flows handled by
  * AuthController. Delegates all persistence and validation logic to
- * IUserService and wraps every response in a common ApiResponse envelope.
+ * UserService and wraps every response in a common ApiResponse envelope.
  */
 @RestController
 @RequestMapping("/api/v1/users")
 public class UserController {
 
     @Autowired
-    private IUserService userService;
+    private UserService userService;
 
     /**
      * Creates a new user account from the given request payload.

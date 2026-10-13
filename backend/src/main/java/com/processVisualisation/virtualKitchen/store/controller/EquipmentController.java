@@ -1,9 +1,9 @@
 package com.processVisualisation.virtualKitchen.store.controller;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 import com.processVisualisation.virtualKitchen.store.dto.EquipmentRequestDTO;
 import com.processVisualisation.virtualKitchen.store.dto.EquipmentResponseDTO;
-import com.processVisualisation.virtualKitchen.store.service.IEquipmentService;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import com.processVisualisation.virtualKitchen.store.service.EquipmentService;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -14,14 +14,14 @@ import java.util.List;
 /**
  * REST controller exposing endpoints for the equipment catalog under
  * {@code /api/v1/equipments}. Delegates persistence and business logic to
- * {@link IEquipmentService} and wraps every response in an {@link ApiResponse}.
+ * {@link EquipmentService} and wraps every response in an {@link ApiResponse}.
  */
 @RestController
 @RequestMapping("/api/v1/equipments")
 public class EquipmentController {
 
     @Autowired
-    private IEquipmentService service;
+    private EquipmentService service;
 
     /**
      * Creates a new equipment catalog entry.

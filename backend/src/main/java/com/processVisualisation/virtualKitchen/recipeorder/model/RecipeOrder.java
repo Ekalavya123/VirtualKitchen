@@ -3,7 +3,7 @@ package com.processVisualisation.virtualKitchen.recipeorder.model;
 import com.processVisualisation.virtualKitchen.auth.model.DeliveryAddress;
 import com.processVisualisation.virtualKitchen.recipe.model.NutritionInfo;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
+import com.processVisualisation.virtualKitchen.store.units.UnitType;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;

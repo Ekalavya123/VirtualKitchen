@@ -1,6 +1,7 @@
 package com.processVisualisation.virtualKitchen.store.model;
 
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
+import com.processVisualisation.virtualKitchen.kitchen.model.Inventory;
+import com.processVisualisation.virtualKitchen.store.units.UnitType;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.CreatedDate;

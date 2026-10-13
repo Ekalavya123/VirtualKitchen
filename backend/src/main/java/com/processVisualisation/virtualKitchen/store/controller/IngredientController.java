@@ -1,10 +1,10 @@
 package com.processVisualisation.virtualKitchen.store.controller;
 
+import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
 import com.processVisualisation.virtualKitchen.store.dto.IngredientRequestDTO;
 import com.processVisualisation.virtualKitchen.store.dto.IngredientResponseDTO;
 import com.processVisualisation.virtualKitchen.store.dto.IngredientUpdateDTO;
-import com.processVisualisation.virtualKitchen.store.service.IIngredientService;
-import com.processVisualisation.virtualKitchen.common.utils.ApiResponse;
+import com.processVisualisation.virtualKitchen.store.service.IngredientService;
 
 import jakarta.validation.Valid;
 
@@ -18,7 +18,7 @@ import java.util.List;
 /**
  * REST controller exposing CRUD endpoints for the ingredient catalog under
  * {@code /api/v1/ingredients}. Delegates persistence and business logic to
- * {@link IIngredientService} and wraps every response in a standard
+ * {@link IngredientService} and wraps every response in a standard
  * {@link ApiResponse} envelope.
  */
 @RestController
@@ -26,7 +26,7 @@ import java.util.List;
 public class IngredientController {
 
     @Autowired
-    private IIngredientService ingredientService;
+    private IngredientService ingredientService;
 
     /**
      * Creates a new ingredient catalog entry.

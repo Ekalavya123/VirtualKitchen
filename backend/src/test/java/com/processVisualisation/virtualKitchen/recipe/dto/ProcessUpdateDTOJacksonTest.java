@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * {@link ProcessNodeDTO} ("no Creators, like default constructor, exist")
  * because {@code @Builder} alone suppresses Lombok's implicit no-args
  * constructor. Exercises real JSON deserialization (unlike the Mockito-based
- * {@code ProcessServiceImplTest}, which builds DTOs directly in Java and
+ * {@code ProcessServiceTest}, which builds DTOs directly in Java and
  * never went through Jackson, so it never would have caught this).
  */
 class ProcessUpdateDTOJacksonTest {

@@ -1,9 +1,9 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
-import com.processVisualisation.virtualKitchen.ai.model.VisualizationAsset;
-import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationAssetRepository;
-import com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException;
+import com.processVisualisation.virtualKitchen.ai.recipe.visualization.VisualizationAssetRepository;
+import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeThumbnailDTO;
+import com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessNodeKind;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
@@ -33,18 +33,18 @@ class RecipeThumbnailServiceTest {
     private static final Long RECIPE_ID = 10L;
     private static final LocalDateTime T0 = LocalDateTime.of(2026, 10, 1, 12, 0);
 
-    private IProcessTemplateService recipeService;
+    private RecipeTemplateService recipeService;
     private ProcessRepository processRepository;
-    private AIVisualizationAssetRepository assetRepository;
+    private VisualizationAssetRepository assetRepository;
     private RecipeThumbnailService service;
     private final List<VisualizationAsset> assets = new ArrayList<>();
 
     @BeforeEach
     @SuppressWarnings("unchecked")
     void setUp() {
-        recipeService = mock(IProcessTemplateService.class);
+        recipeService = mock(RecipeTemplateService.class);
         processRepository = mock(ProcessRepository.class);
-        assetRepository = mock(AIVisualizationAssetRepository.class);
+        assetRepository = mock(VisualizationAssetRepository.class);
         service = new RecipeThumbnailService(recipeService, processRepository, assetRepository);
         when(assetRepository.findAllById(any())).thenAnswer(invocation -> {
             Collection<Long> ids = new ArrayList<>();

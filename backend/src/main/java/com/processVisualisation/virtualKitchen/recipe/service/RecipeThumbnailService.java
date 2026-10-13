@@ -1,8 +1,7 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
-import com.processVisualisation.virtualKitchen.ai.model.VisualizationAsset;
-import com.processVisualisation.virtualKitchen.ai.repository.AIVisualizationAssetRepository;
-import com.processVisualisation.virtualKitchen.common.utils.ProcessStepOrder;
+import com.processVisualisation.virtualKitchen.ai.recipe.visualization.VisualizationAssetRepository;
+import com.processVisualisation.virtualKitchen.ai.recipe.visualization.model.VisualizationAsset;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeThumbnailDTO;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
@@ -47,14 +46,14 @@ public class RecipeThumbnailService {
             .comparing(Visual::generatedAt, Comparator.nullsLast(Comparator.reverseOrder()))
             .thenComparing(Visual::assetId, Comparator.nullsLast(Comparator.reverseOrder()));
 
-    private final IProcessTemplateService recipeService;
+    private final RecipeTemplateService recipeService;
     private final ProcessRepository processRepository;
-    private final AIVisualizationAssetRepository assetRepository;
+    private final VisualizationAssetRepository assetRepository;
 
     public RecipeThumbnailService(
-            IProcessTemplateService recipeService,
+            RecipeTemplateService recipeService,
             ProcessRepository processRepository,
-            AIVisualizationAssetRepository assetRepository) {
+            VisualizationAssetRepository assetRepository) {
         this.recipeService = recipeService;
         this.processRepository = processRepository;
         this.assetRepository = assetRepository;
@@ -64,7 +63,7 @@ public class RecipeThumbnailService {
      * Resolves one recipe's thumbnail, following the recipe's visibility (owner, or public).
      *
      * @throws NoSuchElementException when the recipe doesn't exist
-     * @throws com.processVisualisation.virtualKitchen.common.exception.RecipeAccessDeniedException
+     * @throws com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException
      *         when the viewer may not read it
      */
     public RecipeThumbnailDTO resolve(Long recipeId, Long viewerId) {

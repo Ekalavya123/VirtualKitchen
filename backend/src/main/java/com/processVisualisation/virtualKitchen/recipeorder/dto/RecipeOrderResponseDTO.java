@@ -3,9 +3,9 @@ package com.processVisualisation.virtualKitchen.recipeorder.dto;
 import com.processVisualisation.virtualKitchen.auth.model.DeliveryAddress;
 import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.model.NutritionInfo;
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
 import com.processVisualisation.virtualKitchen.recipeorder.model.RecipeOrder;
 import com.processVisualisation.virtualKitchen.recipeorder.model.RecipeOrderStatus;
+import com.processVisualisation.virtualKitchen.store.units.UnitType;
 import lombok.Builder;
 import lombok.Data;
 

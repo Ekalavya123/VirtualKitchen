@@ -1,11 +1,12 @@
 package com.processVisualisation.virtualKitchen.store.catalog;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.processVisualisation.virtualKitchen.ai.service.RecipeStepVocabularyProvider;
-import com.processVisualisation.virtualKitchen.common.SequenceGeneratorService;
-import com.processVisualisation.virtualKitchen.recipe.model.UnitType;
+import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVocabularyProvider;
+import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
+import com.processVisualisation.virtualKitchen.recipe.migration.ProcessIngredientIdMigration;
 import com.processVisualisation.virtualKitchen.store.model.Ingredient;
 import com.processVisualisation.virtualKitchen.store.repository.IngredientRepository;
+import com.processVisualisation.virtualKitchen.store.units.UnitType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -202,7 +203,7 @@ public class IngredientCatalogSeeder implements ApplicationRunner {
         return values;
     }
 
-    static String normalize(String value) {
+    public static String normalize(String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
     }
 
