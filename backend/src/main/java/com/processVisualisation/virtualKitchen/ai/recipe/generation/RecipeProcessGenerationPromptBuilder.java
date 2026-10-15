@@ -23,7 +23,7 @@ import static com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.Recip
 
 /**
  * Builds the system and user prompts used to convert free-form recipe text
- * into a semantic Process structure (MAIN process + subprocesses, each a
+ * into a semantic Process structure (named preparation flows + the MAIN cooking sequence, each a
  * flat list of STEP/CONDITION nodes) whose shape is defined by {@link RecipeProcessOutputSchema}. No React Flow field (id, position,
  * dimensions, handles) is ever requested — the application generates those
  * when converting the result into the Process working snapshot.
@@ -38,7 +38,7 @@ public class RecipeProcessGenerationPromptBuilder {
      * Logged with every generation so a change in output quality can be tied to a prompt change.
      * Bump it whenever the system/initial/retry prompt wording or structure changes.
      */
-    public static final String PROMPT_VERSION = "2";
+    public static final String PROMPT_VERSION = "5";
 
     /** Aliases shown per ingredient — enough to recognise regional names without bloating the prompt. */
     private static final int MAX_INGREDIENT_ALIASES = 3;
@@ -63,44 +63,49 @@ public class RecipeProcessGenerationPromptBuilder {
                 - action must be an id from ACTIONS below. Use the most specific action that fits
                   (e.g. "saute", "simmer", "deep-fry" rather than "cook"; "mince" rather than "cut").
                 - Use "cook" only when the recipe names no technique at all.
-                - Use "custom" only when no listed action can represent the operation, and then always set
-                  "customActionName" to a short verb phrase. Omit customActionName otherwise.
+                - When no listed action fits, use "custom" and set "customActionName" to a short verb phrase
+                  (e.g. "Spherify"). Omit customActionName otherwise.
                 - Respect each action's "on" targets: never put ingredients on an action that only acts on
-                  subprocesses, never reference subprocesses from an ingredient-only action, and never give a
-                  single-ingredient action ("1I") more than one ingredient.
+                  prepared components, never "use" a prepared component from an ingredient-only action, and never
+                  give a single-ingredient action ("1I") more than one ingredient.
 
                 INGREDIENTS OF A STEP
                 - "ingredients" is a list; a step's action can apply to multiple ingredients at once
                   (e.g. Chop applied to onion, tomato, and chilli, each with its own style).
+                - "name" is the ingredient as the recipe words it (e.g. "boneless chicken breast"). Always write it.
+                - ingredientId: the catalog id from INGREDIENTS. When nothing listed is the same ingredient, use
+                  "custom" (its "name" becomes the custom ingredient's name). Never pick a different ingredient
+                  just because it is listed.
                 - EACH ingredient entry has its OWN quantity/unit/preparationStyle. Never put quantity, unit, or
                   preparation style at the step level — only inside that ingredient's own entry.
                 - quantity: the number the recipe states for that ingredient in this step. Omit it when the recipe
-                  gives no amount (and for units that carry no number: to-taste, as-needed). When an action marks
-                  quantity as required ("quantity!") and the recipe gives no amount, use 1 with the ingredient's
-                  default unit.
+                  gives no amount (and for units that carry no number: to-taste, as-needed).
                 - unit: the recipe's unit mapped to a unit id below (e.g. "2 cloves garlic" -> quantity 2, unit
                   "clove"; "salt to taste" -> no quantity, unit "to-taste"). When no unit is stated, use the
-                  ingredient's default unit shown in parentheses.
-                - preparationStyle: only when the action lists "preparationStyle" and the recipe states or clearly
-                  implies it (e.g. "finely chopped" -> "finely-chopped"). It must come from that action's
-                  preparation style sets. Never invent one. An ingredient's state as it is added
-                  (e.g. "500 g boneless chicken", "2 onions, sliced") belongs on that ingredient entry.
-                - "processes" lists the "ref" of any subprocess this step's action uses the result of
-                  (e.g. a "saute" step referencing "prepare_masala").
-                - A step can have ingredients, subprocess references, step-output references, any combination of
-                  them, or — only for actions whose target is optional — none.
+                  ingredient's default unit shown in parentheses. For a unit that isn't listed (e.g. "a knob"),
+                  use unit "custom" with "customUnit".
+                - preparationStyle: ONE style id, only when the action lists "preparationStyle" and the recipe states
+                  or clearly implies it (e.g. "finely chopped" -> "finely-chopped"). It must come from that action's
+                  preparation style sets. Never combine several styles in one value. For a style that isn't listed,
+                  use "custom" with "customPreparationStyle". Never invent one the recipe doesn't state.
+                - "uses" lists the "ref" of each prepared component (a preparation's output) this step works with.
+                - A step can have ingredients, prepared components, step outputs, any combination of them, or none:
+                  a step with no target acts on what is already in the pan (e.g. "simmer", "cover",
+                  "transfer to a plate").
 
                 STEP OUTPUTS (REUSING AN EARLIER STEP'S RESULT)
-                - "fromSteps" lists the stepIds of EARLIER STEPs in the SAME process whose expectedOutput this
-                  step acts on. Example: a step boils eggs ({"stepId":"s1",...,"expectedOutput":"boiled eggs"}); a
-                  later step fries them with onions -> "fromSteps":["s1"], "ingredients":[onion]. Do not list the
-                  eggs again as an ingredient — the step output already stands for them.
+                - Rarely needed: consecutive steps already continue from one another. Use "fromSteps" only when a
+                  step works with the result of an EARLIER, non-adjacent STEP of the SAME flow (e.g. browned chicken
+                  set aside and returned later).
+                - "fromSteps" lists the stepIds of those earlier STEPs. Example: {"stepId":"b1","action":"sear",...,
+                  "expectedOutput":"browned chicken"} ... later {"action":"add","fromSteps":["b1"],...}.
                 - Set "stepId" ONLY on a step that a later step lists in "fromSteps", as a short slug unique within
-                  its own process ("s1", "s2", ...). Omit stepId on every other step.
-                - Only reference a step that comes before this one in the "steps" array, is a STEP (never a
-                  CONDITION), is not this step itself, and has a non-empty expectedOutput.
+                  its own flow. Omit stepId on every other step.
+                - A "fromSteps" value is always a stepId you set on that earlier step — never its expectedOutput text.
+                - Only reference a step that comes before this one, is a STEP (never a CONDITION), is not this step
+                  itself, and has a non-empty expectedOutput.
                 - Step outputs count as prepared components, so only actions whose targets include S may use them.
-                - Use "processes" (not fromSteps) for the result of a whole subprocess.
+                - Use "uses" (not fromSteps) for the output of a preparation.
 
                 CORE STEP FIELDS
                 - actionDescription: a short natural-language description of what this step does. Always include it.
@@ -197,22 +202,38 @@ public class RecipeProcessGenerationPromptBuilder {
     private String buildSchemaAndRulesBlock(RecipeProcessOutputSchema outputSchema, String vocabularyBlock) {
         return outputSchema.promptBlock() + """
 
-                PROCESS MODEL
-                - A recipe has exactly one MAIN process and zero or more SUBPROCESSes.
-                - Each process (MAIN or a subprocess) is a flat, ordered list of STEP/CONDITION nodes — never nested.
-                - Do not create a subprocess inside another subprocess. Only MAIN and top-level subprocesses exist.
-                - Create a subprocess only for a meaningful intermediate preparation that stands on its own
-                  (e.g. "Marinate Chicken", "Prepare Sauce"). Do not decompose the recipe into many tiny subprocesses.
-                - Omit "subprocesses" when the recipe has no meaningful separate preparation stage.
-                - A subprocess is referenced from a STEP's own "processes" list — NEVER as its own node. There is
-                  no node type for "run this subprocess"; the step whose action uses the subprocess's result
-                  references it there instead.
-                - "ref" is a short, unique, lowercase snake_case slug (e.g. "marinate_chicken") used only to let a
-                  STEP's "processes" point at that subprocess within this same response. It is not a
-                  database id and the MAIN process itself has no ref (nothing can reference MAIN).
+                RECIPE STRUCTURE: PREPARATIONS + MAIN
+                - A recipe is a list of independent PREPARATIONS followed by exactly one MAIN cooking sequence.
+                  The cook sees every preparation together in one Preparation board, each as its own flow of steps.
+                - A preparation is prep work done before or alongside cooking that produces one named component:
+                  cutting, mincing, marinating, making a paste or sauce, soaking, par-cooking rice, etc.
+                - "output" names that component the way a cook would say it: "Chopped Onions", "Marinated Chicken",
+                  "Ginger-Garlic Paste", "Par-boiled Rice". It must be unique within the recipe.
+                - A preparation's LAST step makes its output: give that step "expectedOutput" equal to the "output"
+                  name (e.g. the last step of "Marinated Chicken" has "expectedOutput":"Marinated Chicken").
+                - One preparation per prepared component. Several prep actions on the same component go in one
+                  preparation (e.g. cut the chicken, then marinate it -> one "Marinated Chicken" preparation).
+                - Preparations are flat and independent: a preparation never uses another preparation's output.
+                  If one prepared component is made from another (a paste used in a marinade), put both in the
+                  same preparation.
+                - Do not create a preparation for an ingredient that goes into the pan as-is: oil, ghee, water,
+                  salt, whole or ground spices, stock, canned goods. MAIN uses those directly as "ingredients".
+                - Routine handling (washing produce, peeling where the skin isn't eaten, patting dry) is covered by
+                  the recipe's default preparation notes: do not write steps for it unless the recipe asks for
+                  something specific (e.g. "soak the rice for 30 minutes", "peel and devein the prawns").
+                - Omit "preparations" when the recipe needs no prep work.
+                - "ref" is a short, unique, lowercase snake_case slug (e.g. "marinated_chicken") that MAIN steps
+                  write in "uses" to work with that output. It is not a database id.
+                - MAIN is the one continuous cooking sequence (usually one pot or pan) in cooking order. Its steps
+                  bring in prepared components with "uses":[ref] and direct ingredients with "ingredients".
+                - Every preparation's output must be used by at least one MAIN step.
+                - A MAIN step does not have to name what is already in the pan: "simmer for 20 minutes",
+                  "cover", "transfer the chicken to a plate" simply continue from the step before.
+                - A component used on its own is the target of its action: "season the chicken with salt"
+                  -> action "season", "uses" the chicken, "ingredients" [salt].
 
                 STEPS ARE ORDERED
-                - Each process's "steps" array is already in execution order — the application connects
+                - Each "steps" array is already in execution order — the application connects
                   consecutive steps automatically. Do not include edges, connections, or ordering fields.
                 - Create a separate step for each meaningful cooking action; split multiple actions in one
                   sentence into separate steps; do not split one atomic action into multiple steps.
@@ -227,7 +248,7 @@ public class RecipeProcessGenerationPromptBuilder {
                   "steps"; "No" goes back to the STEP immediately BEFORE the condition, which is repeated until
                   the check passes. You do not output branches — only phrase and place the condition so this is right.
                 - Place a CONDITION immediately AFTER the STEP whose result it checks, never as the first node of
-                  a process, and never directly after another CONDITION.
+                  a preparation or MAIN, and never directly after another CONDITION.
                 - Phrase "title" as a yes/no question whose "Yes" means the step is done and cooking moves on, and
                   whose "No" means that previous step must continue/repeat (e.g. after "Fry the onions":
                   "Are the onions golden brown?" — not "Are the onions still pale?").
@@ -241,12 +262,18 @@ public class RecipeProcessGenerationPromptBuilder {
                 GENERAL RULES
                 - Output ids exactly as listed. Aliases in [brackets] exist only to help you read the recipe —
                   never output an alias, a label, or an id that is not listed.
-                - Use "customIngredientName" with ingredientId "custom" only when no listed ingredient reasonably
-                  matches — never silently map an unlisted ingredient onto the wrong catalog entry.
+                - A value the catalog lacks is fine: use "custom" with its name (customActionName,
+                  customUnit, customPreparationStyle, or the ingredient's "name"). Never silently map it onto an
+                  unrelated catalog entry.
+                - Every ingredient amount the recipe gives appears exactly once, on the step where it is used.
                 - Keep quantities, units, durations, temperatures, and cooking details faithful to the recipe text.
                 - Do not invent ingredients, quantities, timings, or temperatures the recipe doesn't state.
                 - Keep the recipe's meaning unchanged.
                 - Return ONLY minified JSON matching the OUTPUT shape, with every empty/default field omitted.
+
+                EXAMPLE (shortened)
+                {"preparations":[{"ref":"marinated_chicken","output":"Marinated Chicken","steps":[{"action":"cut","ingredients":[{"ingredientId":"chicken","name":"boneless chicken","quantity":500,"unit":"g","preparationStyle":"bite-sized"}],"actionDescription":"Cut the chicken into bite-sized pieces"},{"action":"marinate","ingredients":[{"ingredientId":"yogurt","name":"yogurt","quantity":0.5,"unit":"cup"}],"actionDescription":"Coat the chicken in yogurt and rest","expectedOutput":"Marinated Chicken","duration":"30 minutes"}]},{"ref":"chopped_onions","output":"Chopped Onions","steps":[{"action":"chop","ingredients":[{"ingredientId":"onion","name":"onions","quantity":2,"unit":"piece","preparationStyle":"chopped"}],"actionDescription":"Chop the onions","expectedOutput":"Chopped Onions"}]}],"main":{"name":"Chicken Curry","steps":[{"action":"heat","ingredients":[{"ingredientId":"oil","name":"oil","quantity":3,"unit":"tbsp"}],"actionDescription":"Heat the oil in a deep pan","flameLevel":"medium"},{"action":"saute","uses":["chopped_onions"],"actionDescription":"Fry the onions until golden","duration":"8 minutes"},{"nodeType":"CONDITION","title":"Are the onions golden?","actionDescription":"Check the colour of the onions"},{"action":"add","uses":["marinated_chicken"],"actionDescription":"Add the chicken and its marinade"},{"action":"simmer","actionDescription":"Cover and simmer until the chicken is cooked","flameLevel":"low","duration":"20 minutes"}]}}
+                (The ingredientIds above are illustrative: always use the ids listed in INGREDIENTS.)
                 """;
     }
 
@@ -257,8 +284,9 @@ public class RecipeProcessGenerationPromptBuilder {
 
         out.append("""
                 ACTIONS — one per line: id | on | fields | meaning
-                  on: I = ingredients, S = subprocess outputs, "-" = no target, 1I = at most one ingredient,
-                      a trailing "!" = at least one target required.
+                  on: I = ingredients, S = prepared components (preparation outputs via "uses", step outputs via
+                      "fromSteps"), "-" = no target, 1I = at most one ingredient, a trailing "!" = names its target
+                      when it starts on something new (it may continue on what is in the pan without one).
                   fields: the ONLY fields this action may use. "!" = required, "*" = strongly recommended when the
                       recipe states it. preparationStyle{...} lists the allowed preparation style sets;
                       temperature(...) gives what the temperature measures.

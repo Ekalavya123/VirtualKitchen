@@ -165,7 +165,7 @@ export default function RecipeProcessGenerationModal({
             <>
               {!editing && willReplaceMain && (
                 <div style={{ fontSize: 11.5, color: 'var(--flow-warning)', background: 'var(--flow-warning-soft)', border: '1px solid var(--flow-warning-border)', borderRadius: 8, padding: '8px 10px' }}>
-                  ⚠ This recipe already has a MAIN process. Generating will replace its content (existing subprocesses are kept; new ones may be added). You can Undo it afterwards.
+                  ⚠ This recipe already has a main process. Generating will replace it, and the Preparation too when the new recipe has preparation steps. You can Undo it afterwards.
                   {editTargetName && allowCreate ? ' To change only part of it, use “Edit current flow”.' : ''}
                 </div>
               )}

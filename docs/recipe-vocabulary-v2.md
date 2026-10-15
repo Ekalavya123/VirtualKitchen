@@ -678,3 +678,63 @@ When an unknown id matches an alias, the error names the canonical id (e.g. *"us
 - Feed each action's `visualization` cue into the step-image prompt.
 - Let the canvas display amounts in the viewer's preferred unit system.
 - Add a catalog admin UI.
+
+---
+
+## I. Recipe structure: Preparation + Main (prompt v4)
+
+Every recipe has exactly **two flow editors**:
+- **Preparation**: independent flows, each making one named component.
+- **Main Process**: one connected cooking sequence that uses those components.
+
+It reuses the existing model: no new node kinds, no new process type, no nesting.
+
+| Concept | Stored as |
+|---|---|
+| Main Process | the recipe's single `MAIN` process: one connected sequence of STEP/CONDITION nodes |
+| Preparation | the recipe's single `SUBPROCESS`, named "Preparation" |
+| A preparation flow | a connected group of nodes (1..n steps) inside the Preparation (`model/preparationFlows.ts`) |
+| Its named output ("Chopped Onions") | the flow's final STEP's `expectedOutput`; its identity is that step's node id |
+| A main step using it | `actionOn.processes[{processId, stepId}]` (the AI writes `"uses":[ref]`); any Preparation step with an Expected Output can be used |
+| A direct ingredient (oil, salt, water) | `actionOn.ingredients[]` on the main step, as before |
+| Default preparation guidance | `RecipeTemplate.preparationNotes` (null = the app's standard text) |
+
+**Legacy data.** An entry without `stepId` (a whole process) still reads as the process's name.
+- When the owner opens a recipe saved with several subprocesses, the editor merges them into one Preparation (`model/mergePreparations.ts`). This is one undoable edit, and it is saved by autosave.
+- Whole-process uses become uses of each old subprocess's output step.
+- Recipe copies remap `stepId` together with the process id (`ProcessGraphCloner`).
+
+**Auto Arrange** in Preparation lays each flow out top to bottom in its own column. The flows fill up to three columns and then wrap into rows (`arrangeFlowGrid`).
+
+**Rules.**
+- Preparation flows are independent: only MAIN steps use their outputs.
+- A flow's last step names its output: the prompt asks for it, and the normalizer enforces it.
+- A step without any target is valid. It acts on what is already in the pan ("simmer 20 minutes", "transfer to a plate").
+- Expected outputs are optional, except on a step whose output a later step uses (`fromSteps`).
+
+**AI output (v3, unchanged in v4).** Each `preparations[]` entry becomes one flow of the Preparation. The shape is `{"preparations":[{"ref","output","steps"}],"main":{"name","steps"}}`. Each ingredient also carries the recipe's
+own wording in `name`. Custom values are allowed throughout: `custom` + `customActionName` / `customUnit` / `customPreparationStyle`,
+and ingredient `name`. `RecipeProcessOutputNormalizer` then repairs, deterministically, anything that is only cosmetically wrong and
+reports every repair:
+- aliases are mapped to their canonical ids;
+- uncatalogued values become named custom values, never an unrelated catalog entry;
+- a compound style keeps its first allowed style and turns the rest into a note;
+- fields the action doesn't take are dropped;
+- a duration range keeps its lower bound;
+- quantity/unit slips are corrected.
+
+`RecipeProcessGenerationValidator` stays strict on structure:
+- references must resolve;
+- preparations must be flat and named;
+- CONDITIONs must be placed correctly;
+- every step needs a description and a known action/target kind.
+
+An unused preparation is a warning. The single retry is spent only on structural errors.
+
+**Readiness** (`recipe/validation/RecipeReadinessEvaluator` and the frontend's `model/recipeReadiness.ts`, which share the test cases in
+`backend/src/test/resources/readiness/`) checks the whole recipe. Saving is never blocked.
+
+| Severity | What it means | Issues |
+|---|---|---|
+| BLOCKER | stops ordering, cook mode, and whole-recipe visuals/narration (AI workflow approval) | no or empty MAIN; MAIN not connected; a step without an action, a custom action without a name, a MAIN step without an instruction; a flow whose final step has no Expected Output (no named output); an empty Preparation that is used; a use of a missing process/step or of a step without an Expected Output |
+| WARNING | shown only | an unused flow output; an empty Preparation nothing uses; a Preparation step using a prepared component; a flow with several ends; extra legacy preparation processes; MAIN starting in several places; custom ingredients/units (resolved when ordering) |

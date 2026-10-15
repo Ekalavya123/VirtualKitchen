@@ -100,7 +100,7 @@ Recipes and the process graphs they are made of.
 - **model** — `RecipeTemplate` (the recipe: ingredients, nutrition, visibility, `mainProcessId`, `processRevision`; collection `process_template`) and `Process` (a React-Flow graph of STEP/CONDITION `ProcessNode`s and `ProcessEdge`s, MAIN or SUBPROCESS; collection `processes`).
 - **controller** — `RecipeTemplateController` (`/api/v1/process-templates`), `RecipeDetailController` (`/api/v1/recipes/{id}`), `ProcessController` (`/api/v1/recipes/{id}/processes`).
 - **service** — `RecipeTemplateService`, `ProcessService` (recipe-scoped CRUD, revision-checked batch save, copy), `ProcessGraphCloner` (deep graph copy for the copy features), `ProcessStepOrder`, `RecipeThumbnailService` + `StepImageLookup`.
-- **validation** — `ProcessValidator`, `ProcessValidationResult`, `ProcessValidationException`.
+- **validation** — `ProcessValidator`, `ProcessValidationResult`, `ProcessValidationException` (what every save must satisfy), and `RecipeReadinessEvaluator` (whole-recipe Preparation + Main structure; gates ordering and AI workflow approval, never saving — see docs/recipe-vocabulary-v2.md §I).
 - **migration** — `ProcessIngredientIdMigration` (startup runner back-filling catalog ingredient ids into process nodes).
 - **exception / mapper / repository / dto** — `RecipeAccessDeniedException`, `RecipeRevisionConflictException`, `ProcessMapper`, `RecipeTemplateMapper`, graph and recipe DTOs.
 
@@ -141,7 +141,7 @@ A text request flows: feature service → `AiRequestQueueService.executeBounded`
 - `ai.asset` — `VisualizationAsset` (collection `visualization_asset`) and its repository and enums, shared by step visuals and global assets.
 - `ai.chat` — `AiChatController` (`/api/ai/chat`), `AiChatService`.
 - `ai.globalasset` — admin-triggered image generation for catalog ingredients/equipment.
-- `ai.recipe.generation` — recipe text → MAIN process + subprocesses (prompt builder, output schema, normalizer, validator, async job).
+- `ai.recipe.generation` — recipe text → preparation flows + the MAIN process (prompt builder, output schema, normalizer that repairs cosmetic slips, structural validator, async job); the frontend stores the flows in the recipe's one Preparation process.
 - `ai.recipe.edit` — AI edits of an existing process (builds on the generation schema and validator).
 - `ai.recipe.visualization` — per-step image generation for a process (async job, artifact consumer, `VisualizationStepImageLookup`).
 - `ai.recipe.narration` — per-step text-to-speech with fingerprint-based reuse; audio on the filesystem or Supabase.

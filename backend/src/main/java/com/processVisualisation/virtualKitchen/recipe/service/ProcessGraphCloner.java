@@ -28,10 +28,18 @@ public final class ProcessGraphCloner {
      *                     is dropped. Null when copying within the same recipe, which keeps references as they are.
      */
     public static Process cloneGraph(Process original, Map<Long, Long> processIdMap) {
-        Map<String, String> nodeIdMap = new HashMap<>();
-        for (Process.ProcessNode node : nodes(original)) {
-            nodeIdMap.put(node.getId(), UUID.randomUUID().toString());
-        }
+        return cloneGraph(original, processIdMap, null);
+    }
+
+    /**
+     * As {@link #cloneGraph(Process, Map)}, for a whole recipe copied at once: {@code nodeIdMaps} holds every
+     * source process's old-to-new node ids (see {@link #newNodeIds}), so a reference to a step of another process
+     * ({@code actionOn.processes[].stepId}, a use of a Preparation step's output) follows that step's copy too.
+     */
+    public static Process cloneGraph(Process original, Map<Long, Long> processIdMap, Map<Long, Map<String, String>> nodeIdMaps) {
+        Map<String, String> nodeIdMap = nodeIdMaps != null && nodeIdMaps.containsKey(original.getId())
+                ? nodeIdMaps.get(original.getId())
+                : newNodeIds(original);
 
         List<Process.ProcessNode> copiedNodes = new ArrayList<>();
         for (Process.ProcessNode node : nodes(original)) {
@@ -42,7 +50,7 @@ public final class ProcessGraphCloner {
             }
             Map<String, Object> data = deepCopy(node.getData());
             if (processIdMap != null) {
-                remapActionOnProcessRefs(data, processIdMap);
+                remapActionOnProcessRefs(data, processIdMap, nodeIdMaps);
             }
             remapActionOnStepRefs(data, nodeIdMap);
             nodeCopy.setData(data);
@@ -63,6 +71,15 @@ public final class ProcessGraphCloner {
         copy.setEdges(copiedEdges);
         copy.setViewport(cloneViewport(original.getViewport()));
         return copy;
+    }
+
+    /** Fresh ids for every node of {@code original}, keyed by its current node ids. */
+    public static Map<String, String> newNodeIds(Process original) {
+        Map<String, String> nodeIdMap = new HashMap<>();
+        for (Process.ProcessNode node : nodes(original)) {
+            nodeIdMap.put(node.getId(), UUID.randomUUID().toString());
+        }
+        return nodeIdMap;
     }
 
     /** A deep copy of a node/edge data map (nested maps and lists copied, leaf values shared). Null gives an empty map. */
@@ -90,12 +107,13 @@ public final class ProcessGraphCloner {
 
     /**
      * Rewrites a STEP's Action On subprocess references ({@code data.step.actionOn.processes[].processId},
-     * the shape the frontend's recipe-tool/model/recipeStepData.ts writes) to the copied processes. A reference to a process
+     * the shape the frontend's recipe-tool/model/recipeStepData.ts writes) to the copied processes, and a referenced
+     * step ({@code stepId}) to its copy when {@code nodeIdMaps} knows it. A reference to a process
      * that isn't in {@code processIdMap} — i.e. not part of the recipe being copied — is dropped
      * rather than kept, since keeping it would be a live link from the copy into another recipe.
      */
     @SuppressWarnings("unchecked")
-    private static void remapActionOnProcessRefs(Map<String, Object> data, Map<Long, Long> processIdMap) {
+    private static void remapActionOnProcessRefs(Map<String, Object> data, Map<Long, Long> processIdMap, Map<Long, Map<String, String>> nodeIdMaps) {
         if (!(data.get("step") instanceof Map<?, ?> step)) return;
         if (!(step.get("actionOn") instanceof Map<?, ?> actionOn)) return;
         if (!(actionOn.get("processes") instanceof List<?> references)) return;
@@ -103,10 +121,16 @@ public final class ProcessGraphCloner {
         List<Object> remapped = new ArrayList<>();
         for (Object reference : references) {
             if (!(reference instanceof Map<?, ?> entry)) continue;
-            Long newId = processIdMap.get(asLong(entry.get("processId")));
+            Long oldId = asLong(entry.get("processId"));
+            Long newId = processIdMap.get(oldId);
             if (newId == null) continue;
             Map<String, Object> entryCopy = new LinkedHashMap<>((Map<String, Object>) entry);
             entryCopy.put("processId", newId);
+            Object stepId = entry.get("stepId");
+            Map<String, String> stepIds = nodeIdMaps == null ? null : nodeIdMaps.get(oldId);
+            if (stepId != null && stepIds != null) {
+                entryCopy.put("stepId", stepIds.getOrDefault(String.valueOf(stepId), String.valueOf(stepId)));
+            }
             remapped.add(entryCopy);
         }
         ((Map<String, Object>) actionOn).put("processes", remapped);

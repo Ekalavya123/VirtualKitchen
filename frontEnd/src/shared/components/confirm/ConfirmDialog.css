@@ -80,6 +80,8 @@
   color: var(--flow-text-muted);
   font-size: 0.875rem;
   line-height: 1.4rem;
+  /* A message may list items, one per line. */
+  white-space: pre-line;
 }
 
 .confirm-dialog-footer {

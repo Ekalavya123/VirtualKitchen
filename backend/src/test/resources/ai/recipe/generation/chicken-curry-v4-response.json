@@ -1,0 +1,142 @@
+{
+  "preparations": [
+    {
+      "ref": "chopped_onion",
+      "output": "Chopped Onion",
+      "steps": [
+        {
+          "action": "chop",
+          "ingredients": [
+            { "ingredientId": "107", "name": "onion", "quantity": 1.5, "unit": "cup", "preparationStyle": "chopped" }
+          ],
+          "actionDescription": "Chop the onion",
+          "expectedOutput": "Chopped Onion"
+        }
+      ]
+    },
+    {
+      "ref": "minced_aromatics",
+      "output": "Minced Aromatics",
+      "steps": [
+        {
+          "action": "mince",
+          "ingredients": [
+            { "ingredientId": "112", "name": "garlic", "quantity": 1, "unit": "tbsp", "preparationStyle": "minced" }
+          ],
+          "actionDescription": "Mince the garlic"
+        },
+        {
+          "action": "mince",
+          "ingredients": [
+            { "ingredientId": "113", "name": "ginger", "quantity": 1.5, "unit": "tsp", "preparationStyle": "minced" }
+          ],
+          "actionDescription": "Mince the ginger",
+          "expectedOutput": "Minced Aromatics"
+        }
+      ]
+    }
+  ],
+  "main": {
+    "name": "Chicken Curry",
+    "steps": [
+      {
+        "action": "season",
+        "ingredients": [
+          { "ingredientId": "308", "name": "chicken breast halves", "quantity": 2, "unit": "lb", "preparationStyle": "boneless" },
+          { "ingredientId": "33", "name": "salt", "quantity": 2, "unit": "tsp" }
+        ],
+        "actionDescription": "Sprinkle the chicken breasts with salt"
+      },
+      {
+        "action": "heat",
+        "ingredients": [
+          { "ingredientId": "19", "name": "cooking oil", "quantity": 1, "unit": "tbsp" }
+        ],
+        "actionDescription": "Heat oil in a large skillet",
+        "flameLevel": "high"
+      },
+      {
+        "action": "sear",
+        "ingredients": [
+          { "ingredientId": "308", "name": "chicken breast halves" }
+        ],
+        "actionDescription": "Brown chicken in batches until golden",
+        "expectedOutput": "browned chicken",
+        "flameLevel": "high"
+      },
+      {
+        "action": "transfer",
+        "actionDescription": "Transfer browned chicken to a plate",
+        "expectedOutput": "browned chicken"
+      },
+      {
+        "action": "saute",
+        "uses": ["chopped_onion", "minced_aromatics"],
+        "actionDescription": "Cook onion, garlic, and ginger until soft and translucent",
+        "flameLevel": "medium",
+        "duration": "5 minutes"
+      },
+      {
+        "action": "add",
+        "ingredients": [
+          { "ingredientId": "82", "name": "curry powder", "quantity": 1, "unit": "tbsp" },
+          { "ingredientId": "41", "name": "ground cumin", "quantity": 1, "unit": "tsp" },
+          { "ingredientId": "45", "name": "turmeric powder", "quantity": 1, "unit": "tsp" },
+          { "ingredientId": "44", "name": "ground coriander", "quantity": 1, "unit": "tsp" },
+          { "ingredientId": "50", "name": "cayenne pepper", "quantity": 1, "unit": "tsp" },
+          { "ingredientId": "4", "name": "water", "quantity": 1, "unit": "tbsp" }
+        ],
+        "actionDescription": "Stir in spices and water",
+        "duration": "1 minute"
+      },
+      {
+        "action": "add",
+        "ingredients": [
+          { "ingredientId": "400", "name": "crushed tomatoes", "quantity": 15, "unit": "oz" },
+          { "ingredientId": "286", "name": "yogurt", "quantity": 1, "unit": "cup" },
+          { "ingredientId": "92", "name": "cilantro", "quantity": 1, "unit": "tbsp", "preparationStyle": "chopped" },
+          { "ingredientId": "33", "name": "salt", "quantity": 1, "unit": "tsp" }
+        ],
+        "actionDescription": "Add tomatoes, yogurt, cilantro, and salt"
+      },
+      {
+        "action": "add",
+        "fromSteps": ["browned chicken"],
+        "actionDescription": "Return chicken to the skillet"
+      },
+      {
+        "action": "add",
+        "ingredients": [
+          { "ingredientId": "4", "name": "water", "quantity": 0.5, "unit": "cup" }
+        ],
+        "actionDescription": "Pour in water and bring to a boil"
+      },
+      {
+        "action": "add",
+        "ingredients": [
+          { "ingredientId": "80", "name": "garam masala", "quantity": 1, "unit": "tsp" },
+          { "ingredientId": "92", "name": "cilantro", "quantity": 1, "unit": "tbsp", "preparationStyle": "chopped" }
+        ],
+        "actionDescription": "Sprinkle garam masala and cilantro over chicken"
+      },
+      {
+        "action": "simmer",
+        "actionDescription": "Cover and simmer until chicken is cooked through",
+        "flameLevel": "low",
+        "duration": "20 minutes"
+      },
+      {
+        "nodeType": "CONDITION",
+        "title": "Is the chicken cooked through?",
+        "actionDescription": "Check if chicken is no longer pink and juices run clear"
+      },
+      {
+        "action": "drizzle",
+        "ingredients": [
+          { "ingredientId": "8", "name": "lemon juice", "quantity": 1, "unit": "tbsp" }
+        ],
+        "actionDescription": "Drizzle with lemon juice to serve"
+      }
+    ]
+  }
+}

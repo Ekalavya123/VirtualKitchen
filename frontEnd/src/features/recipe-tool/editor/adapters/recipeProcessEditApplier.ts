@@ -25,8 +25,9 @@ import {
   type RecipeStepFields,
 } from '../../model/recipeStepData'
 import { getProcessReadingOrder } from '../../model/processReadingOrder'
+import { decodePreparedReference } from '../../model/preparationFlows'
 import { buildConditionNode, buildStepNode } from './recipeProcessGenerationConverter'
-import { EDIT_START, detachNode, findFreePosition, insertNodeAfter, preferredInsertPosition, type ProcessGraph } from './recipeProcessEditGraph'
+import { EDIT_NEW_FLOW, EDIT_START, detachNode, findFreePosition, insertNodeAfter, preferredInsertPosition, type ProcessGraph } from './recipeProcessEditGraph'
 import { DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes'
 
 const STEP_SIZE = DEFAULT_NODE_SIZE.step
@@ -51,8 +52,10 @@ const toActionOnIngredient = (ingredient: GeneratedActionOnIngredient): ActionOn
   customIngredientName: ingredient.customIngredientName ?? '',
   quantity: ingredient.quantity ?? null,
   unit: ingredient.unit ?? '',
+  customUnit: ingredient.customUnit ?? '',
+  notes: ingredient.notes ?? undefined,
   preparationStyleId: ingredient.preparationStyle ?? '',
-  customPreparationStyle: '',
+  customPreparationStyle: ingredient.customPreparationStyle ?? '',
 })
 
 /** Overwrites every field the patch carries; actionOn.steps/processes replace the whole list. */
@@ -74,7 +77,9 @@ const patchStepFields = (
     Object.assign(raw, { repeatIntervalValue: parsed.durationValue, repeatIntervalUnit: parsed.durationUnit })
   }
   if (patch.actionOn?.steps != null) actionOn.steps = patch.actionOn.steps.map((ref) => ({ stepId: resolveNode(ref) }))
-  if (patch.actionOn?.processes != null) actionOn.processes = patch.actionOn.processes.map((id) => ({ processId: Number(id) }))
+  if (patch.actionOn?.processes != null) {
+    actionOn.processes = patch.actionOn.processes.flatMap((ref) => decodePreparedReference(ref) ?? [])
+  }
 
   for (const field of clear) {
     switch (field) {
@@ -105,7 +110,7 @@ export const applyProcessEdit = (process: Process, operations: ProcessEditOperat
 
   const resolve = (ref: string | null | undefined): string => {
     if (!ref) throw new ProcessEditConflictError()
-    if (ref === EDIT_START) return EDIT_START
+    if (ref === EDIT_START || ref === EDIT_NEW_FLOW) return ref
     const id = nodeIdByRef.get(ref) ?? ref
     if (!graph.nodes.some((node) => node.id === id)) throw new ProcessEditConflictError()
     return id
@@ -145,7 +150,10 @@ export const applyProcessEdit = (process: Process, operations: ProcessEditOperat
           : buildStepNode(
             { ...step, nodeType: 'STEP' },
             id,
-            new Map((step.actionOn?.processes ?? []).map((processId) => [processId, Number(processId)])),
+            new Map((step.actionOn?.processes ?? []).flatMap((ref) => {
+              const reference = decodePreparedReference(ref)
+              return reference ? [[ref, reference] as const] : []
+            })),
             new Map((step.actionOn?.steps ?? []).map((ref) => [ref, resolve(ref)])),
             0,
             0,
@@ -196,8 +204,8 @@ export const applyProcessEdit = (process: Process, operations: ProcessEditOperat
             ingredients[index] = {
               ...current,
               ...(values.quantity != null ? { quantity: values.quantity } : {}),
-              ...(values.unit != null ? { unit: values.unit } : {}),
-              ...(values.preparationStyle != null ? { preparationStyleId: values.preparationStyle, customPreparationStyle: '' } : {}),
+              ...(values.unit != null ? { unit: values.unit, customUnit: values.customUnit ?? '' } : {}),
+              ...(values.preparationStyle != null ? { preparationStyleId: values.preparationStyle, customPreparationStyle: values.customPreparationStyle ?? '' } : {}),
               ...(values.customIngredientName != null ? { customIngredientName: values.customIngredientName } : {}),
             }
           }
@@ -246,6 +254,7 @@ export const applyProcessEdit = (process: Process, operations: ProcessEditOperat
 const describeNodeRef = (process: Process, ref: string | null | undefined, newTitles: Map<string, string>): string => {
   if (!ref) return 'a step'
   if (ref === EDIT_START) return 'the start'
+  if (ref === EDIT_NEW_FLOW) return 'a new flow'
   const added = newTitles.get(ref)
   if (added) return `the new “${added}” step`
   const node = process.nodes.find((candidate) => candidate.id === ref)

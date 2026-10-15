@@ -486,12 +486,20 @@ class RecipeOrderServiceTest {
     void recipesWithUncheckableIngredientsCannotBeReserved() {
         Map<String, Object> custom = line("custom", 1, "piece");
         custom.put("customIngredientName", "Saffron threads");
-        liveProcesses.get(0).getNodes().add(step("m4", List.of(custom)));
+        append(liveProcesses.get(0), step("m4", List.of(custom)));
         RecipeOrder order = createConfirmed(2);
 
         assertEquals(1, order.getRequirementIssues().size());
         assertFalse(service.availability(USER, order.getId()).canReserve());
         assertStatus(HttpStatus.UNPROCESSABLE_ENTITY, () -> service.reserve(USER, order.getId()));
+    }
+
+    @Test
+    void recipesWhoseStructureIsNotReadyCannotBeOrdered() {
+        // A main step that nothing connects to: the kitchen couldn't tell when to do it.
+        liveProcesses.get(0).getNodes().add(step("stray", List.of(line(SALT, 1, "g"))));
+
+        assertStatus(HttpStatus.UNPROCESSABLE_ENTITY, () -> service.createDraft(USER, new RecipeOrderRequests.Create(RECIPE, 2, null, null)));
     }
 
     // --- payment and lifecycle ---

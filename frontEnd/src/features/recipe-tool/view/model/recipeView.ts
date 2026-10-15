@@ -257,7 +257,7 @@ type SentenceContext = { verb: string; isCut: boolean }
  */
 const ingredientParts = (entry: ActionOnIngredient, context: SentenceContext): InstructionPart[] => {
   const quantifiable = isQuantifiableUnit(entry.unit)
-  const amount = quantifiable ? formatQuantityWithUnit(entry.quantity, entry.unit) : ''
+  const amount = quantifiable ? formatQuantityWithUnit(entry.quantity, entry.unit, entry.customUnit) : ''
   const isPlainCount = quantifiable && (entry.unit === '' || entry.unit === PIECE_UNIT_ID) && (entry.quantity ?? 0) > 1
   const baseName = ingredientNameInSentence(entry)
   const name = isPlainCount && entry.ingredientId !== CUSTOM_INGREDIENT_ID ? pluralize(baseName) : baseName
@@ -384,9 +384,12 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
   const orderedById = new Map(processes.map((process) => [process.id, orderProcessNodes(process)]))
   const processById = new Map(processes.map((process) => [process.id, process]))
   const sectionProcesses = orderProcesses(processes, orderedById).filter((process) => process.nodes.length > 0)
-  const productOf = (processId: number) => {
-    const process = processById.get(processId)
-    return process ? processProductLabel(process, orderedById.get(processId)) : ''
+  /** What a used prepared component is called: the Preparation step's output, or (legacy) a whole process's product. */
+  const productOf = (entry: { processId: number; stepId?: string }) => {
+    const process = processById.get(entry.processId)
+    if (!process) return ''
+    if (entry.stepId) return stepProductLabel(process.nodes.find((node) => node.id === entry.stepId && node.kind === 'STEP'))
+    return processProductLabel(process, orderedById.get(entry.processId))
   }
 
   // Numbering first, so references (checks, jumps, "from step N") can resolve any step.
@@ -400,7 +403,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
 
   // Summed across every step, grouped by ingredient + unit; a step that mentions an ingredient
   // without an amount ("stir the onions") adds nothing to its total.
-  const ingredientTotals = new Map<string, Omit<RecipeIngredientLine, 'amount'> & { quantity: number | null; unit: ActionOnIngredient['unit'] }>()
+  const ingredientTotals = new Map<string, Omit<RecipeIngredientLine, 'amount'> & { quantity: number | null; unit: ActionOnIngredient['unit']; customUnit: string }>()
   let totalMinutes = 0
   let heroImageUrl: string | undefined
   let fallbackImageUrl: string | undefined
@@ -429,7 +432,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
       stepFields.set(node.id, step)
       const earlierBases = [
         ...step.actionOn.steps.map((entry) => rootIngredientName(stepById.get(entry.stepId), stepById)),
-        ...step.actionOn.processes.map((entry) => productOf(entry.processId)),
+        ...step.actionOn.processes.map(productOf),
       ].filter(Boolean)
       titles.set(node.id, buildStepHeading(step, earlierBases))
     }
@@ -495,7 +498,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
       const { visualization } = normalizeRecipeStepNodeData(node.data)
 
       for (const entry of step.actionOn.ingredients) {
-        const ingredientKey = `${entry.ingredientId}:${entry.customIngredientName ?? ''}:${entry.unit}`
+        const ingredientKey = `${entry.ingredientId}:${entry.customIngredientName ?? ''}:${entry.unit}:${entry.customUnit ?? ''}`
         const preparation = getPreparationStyleDisplayName(entry.preparationStyleId ?? '', entry.customPreparationStyle)
         const existing = ingredientTotals.get(ingredientKey)
         if (existing) {
@@ -509,6 +512,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
             preparations: preparation ? [preparation] : [],
             quantity: entry.quantity,
             unit: entry.unit,
+            customUnit: entry.customUnit ?? '',
           })
         }
       }
@@ -534,7 +538,12 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
           const sub = processById.get(entry.processId)
           if (!sub) return []
           const shown = sectionProcesses.includes(sub)
-          return [productParts(productOf(sub.id) || 'prepared component', shown ? sectionAnchorId(sub.id) : undefined, shown ? sectionTitleOf(sub) : undefined)]
+          // A Preparation step's output links to that step ("step 3"); a legacy whole-process use to its section.
+          if (entry.stepId) {
+            const number = numberOf.get(`${sub.id}:${entry.stepId}`)
+            return [productParts(productOf(entry) || 'prepared component', shown ? itemAnchorId(sub.id, entry.stepId) : undefined, number ? `step ${number}` : undefined)]
+          }
+          return [productParts(productOf(entry) || 'prepared component', shown ? sectionAnchorId(sub.id) : undefined, shown ? sectionTitleOf(sub) : undefined)]
         }),
       ]
       // A description that opens by restating the built sentence only adds its tail ("Cut the
@@ -597,11 +606,11 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
     }
   })
 
-  const ingredients = Array.from(ingredientTotals.values()).map<RecipeIngredientLine>(({ quantity, unit, key, name, icon, preparations }) => ({
+  const ingredients = Array.from(ingredientTotals.values()).map<RecipeIngredientLine>(({ quantity, unit, customUnit, key, name, icon, preparations }) => ({
     key,
     name,
     icon,
-    amount: formatQuantityWithUnit(quantity, unit),
+    amount: formatQuantityWithUnit(quantity, unit, customUnit),
     preparations,
   }))
 

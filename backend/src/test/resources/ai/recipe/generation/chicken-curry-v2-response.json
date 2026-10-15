@@ -1,0 +1,205 @@
+{
+  "mainProcess": {
+    "name": "Chicken Curry",
+    "steps": [
+      {
+        "action": "season",
+        "ingredients": [
+          {
+            "ingredientId": "308",
+            "quantity": 2,
+            "unit": "lb",
+            "preparationStyle": "skinless,boneless"
+          }
+        ],
+        "actionDescription": "Sprinkle the chicken breasts with 2 teaspoons salt",
+        "expectedOutput": "seasoned chicken"
+      },
+      {
+        "stepId": "s1",
+        "action": "heat",
+        "ingredients": [
+          {
+            "ingredientId": "19",
+            "quantity": 2,
+            "unit": "tbsp"
+          }
+        ],
+        "actionDescription": "Heat 1 to 2 tablespoons oil in a large skillet over high heat",
+        "flameLevel": "high",
+        "duration": "1 minutes"
+      },
+      {
+        "action": "sear",
+        "fromSteps": [
+          "s1"
+        ],
+        "actionDescription": "Brown chicken in batches until partially cooked and golden on all sides",
+        "expectedOutput": "browned chicken",
+        "flameLevel": "high"
+      },
+      {
+        "action": "transfer",
+        "actionDescription": "Transfer browned chicken breasts to a plate and set aside",
+        "expectedOutput": "set aside chicken"
+      },
+      {
+        "action": "saute",
+        "ingredients": [
+          {
+            "ingredientId": "107",
+            "quantity": 1.5,
+            "unit": "cup",
+            "preparationStyle": "chopped"
+          },
+          {
+            "ingredientId": "112",
+            "quantity": 1,
+            "unit": "tbsp",
+            "preparationStyle": "minced"
+          },
+          {
+            "ingredientId": "113",
+            "quantity": 1.5,
+            "unit": "tsp",
+            "preparationStyle": "minced"
+          }
+        ],
+        "actionDescription": "Cook and stir onion, garlic, and ginger until soft and translucent",
+        "expectedOutput": "softened aromatics",
+        "flameLevel": "medium",
+        "duration": "5 minutes",
+        "repeatInterval": "1 minutes"
+      },
+      {
+        "action": "mix",
+        "ingredients": [
+          {
+            "ingredientId": "82",
+            "quantity": 1,
+            "unit": "tbsp"
+          },
+          {
+            "ingredientId": "41",
+            "quantity": 1,
+            "unit": "tsp"
+          },
+          {
+            "ingredientId": "45",
+            "quantity": 1,
+            "unit": "tsp"
+          },
+          {
+            "ingredientId": "44",
+            "quantity": 1,
+            "unit": "tsp"
+          },
+          {
+            "ingredientId": "50",
+            "quantity": 1,
+            "unit": "tsp"
+          },
+          {
+            "ingredientId": "4",
+            "quantity": 1,
+            "unit": "tbsp"
+          }
+        ],
+        "actionDescription": "Stir curry powder, cumin, turmeric, coriander, cayenne, and water into the onion mixture",
+        "expectedOutput": "spiced onion mixture",
+        "duration": "1 minutes"
+      },
+      {
+        "action": "mix",
+        "ingredients": [
+          {
+            "ingredientId": "400",
+            "quantity": 1,
+            "unit": "can"
+          },
+          {
+            "ingredientId": "286",
+            "quantity": 1,
+            "unit": "cup"
+          },
+          {
+            "ingredientId": "92",
+            "quantity": 1,
+            "unit": "tbsp",
+            "preparationStyle": "chopped"
+          },
+          {
+            "ingredientId": "33",
+            "quantity": 1,
+            "unit": "tsp"
+          }
+        ],
+        "actionDescription": "Add tomatoes, yogurt, cilantro, and salt to the mixture; stir to combine",
+        "expectedOutput": "curry base"
+      },
+      {
+        "action": "add",
+        "fromSteps": [
+          "s1"
+        ],
+        "actionDescription": "Return chicken breast to the skillet along with any juices on the plate",
+        "expectedOutput": "chicken in sauce"
+      },
+      {
+        "action": "boil",
+        "ingredients": [
+          {
+            "ingredientId": "4",
+            "quantity": 0.5,
+            "unit": "cup"
+          }
+        ],
+        "actionDescription": "Pour in 1/2 cup water and bring to a boil, turning the chicken to coat with the sauce",
+        "expectedOutput": "boiling curry"
+      },
+      {
+        "action": "add",
+        "ingredients": [
+          {
+            "ingredientId": "80",
+            "quantity": 1,
+            "unit": "tsp"
+          },
+          {
+            "ingredientId": "92",
+            "quantity": 1,
+            "unit": "tbsp",
+            "preparationStyle": "chopped"
+          }
+        ],
+        "actionDescription": "Sprinkle garam masala and cilantro over the chicken",
+        "expectedOutput": "seasoned chicken curry"
+      },
+      {
+        "action": "simmer",
+        "actionDescription": "Cover the skillet and simmer until chicken breasts are no longer pink in the center",
+        "expectedOutput": "cooked chicken",
+        "flameLevel": "medium",
+        "duration": "20 minutes"
+      },
+      {
+        "nodeType": "CONDITION",
+        "title": "Is the chicken cooked through?",
+        "actionDescription": "Check if an instant-read thermometer inserted into the center reads at least 165 degrees F",
+        "expectedOutput": "cooked chicken"
+      },
+      {
+        "action": "drizzle",
+        "ingredients": [
+          {
+            "ingredientId": "8",
+            "quantity": 1,
+            "unit": "tbsp"
+          }
+        ],
+        "actionDescription": "Drizzle with lemon juice to serve",
+        "expectedOutput": "finished dish"
+      }
+    ]
+  }
+}

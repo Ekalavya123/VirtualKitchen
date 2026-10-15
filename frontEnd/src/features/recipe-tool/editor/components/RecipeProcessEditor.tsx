@@ -10,7 +10,7 @@ interface RecipeProcessEditorProps {
   breadcrumbAncestors: RecipeProcessBreadcrumbEntry[]
   onNavigateToList: () => void
   onNavigateToAncestor: (index: number) => void
-  onOpenSubprocess: (subprocessId: number, currentProcessName: string) => void
+  onOpenSubprocess: (subprocessId: number, currentProcessName: string, stepId?: string) => void
   onBack?: () => void
   /** Passed straight through to RecipeProcessCanvas — see its own doc comments. */
   recipeName?: string
@@ -18,6 +18,7 @@ interface RecipeProcessEditorProps {
   sidebarHeader?: ReactNode
   onSelectedNodeChange?: (nodeId: string | null) => void
   highlightedNodeIds?: ReadonlySet<string>
+  focusNodeRequest?: { nodeId: string; token: number } | null
 }
 
 /**
@@ -38,6 +39,7 @@ export default function RecipeProcessEditor({
   sidebarHeader,
   onSelectedNodeChange,
   highlightedNodeIds,
+  focusNodeRequest,
 }: RecipeProcessEditorProps) {
   return (
     <div className="h-full w-full">
@@ -54,6 +56,7 @@ export default function RecipeProcessEditor({
         sidebarHeader={sidebarHeader}
         onSelectedNodeChange={onSelectedNodeChange}
         highlightedNodeIds={highlightedNodeIds}
+        focusNodeRequest={focusNodeRequest}
       />
     </div>
   )

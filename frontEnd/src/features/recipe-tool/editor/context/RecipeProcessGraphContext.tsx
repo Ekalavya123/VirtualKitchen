@@ -14,8 +14,8 @@ import { DEFAULT_HANDLE_SIDES, type HandleSides } from '../model/processLayout'
  * written to by anything downstream.
  */
 export type RecipeProcessGraphContextValue = {
-  /** SUBPROCESS documents this step could reference — same recipe, excluding MAIN and the process currently open. */
-  availableSubprocesses: Process[]
+  /** Every process of the recipe — resolves a used prepared component (a Preparation step's output) to its live name. */
+  recipeProcesses: Process[]
   /**
    * STEP node ids of the current process, in the same order RecipeProcessCanvas/RecipeProcessTopBar number
    * and list them (array order — mirrors how the step dropdown and slideshow already number
@@ -43,7 +43,7 @@ export type RecipeProcessGraphContextValue = {
 }
 
 const RecipeProcessGraphContext = createContext<RecipeProcessGraphContextValue>({
-  availableSubprocesses: [],
+  recipeProcesses: [],
   stepOrder: [],
   stepOutputGraph: EMPTY_STEP_OUTPUT_GRAPH,
 })

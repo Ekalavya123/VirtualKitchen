@@ -78,6 +78,7 @@ public class RecipeTemplateMapper {
                 .visibility(pt.getVisibility())
                 .ingredients(toIngredientDTOs(pt.getIngredients()))
                 .nutrition(toNutritionDTO(pt.getNutrition()))
+                .preparationNotes(pt.getPreparationNotes())
                 .mainProcessId(pt.getMainProcessId())
                 .processRevision(pt.getProcessRevision() != null ? pt.getProcessRevision() : 0L)
                 .createdAt(pt.getCreatedAt())

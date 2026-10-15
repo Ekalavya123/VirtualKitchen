@@ -1,10 +1,13 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  FLOW_GRID,
   ROW_LAYOUT,
+  arrangeFlowGrid,
   arrangeRows,
   findLoopEdges,
   getHandleSides,
+  planFlowColumns,
   planRows,
   type LayoutBox,
   type LayoutEdge,
@@ -160,5 +163,40 @@ describe('findLoopEdges', () => {
 
   it('finds nothing in an acyclic flow', () => {
     assert.equal(findLoopEdges([step('a'), step('b')], [edge('a', 'b')]).size, 0)
+  })
+})
+
+describe('arrangeFlowGrid', () => {
+  const flow = (prefix: string, steps: number, height = 150) =>
+    Array.from({ length: steps }, (_, index) => ({ id: `${prefix}${index}`, kind: 'STEP', height }))
+  const overlaps = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+
+  it('plans up to three flow columns', () => {
+    assert.equal(planFlowColumns(2000).perRow, 3)
+    assert.equal(planFlowColumns(500).perRow, 1)
+  })
+
+  it('stacks each flow in its own column and wraps the fourth flow onto a new row', () => {
+    const plan = planFlowColumns(1400)
+    assert.equal(plan.perRow, 3)
+    const flows = [flow('a', 3), flow('b', 1), flow('c', 2), flow('d', 2), flow('e', 1)]
+    const layout = arrangeFlowGrid(flows, plan)
+
+    // Within a flow: one column, top to bottom.
+    const a = flows[0].map((node) => layout.get(node.id)!)
+    assert.ok(a.every((rect) => rect.x === a[0].x))
+    assert.ok(a[1].y > a[0].y && a[2].y > a[1].y)
+
+    // Flows a, b, c side by side; d and e start a second row below the tallest of them (a).
+    const firstOf = (prefix: string) => layout.get(`${prefix}0`)!
+    assert.ok(firstOf('a').x < firstOf('b').x && firstOf('b').x < firstOf('c').x)
+    assert.equal(firstOf('a').y, firstOf('c').y)
+    assert.equal(firstOf('d').x, firstOf('a').x)
+    assert.ok(firstOf('d').y >= a[2].y + a[2].height + FLOW_GRID.rowGap)
+    assert.equal(firstOf('e').y, firstOf('d').y)
+
+    const rects = [...layout.values()]
+    rects.forEach((rect, i) => rects.slice(i + 1).forEach((other) => assert.ok(!overlaps(rect, other))))
   })
 })

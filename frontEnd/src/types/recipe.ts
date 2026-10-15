@@ -24,6 +24,12 @@ export interface GeneratedActionOnIngredient {
   unit?: string | null
   preparationStyle?: string | null
   customIngredientName?: string | null
+  /** Only meaningful when `unit` is "custom". */
+  customUnit?: string | null
+  /** Only meaningful when `preparationStyle` is "custom". */
+  customPreparationStyle?: string | null
+  /** Free-text detail with no structured field (e.g. a second preparation state). */
+  notes?: string | null
 }
 
 export interface GeneratedActionOn {
@@ -105,7 +111,12 @@ export interface RecipeProcessGenerationResult {
   mode?: ProcessGenerationMode | null
   /** CREATE only. */
   mainProcess: GeneratedRecipeProcess
+  /** CREATE only: the preparation flows; each `name` is the flow's named output. */
   subprocesses: GeneratedRecipeProcess[]
+  /** CREATE only: what the backend corrected in the model's answer (e.g. a value kept as a custom one). */
+  repairs?: string[] | null
+  /** CREATE only: accepted but worth attention (e.g. a preparation the main process never uses). */
+  warnings?: string[] | null
   /** EDIT only. */
   edit?: RecipeProcessEditResult | null
   modelUsed?: string
@@ -131,7 +142,8 @@ export interface EditTargetProcess {
   name: string
   /** In reading order. */
   nodes: EditTargetNode[]
-  subprocesses: { processId: number; name: string }[]
+  /** What a step may use: Preparation step outputs (`stepId`) by name; `processId` alone is a whole (legacy) process. */
+  subprocesses: { processId: number; stepId?: string; name: string }[]
 }
 
 /** POST /api/v1/recipes/{recipeId}/processes/generate/jobs body. */
@@ -247,6 +259,8 @@ export interface RecipeDetail {
   visibility?: 'PUBLIC' | 'PRIVATE'
   ingredients: RecipeIngredient[]
   nutrition?: NutritionInfo | null
+  /** The recipe's own default preparation guidance; null/absent means the app's default text. */
+  preparationNotes?: string | null
   mainProcessId?: number | null
   /** Optimistic-concurrency counter of the recipe-level process save (0 until first saved). */
   processRevision?: number

@@ -9,11 +9,13 @@ import {
   getRecipeStepRepeatIntervalLabel,
   getRecipeStepTemperatureLabel,
   normalizeRecipeStepNodeData,
+  type RecipeStepActionOnProcess,
   type RecipeStepNodeData,
 } from '../../model/recipeStepData'
 import { useNodeHandleSides, useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'
 import { DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes'
 import { getStepOutputLabel, getStepOutputReferenceProblem } from '../../model/recipeStepOutputs'
+import { PREPARED_REFERENCE_PROBLEM_LABELS, describePreparedReference } from '../../model/preparationFlows'
 import { getStepActionById, type ActionCategory, type StepActionId } from '../../../../shared/catalog/actionCatalog'
 import { getPreparationStyleDisplayName } from '../../../../shared/catalog/preparationStyleCatalog'
 import { getFlameLevelDisplayName } from '../../../../shared/catalog/flameLevelCatalog'
@@ -107,7 +109,7 @@ const COLLAPSED_ACTION_ON_LIMIT = 3
 export default function RecipeStepNode({ selected, style: nodeStyle, width: nodeWidth, height: nodeHeight, data }: RecipeStepNodeProps) {
   const nodeId = useNodeId()
   const updateNodeInternals = useUpdateNodeInternals()
-  const { availableSubprocesses, stepOrder, stepOutputGraph, onNodeResizeStart, onNodeResizeEnd } = useRecipeProcessGraphContext()
+  const { recipeProcesses, stepOrder, stepOutputGraph, onNodeResizeStart, onNodeResizeEnd } = useRecipeProcessGraphContext()
   const [expanded, setExpanded] = useState(false)
   const normalized = normalizeRecipeStepNodeData(data)
   const step = normalized.step
@@ -142,7 +144,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
 
   const ingredientLines = step.actionOn.ingredients.map((entry, index) => {
     const name = getActionOnIngredientDisplayName(entry)
-    const quantity = formatQuantityWithUnit(entry.quantity, entry.unit)
+    const quantity = formatQuantityWithUnit(entry.quantity, entry.unit, entry.customUnit)
     const prepStyle = getPreparationStyleDisplayName(entry.preparationStyleId ?? '', entry.customPreparationStyle)
     return {
       key: `ingredient-${index}`,
@@ -168,13 +170,20 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
     }
   })
 
-  const subprocessName = (processId: number) =>
-    availableSubprocesses.find((candidate) => candidate.id === processId)?.name ?? `Process #${processId}`
+  // A used prepared component shows its *current* name: the Preparation step's live Expected Output.
+  const preparedName = (reference: RecipeStepActionOnProcess) => describePreparedReference(recipeProcesses, reference).label
 
-  const subprocessLines = step.actionOn.processes.map((entry) => ({
-    key: `subprocess-${entry.processId}`,
-    content: <span style={{ fontWeight: 700, color: theme.accentStrong }}>{subprocessName(entry.processId)}</span>,
-  }))
+  const subprocessLines = step.actionOn.processes.map((entry) => {
+    const { label, problem } = describePreparedReference(recipeProcesses, entry)
+    return {
+      key: `prepared-${entry.processId}-${entry.stepId ?? ''}`,
+      content: (
+        <span style={{ fontWeight: 700, color: problem ? '#dc2626' : theme.accentStrong }} title={problem ? PREPARED_REFERENCE_PROBLEM_LABELS[problem] : 'Prepared in Preparation'}>
+          🔪 {problem ? PREPARED_REFERENCE_PROBLEM_LABELS[problem] : label}
+        </span>
+      ),
+    }
+  })
 
   // Labels are the referenced step's *current* Expected Output, resolved live from the graph.
   const stepOutputLines = step.actionOn.steps.map((entry) => {
@@ -191,7 +200,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
   })
 
   const actionSummary = getRecipeStepActionSummary(step, {
-    subprocessName,
+    preparedName,
     stepOutputLabel: (stepId) => getStepOutputLabel(stepOutputGraph, stepId),
   })
 

@@ -30,6 +30,10 @@ public class RecipeProcessGenerationResultDTO {
     /** Which kind of request produced this result; null on results stored before modes existed (= CREATE). */
     private ProcessGenerationMode mode;
     private RecipeProcessEditResultDTO edit;
+    /** What the application corrected in the model's answer (e.g. an uncatalogued ingredient kept as a custom one). */
+    private List<String> repairs;
+    /** Accepted but worth the user's attention (e.g. a preparation whose output the main process never uses). */
+    private List<String> warnings;
 
     private String modelUsed;
     private String modelTier;

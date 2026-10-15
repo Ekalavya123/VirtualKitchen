@@ -31,15 +31,16 @@ class RecipeProcessOutputTest {
     @Test
     void schemaRequiresOnlyTheContractFields() {
         JsonNode root = objectMapper.valueToTree(schema.jsonSchema());
-        assertEquals(List.of("mainProcess"), required(root));
+        assertEquals(List.of("main"), required(root));
 
-        JsonNode subprocess = root.at("/properties/subprocesses/items");
-        assertEquals(List.of("ref", "name", "steps"), required(subprocess));
+        JsonNode preparation = root.at("/properties/preparations/items");
+        assertEquals(List.of("ref", "output", "steps"), required(preparation));
 
-        JsonNode nodeVariants = root.at("/properties/mainProcess/properties/steps/items/anyOf");
+        JsonNode nodeVariants = root.at("/properties/main/properties/steps/items/anyOf");
         assertEquals(List.of("action", "actionDescription"), required(nodeVariants.get(0)));
         assertEquals(List.of("nodeType", "title", "actionDescription"), required(nodeVariants.get(1)));
-        assertEquals(List.of("ingredientId"), required(nodeVariants.get(0).at("/properties/ingredients/items")));
+        assertEquals(List.of("ingredientId", "name"), required(nodeVariants.get(0).at("/properties/ingredients/items")));
+        assertTrue(nodeVariants.get(0).at("/properties/uses").isObject(), "a step names the preparations it uses");
         assertTrue(nodeVariants.get(0).at("/properties/flameLevel/enum").toString().contains("medium-high"));
         assertTrue(nodeVariants.get(0).at("/properties/unit").isMissingNode(), "unit lives on the ingredient, not the step");
     }
@@ -54,11 +55,11 @@ class RecipeProcessOutputTest {
                 {"action":"fry","ingredients":[{"ingredientId":"onion","quantity":1,"unit":"piece"}],"fromSteps":["s1"],"actionDescription":"Fry eggs with onion","unexpectedKey":true}
                 ]}}""";
 
-        RecipeProcessOutput output = objectMapper.readValue(content, RecipeProcessOutput.class);
-        GeneratedRecipeProcessDTO main = normalizer.toProcess(output.mainProcess());
-        List<GeneratedRecipeProcessDTO> subprocesses = normalizer.toSubprocesses(output.subprocesses());
+        RecipeProcessOutputNormalizer.Normalized normalized = normalizer.normalize(objectMapper.readValue(content, RecipeProcessOutput.class));
+        GeneratedRecipeProcessDTO main = normalized.main();
+        List<GeneratedRecipeProcessDTO> subprocesses = normalized.preparations();
 
-        assertEquals(List.of(), subprocesses, "omitted subprocesses become an empty list");
+        assertEquals(List.of(), subprocesses, "omitted preparations become an empty list");
         GeneratedRecipeStepDTO rest = main.getSteps().get(1);
         assertEquals("STEP", rest.getNodeType());
         assertEquals("", rest.getExpectedOutput());
@@ -81,7 +82,7 @@ class RecipeProcessOutputTest {
                 {"stepId":"s1","action":"stir","actionDescription":"c","expectedOutput":"x"}
                 ]}}""";
 
-        GeneratedRecipeProcessDTO main = normalizer.toProcess(objectMapper.readValue(content, RecipeProcessOutput.class).mainProcess());
+        GeneratedRecipeProcessDTO main = normalizer.normalize(objectMapper.readValue(content, RecipeProcessOutput.class)).main();
 
         List<String> ids = main.getSteps().stream().map(GeneratedRecipeStepDTO::getStepId).toList();
         assertEquals(3, ids.stream().distinct().count(), () -> "stepIds must be unique, got " + ids);
@@ -95,10 +96,10 @@ class RecipeProcessOutputTest {
                 {"action":"chop","fromSteps":["nope"],"actionDescription":"Chop"}
                 ]}}""";
 
-        GeneratedRecipeProcessDTO main = normalizer.toProcess(objectMapper.readValue(content, RecipeProcessOutput.class).mainProcess());
+        GeneratedRecipeProcessDTO main = normalizer.normalize(objectMapper.readValue(content, RecipeProcessOutput.class)).main();
         List<String> errors = validator.validate(main, List.of()).getErrors();
 
-        assertTrue(errors.stream().anyMatch(e -> e.startsWith("mainProcess.steps[0].fromSteps")), () -> errors.toString());
+        assertTrue(errors.stream().anyMatch(e -> e.startsWith("main.steps[0].fromSteps")), () -> errors.toString());
         assertTrue(errors.stream().noneMatch(e -> e.contains("actionOn")), () -> errors.toString());
     }
 

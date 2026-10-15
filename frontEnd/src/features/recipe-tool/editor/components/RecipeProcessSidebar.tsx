@@ -1,14 +1,14 @@
-import { useRef, useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import '../../../../styles/flow-ui.css'
 import '../styles/RecipeEditorToolbar.css'
 import type { Process } from '../../../../types/process'
 import { isPendingProcessId } from '../../model/subprocessReferences'
-import { useDraft } from '../../../../shared/drafts/useDraft'
-import DraftRestoredNote from '../../../../shared/drafts/DraftRestoredNote'
+import { getPreparationFlows } from '../../model/preparationFlows'
 import AddNodeMenu from './AddNodeMenu'
+import PreparationNotesPopover from './PreparationNotesPopover'
 import { useProcessSidebarActions } from '../context/ProcessSidebarActionsContext'
-import { useConfirmDiscard } from '../../../../shared/components/confirm/useConfirmDiscard'
-import { errorMessage } from '../../../../shared/errors'
+
+export type ProcessIssueCounts = { blockers: number; warnings: number }
 
 type RecipeProcessSidebarProps = {
   processes: Process[]
@@ -17,22 +17,27 @@ type RecipeProcessSidebarProps = {
   onSelect: (processId: number) => void
   onCreateMainProcess: () => void
   creatingMainProcess: boolean
-  onCreateSubprocess: (name: string, description: string) => Promise<void>
-  /** Deletes a SUBPROCESS (asking first — see RecipeEditorView); omitted for readers. Never offered for MAIN. */
-  onDeleteSubprocess?: (processId: number) => void
-  /** Where the new-subprocess form keeps its draft (see shared/drafts). */
-  newSubprocessDraftKey?: string
+  /** Opens the Preparation, creating it when the recipe has none yet; omitted for readers. */
+  onOpenPreparation?: () => void
+  creatingPreparation?: boolean
+  /** Renames the main process; omitted for readers. (A Preparation flow is named by its last step.) */
+  onRenameProcess?: (processId: number, name: string) => void
+  /** Readiness issues per process, shown as a dot on its card. */
+  issueCounts?: ReadonlyMap<number, ProcessIssueCounts>
+  /** The recipe's default preparation guidance (null = the standard text). */
+  preparationNotes?: string | null
+  onSavePreparationNotes?: (notes: string | null) => Promise<void>
+  /** The recipe's readiness summary (RecipeReadinessPanel), shown under the header. */
+  readinessPanel?: ReactNode
 }
 
 const sectionLabel = 'px-1 text-[0.68rem] font-bold uppercase tracking-wide'
 
 /**
- * "Recipe Processes": the Recipe Editor's process navigator (MAIN pinned above SUBPROCESSes) with
- * the editor's one "+ Add" menu (Step / Condition / Subprocess) at the top, and a "+" on the
- * Subprocesses heading that opens the same new-subprocess form. Distinct from the
- * standalone RecipeProcessListPage, which is a full page. Selecting a process here just updates
- * local state in RecipeEditorView — it never navigates to a different route ("keep the user inside
- * the Recipe Tool"). Subprocess creation reuses the existing ProcessApi (via `onCreateSubprocess`).
+ * "Recipe": the Recipe Editor's two flow editors — Preparation (independent flows, each making one named component,
+ * e.g. "Chopped Onions") above the Main Process (the one connected cooking sequence that uses them) — with the
+ * editor's one "+ Add" menu at the top. Selecting a card just updates local state in RecipeEditorView — it never
+ * navigates to a different route ("keep the user inside the Recipe Tool").
  */
 export default function RecipeProcessSidebar({
   processes,
@@ -41,56 +46,59 @@ export default function RecipeProcessSidebar({
   onSelect,
   onCreateMainProcess,
   creatingMainProcess,
-  onCreateSubprocess,
-  onDeleteSubprocess,
-  newSubprocessDraftKey,
+  onOpenPreparation,
+  creatingPreparation = false,
+  onRenameProcess,
+  issueCounts,
+  preparationNotes = null,
+  onSavePreparationNotes,
+  readinessPanel,
 }: RecipeProcessSidebarProps) {
   // Adding a step/condition and collapsing come from the canvas hosting this sidebar (none without one).
   const { onAddStep, onAddCondition, onCollapse } = useProcessSidebarActions() ?? {}
-  // The new-subprocess form keeps what was typed until the subprocess is created (closing the form
-  // or leaving the recipe doesn't lose it); a form with an unfinished draft opens again by itself.
-  const draft = useDraft(newSubprocessDraftKey ?? null, { name: '', description: '' })
-  const { name, description } = draft.value
-  const setName = (value: string) => draft.setValue((current) => ({ ...current, name: value }))
-  const setDescription = (value: string) => draft.setValue((current) => ({ ...current, description: value }))
-  const [showCreateForm, setShowCreateForm] = useState(() => draft.restored)
-  const [creating, setCreating] = useState(false)
-  const [createError, setCreateError] = useState<string | null>(null)
-  const nameInputRef = useRef<HTMLInputElement | null>(null)
-  const confirmDiscard = useConfirmDiscard()
+  // The main process being renamed and its draft name.
+  const [renaming, setRenaming] = useState<{ processId: number; name: string } | null>(null)
 
   const mainProcess = processes.find((process) => process.type === 'MAIN') ?? null
-  const subprocesses = processes.filter((process) => process.type === 'SUBPROCESS')
+  // Normally one; a reader may still see a recipe saved before the single Preparation (the owner's editor merges them).
+  const preparations = processes.filter((process) => process.type === 'SUBPROCESS')
 
-  const handleCreate = async () => {
-    if (!name.trim()) {
-      setCreateError('Name is required')
-      return
-    }
-    setCreating(true)
-    setCreateError(null)
-    try {
-      await onCreateSubprocess(name.trim(), description.trim())
-      draft.clear()
-      setShowCreateForm(false)
-    } catch (error) {
-      setCreateError(errorMessage(error, 'Unable to create this subprocess'))
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  // Opening the form from "+ Add → Subprocess" puts the cursor straight in its name field, once rendered.
-  const openCreateForm = () => {
-    setShowCreateForm(true)
-    requestAnimationFrame(() => nameInputRef.current?.focus())
+  const commitRename = () => {
+    if (!renaming || !onRenameProcess) return
+    const next = renaming.name.trim()
+    const current = processes.find((process) => process.id === renaming.processId)
+    if (current && next && next !== current.name) onRenameProcess(renaming.processId, next)
+    setRenaming(null)
   }
 
   const renderCard = (process: Process) => {
     const selected = process.id === selectedProcessId
     const stepCount = process.nodes.filter((node) => node.kind === 'STEP').length
-    // Only a SUBPROCESS can be deleted — the MAIN process is the recipe's own and stays.
-    const deletable = onDeleteSubprocess != null && process.type === 'SUBPROCESS'
+    const isMain = process.type === 'MAIN'
+    const flowCount = isMain ? 0 : getPreparationFlows(process).filter((flow) => flow.nodes.some((node) => node.kind === 'STEP')).length
+    const renamable = isMain && onRenameProcess != null
+    const counts = issueCounts?.get(process.id)
+
+    if (renaming?.processId === process.id) {
+      return (
+        <div key={process.id} className="recipe-sidebar-process" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <input
+            className="flow-properties-input"
+            value={renaming.name}
+            autoFocus
+            aria-label="Main process name"
+            onChange={(event) => setRenaming({ processId: process.id, name: event.target.value })}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') commitRename()
+              if (event.key === 'Escape') setRenaming(null)
+            }}
+            onBlur={commitRename}
+          />
+          <span style={{ fontSize: 10.5, color: 'var(--flow-text-subtle)', padding: '0 4px' }}>Enter to save · Esc to cancel</span>
+        </div>
+      )
+    }
+
     return (
       <div key={process.id} className="recipe-sidebar-process">
         <button
@@ -100,7 +108,7 @@ export default function RecipeProcessSidebar({
           style={{
             width: '100%',
             textAlign: 'left',
-            padding: deletable ? '10px 40px 10px 12px' : '10px 12px',
+            padding: renamable ? '10px 38px 10px 12px' : '10px 12px',
             borderRadius: 10,
             border: `1px solid ${selected ? 'var(--flow-accent)' : 'var(--flow-border)'}`,
             background: selected ? 'var(--flow-accent-soft)' : 'var(--flow-surface)',
@@ -110,15 +118,30 @@ export default function RecipeProcessSidebar({
             gap: 8,
           }}
         >
-          <span aria-hidden style={{ fontSize: 14, flexShrink: 0 }}>{process.type === 'MAIN' ? '👑' : '🧩'}</span>
+          <span aria-hidden style={{ fontSize: 14, flexShrink: 0 }}>{isMain ? '🍳' : '🔪'}</span>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--flow-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {process.name}
+              {process.name.trim() || (isMain ? 'Main Process' : 'Preparation')}
             </div>
             <div style={{ fontSize: 10.5, color: 'var(--flow-text-muted)' }}>
-              {process.type === 'MAIN' ? 'Main Process' : 'Subprocess'} · {stepCount} step{stepCount === 1 ? '' : 's'}
+              {isMain
+                ? `Main process · ${stepCount} step${stepCount === 1 ? '' : 's'}`
+                : `${flowCount} flow${flowCount === 1 ? '' : 's'} · ${stepCount} step${stepCount === 1 ? '' : 's'}`}
             </div>
           </div>
+          {counts && (counts.blockers > 0 || counts.warnings > 0) && (
+            <span
+              title={[
+                counts.blockers > 0 ? `${counts.blockers} to fix before cooking or ordering` : '',
+                counts.warnings > 0 ? `${counts.warnings} warning${counts.warnings === 1 ? '' : 's'}` : '',
+              ].filter(Boolean).join(' · ')}
+              aria-label={`${counts.blockers} blocking, ${counts.warnings} warnings`}
+              style={{
+                flexShrink: 0, width: 8, height: 8, borderRadius: 999,
+                background: counts.blockers > 0 ? 'var(--flow-danger)' : 'var(--flow-warning-border)',
+              }}
+            />
+          )}
           {isPendingProcessId(process.id) && (
             <span
               title="Generated — not saved yet"
@@ -128,16 +151,18 @@ export default function RecipeProcessSidebar({
             </span>
           )}
         </button>
-        {deletable && (
-          <button
-            type="button"
-            className="recipe-sidebar-process-delete"
-            onClick={() => onDeleteSubprocess(process.id)}
-            aria-label={`Delete subprocess ${process.name}`}
-            title="Delete subprocess"
-          >
-            🗑
-          </button>
+        {renamable && (
+          <div className="recipe-sidebar-process-actions">
+            <button
+              type="button"
+              className="recipe-sidebar-process-rename"
+              onClick={() => setRenaming({ processId: process.id, name: process.name })}
+              aria-label={`Rename ${process.name}`}
+              title="Rename"
+            >
+              ✎
+            </button>
+          </div>
         )}
       </div>
     )
@@ -146,7 +171,7 @@ export default function RecipeProcessSidebar({
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-shrink-0 items-center justify-between gap-2 border-b border-[var(--flow-border)] py-2.5 pr-2 pl-3.5">
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--flow-text)' }}>Recipe Processes</div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--flow-text)' }}>Recipe</div>
         {onCollapse && (
           <button
             type="button"
@@ -161,63 +186,46 @@ export default function RecipeProcessSidebar({
         )}
       </div>
 
-      {(onAddStep || onAddCondition || isOwner) && (
+      {readinessPanel}
+
+      {(onAddStep || onAddCondition || onOpenPreparation) && (
         <div className="flex-shrink-0 border-b border-[var(--flow-border)] p-2.5">
           <AddNodeMenu
             onAddStep={onAddStep}
             onAddCondition={onAddCondition}
-            onAddSubprocess={isOwner ? openCreateForm : undefined}
+            onAddSubprocess={onOpenPreparation}
             buttonClassName="recipe-sidebar-add"
             placement="bottom-start"
           />
         </div>
       )}
 
-      {isOwner && showCreateForm && (
-        <div className="flex flex-shrink-0 flex-col gap-2 border-b border-[var(--flow-border)] p-3" role="group" aria-label="New subprocess">
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--flow-text)' }}>New subprocess</div>
-          {draft.restored && (name.trim() || description.trim()) && <DraftRestoredNote onDiscard={() => void confirmDiscard('subprocess name and description', draft.clear)} />}
-          <input
-            ref={nameInputRef}
-            className="flow-properties-input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void handleCreate()
-              if (e.key === 'Escape') setShowCreateForm(false)
-            }}
-            placeholder="Subprocess name"
-          />
-          <textarea
-            className="flow-properties-textarea"
-            rows={2}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Description (optional)"
-          />
-          {createError && <div style={{ fontSize: 11, color: '#dc2626', fontWeight: 600 }}>{createError}</div>}
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button
-              type="button"
-              onClick={() => void handleCreate()}
-              disabled={creating}
-              style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--flow-accent)', background: 'var(--flow-accent)', color: 'white', fontSize: 11.5, fontWeight: 700, cursor: creating ? 'wait' : 'pointer' }}
-            >
-              {creating ? 'Creating…' : 'Create Subprocess'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowCreateForm(false)}
-              style={{ padding: '6px 12px', borderRadius: 7, border: '1px solid var(--flow-border)', background: 'var(--flow-surface)', color: 'var(--flow-text-muted)', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-2.5">
-        <div className={sectionLabel} style={{ color: 'var(--flow-text-subtle)' }}>Main Process</div>
+        <div className={`${sectionLabel} flex items-center gap-1`} style={{ color: 'var(--flow-text-subtle)' }}>
+          Preparation
+          <PreparationNotesPopover notes={preparationNotes} onSave={isOwner ? onSavePreparationNotes : undefined} />
+        </div>
+        {preparations.length > 0 ? (
+          preparations.map(renderCard)
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '10px 12px', borderRadius: 10, border: '1px dashed var(--flow-border)' }}>
+            <span style={{ fontSize: 11.5, color: 'var(--flow-text-muted)' }}>
+              No preparation yet: prep work that makes components, like chopped onions or a marinade.
+            </span>
+            {onOpenPreparation && (
+              <button
+                type="button"
+                onClick={onOpenPreparation}
+                disabled={creatingPreparation}
+                style={{ alignSelf: 'flex-start', padding: '5px 10px', borderRadius: 7, border: '1px solid var(--flow-accent)', background: 'var(--flow-accent)', color: 'white', fontSize: 11, fontWeight: 700, cursor: creatingPreparation ? 'wait' : 'pointer' }}
+              >
+                {creatingPreparation ? 'Adding…' : 'Add Preparation'}
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className={`${sectionLabel} mt-2`} style={{ color: 'var(--flow-text-subtle)' }}>Main Process</div>
         {mainProcess ? (
           renderCard(mainProcess)
         ) : (
@@ -234,28 +242,6 @@ export default function RecipeProcessSidebar({
               </button>
             )}
           </div>
-        )}
-
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <div className={sectionLabel} style={{ color: 'var(--flow-text-subtle)' }}>
-            Subprocesses{subprocesses.length > 0 ? ` (${subprocesses.length})` : ''}
-          </div>
-          {isOwner && (
-            <button
-              type="button"
-              onClick={openCreateForm}
-              aria-label="Add subprocess"
-              title="Add subprocess"
-              className="recipe-sidebar-section-add"
-            >
-              +
-            </button>
-          )}
-        </div>
-        {subprocesses.length === 0 ? (
-          <div style={{ fontSize: 11.5, color: 'var(--flow-text-subtle)', padding: '0 4px' }}>No subprocesses yet.</div>
-        ) : (
-          subprocesses.map(renderCard)
         )}
       </div>
 

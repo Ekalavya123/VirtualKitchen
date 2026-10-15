@@ -70,6 +70,7 @@ final class RecipeOrderFixtures {
         Map<String, Object> stepData = new LinkedHashMap<>();
         stepData.put("action", "mix");
         stepData.put("actionDescription", description);
+        stepData.put("expectedOutput", description);
         stepData.put("actionOn", actionOn);
         Process.ProcessNode node = new Process.ProcessNode();
         node.setId(id);
@@ -92,15 +93,30 @@ final class RecipeOrderFixtures {
         return node;
     }
 
+    /** A process whose nodes run one after another, as the editor connects them. */
     static Process process(long id, long recipeId, ProcessType type, String name, Process.ProcessNode... nodes) {
         Process process = new Process();
         process.setId(id);
         process.setRecipeId(recipeId);
         process.setType(type);
         process.setName(name);
-        process.setNodes(new ArrayList<>(List.of(nodes)));
+        process.setNodes(new ArrayList<>());
         process.setEdges(new ArrayList<>());
+        for (Process.ProcessNode node : nodes) append(process, node);
         return process;
+    }
+
+    /** Adds a node after the process's last one, connected to it. */
+    static void append(Process process, Process.ProcessNode node) {
+        if (!process.getNodes().isEmpty()) {
+            Process.ProcessEdge edge = new Process.ProcessEdge();
+            String source = process.getNodes().get(process.getNodes().size() - 1).getId();
+            edge.setId(source + "->" + node.getId());
+            edge.setSource(source);
+            edge.setTarget(node.getId());
+            process.getEdges().add(edge);
+        }
+        process.getNodes().add(node);
     }
 
     /**

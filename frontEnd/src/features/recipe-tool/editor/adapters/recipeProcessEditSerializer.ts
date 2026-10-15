@@ -14,6 +14,7 @@ import { buildDurationLabel } from '../../../../shared/catalog/stepFieldCatalog'
 import { normalizeConditionNodeData } from '../../model/recipeConditionData'
 import { normalizeRecipeStepNodeData } from '../../model/recipeStepData'
 import { getProcessReadingOrder } from '../../model/processReadingOrder'
+import { encodePreparedReference, getPreparedOutputs } from '../../model/preparationFlows'
 import { CONDITION_HANDLES } from '../../model/recipeNodeTypes'
 
 const YES_HANDLE = CONDITION_HANDLES.yes
@@ -34,10 +35,13 @@ const stepContent = (node: ProcessNode): GeneratedRecipeStep => {
         ingredientId: ingredient.ingredientId,
         quantity: ingredient.quantity,
         unit: orNull(ingredient.unit),
+        customUnit: orNull(ingredient.customUnit ?? ''),
         preparationStyle: orNull(ingredient.preparationStyleId ?? ''),
+        customPreparationStyle: orNull(ingredient.customPreparationStyle ?? ''),
         customIngredientName: orNull(ingredient.customIngredientName ?? ''),
+        notes: orNull(ingredient.notes ?? ''),
       })),
-      processes: step.actionOn.processes.map((entry) => String(entry.processId)),
+      processes: step.actionOn.processes.map(encodePreparedReference),
       steps: step.actionOn.steps.map((entry) => entry.stepId),
     },
     // A custom heat level has no catalog id; its wording lives in the description instead.
@@ -89,8 +93,9 @@ export const serializeProcessForEdit = (process: Process, allProcesses: Process[
     processId: process.id,
     name: process.name,
     nodes,
-    subprocesses: allProcesses
-      .filter((candidate) => candidate.id !== process.id && candidate.type === 'SUBPROCESS')
-      .map((candidate) => ({ processId: candidate.id, name: candidate.name })),
+    // What a main step can use: each Preparation step output, by name. Preparation steps use nothing.
+    subprocesses: process.type === 'MAIN'
+      ? getPreparedOutputs(allProcesses).map((output) => ({ processId: output.processId, stepId: output.stepId, name: output.label }))
+      : [],
   }
 }

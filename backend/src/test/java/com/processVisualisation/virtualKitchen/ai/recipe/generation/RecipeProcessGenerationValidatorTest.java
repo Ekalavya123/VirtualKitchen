@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -228,40 +229,54 @@ class RecipeProcessGenerationValidatorTest {
         ProcessValidationResult result = validator.validate(main, List.of());
 
         assertFalse(result.isValid());
-        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("unknown subprocess ref")));
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("unknown preparation ref")));
     }
 
     @Test
-    void validate_selfSubprocessReference_isRejected() {
-        GeneratedRecipeProcessDTO subprocess = process("loopy", "Loopy", List.of(
-                step("cook", actionOn(List.of(), List.of("loopy")), "Cook it.", "")
+    void validate_preparationUsingAnotherPreparation_isRejected() {
+        // Preparations are flat: a paste used inside a marinade belongs in the marinade's own flow.
+        GeneratedRecipeProcessDTO paste = process("paste", "Ginger-Garlic Paste", List.of(
+                step("grind", actionOn(List.of(ingredient("garlic", 4.0, "clove", null)), List.of()), "Grind the garlic.", "")
+        ));
+        GeneratedRecipeProcessDTO marinade = process("marinade", "Marinated Chicken", List.of(
+                step("marinate", actionOn(List.of(ingredient("chicken", 500.0, "g", null)), List.of("paste")), "Marinate.", "")
         ));
         GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
-                step("cook", actionOn(List.of(), List.of("loopy")), "Cook it.", "")
+                step("cook", actionOn(List.of(), List.of("paste", "marinade")), "Cook it.", "")
         ));
 
-        ProcessValidationResult result = validator.validate(main, List.of(subprocess));
+        ProcessValidationResult result = validator.validate(main, List.of(paste, marinade));
 
-        assertFalse(result.isValid());
-        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("self-reference")));
+        assertErrorContains(result, "only main steps may use a preparation's output");
     }
 
     @Test
-    void validate_circularSubprocessReferences_isRejected() {
-        GeneratedRecipeProcessDTO a = process("a", "A", List.of(
-                step("cook", actionOn(List.of(), List.of("b")), "Use B.", "")
-        ));
-        GeneratedRecipeProcessDTO b = process("b", "B", List.of(
-                step("cook", actionOn(List.of(), List.of("a")), "Use A.", "")
+    void validate_preparationWithoutOutputName_isRejected() {
+        GeneratedRecipeProcessDTO onions = process("onions", " ", List.of(
+                step("chop", actionOn(List.of(ingredient("onion", 2.0, "piece", "chopped")), List.of()), "Chop.", "")
         ));
         GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
-                step("cook", actionOn(List.of(), List.of("a")), "Use A.", "")
+                step("saute", actionOn(List.of(), List.of("onions")), "Fry the onions.", "")
         ));
 
-        ProcessValidationResult result = validator.validate(main, List.of(a, b));
+        assertErrorContains(validator.validate(main, List.of(onions)), "missing its output name");
+    }
 
-        assertFalse(result.isValid());
-        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("circular")));
+    @Test
+    void warnings_reportPreparationsTheMainProcessNeverUses() {
+        GeneratedRecipeProcessDTO onions = process("onions", "Chopped Onions", List.of(
+                step("chop", actionOn(List.of(ingredient("onion", 2.0, "piece", "chopped")), List.of()), "Chop.", "")
+        ));
+        GeneratedRecipeProcessDTO cilantro = process("cilantro", "Chopped Cilantro", List.of(
+                step("chop", actionOn(List.of(ingredient("cilantro", 1.0, "tbsp", "chopped")), List.of()), "Chop.", "")
+        ));
+        GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
+                step("saute", actionOn(List.of(), List.of("onions")), "Fry the onions.", "")
+        ));
+
+        assertTrue(validator.validate(main, List.of(onions, cilantro)).isValid(), "an unused preparation is only a warning");
+        assertEquals(List.of("The output of preparation 'Chopped Cilantro' is never used by the main process"),
+                validator.warnings(main, List.of(onions, cilantro)));
     }
 
     @Test
@@ -384,7 +399,7 @@ class RecipeProcessGenerationValidatorTest {
         ProcessValidationResult result = validator.validate(main, List.of(sauce));
 
         assertFalse(result.isValid());
-        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("cannot act on subprocess outputs")));
+        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("cannot act on prepared components")));
     }
 
     @Test
@@ -400,15 +415,17 @@ class RecipeProcessGenerationValidatorTest {
     }
 
     @Test
-    void validate_emptyActionOnForActionThatNeedsATarget_isRejected() {
+    void validate_stepWithoutTargets_continuesOnWhatIsInThePan() {
+        // "Simmer for 20 minutes" / "transfer to a plate" name no target: they act on the pan's current contents.
         GeneratedRecipeProcessDTO main = process(null, "Recipe", List.of(
-                step("chop", actionOn(List.of(), List.of()), "Chop.", "")
+                step("saute", actionOn(List.of(ingredient("onion", 1.0, "piece", null)), List.of()), "Fry the onion.", ""),
+                step("simmer", actionOn(List.of(), List.of()), "Simmer.", ""),
+                step("transfer", null, "Transfer to a bowl.", "")
         ));
 
         ProcessValidationResult result = validator.validate(main, List.of());
 
-        assertFalse(result.isValid());
-        assertTrue(result.getErrors().stream().anyMatch(e -> e.contains("needs at least one")));
+        assertTrue(result.isValid(), () -> String.join("; ", result.getErrors()));
     }
 
     @Test

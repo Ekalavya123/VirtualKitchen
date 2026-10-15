@@ -64,10 +64,15 @@ export const resolveUnitId = (value: unknown): UnitId | '' => resolveCatalogId(u
 
 export const isQuantifiableUnit = (unitId: UnitId | '') => !unitId || getUnitById(unitId).quantifiable
 
-/** "200 g", "2 tbsp", "2" (a plain piece count), "to taste" (non-numeric), or "" when there's nothing to show. */
-export const formatQuantityWithUnit = (quantity: number | null | undefined, unitId: UnitId | '') => {
+/**
+ * "200 g", "2 tbsp", "2" (a plain piece count), "1 knob" (a custom unit's own name), "to taste" (non-numeric),
+ * or "" when there's nothing to show.
+ */
+export const formatQuantityWithUnit = (quantity: number | null | undefined, unitId: UnitId | '', customUnit = '') => {
   if (unitId && !isQuantifiableUnit(unitId)) return getUnitById(unitId).shortLabel
   if (quantity == null) return ''
-  const unitLabel = unitId && unitId !== PIECE_UNIT_ID && unitId !== CUSTOM_UNIT_ID ? getUnitById(unitId).shortLabel : ''
+  const unitLabel = unitId === CUSTOM_UNIT_ID
+    ? customUnit.trim()
+    : unitId && unitId !== PIECE_UNIT_ID ? getUnitById(unitId).shortLabel : ''
   return unitLabel ? `${quantity} ${unitLabel}` : String(quantity)
 }

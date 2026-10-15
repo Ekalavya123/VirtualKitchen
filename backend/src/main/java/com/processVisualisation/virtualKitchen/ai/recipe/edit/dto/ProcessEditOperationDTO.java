@@ -38,6 +38,9 @@ public class ProcessEditOperationDTO {
     /** {@code after} value meaning "before the first node". */
     public static final String START = "START";
 
+    /** {@code after} value of an ADD_STEP that starts a new, unconnected flow (in a Preparation). */
+    public static final String NEW_FLOW = "NEW_FLOW";
+
     private String op;
     private String target;
     private String after;

@@ -10,9 +10,7 @@ import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVo
 import com.processVisualisation.virtualKitchen.recipe.validation.ProcessValidationResult;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -32,16 +30,19 @@ import static com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.Recip
 import static com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVocabularyProvider.FIELD_TEMPERATURE;
 
 /**
- * Validates an AI-generated semantic Process structure (a MAIN process plus
- * zero or more subprocesses, see {@link GeneratedRecipeProcessDTO}) before it is
- * returned to the frontend. Reuses {@link ProcessValidationResult} — the
+ * Validates an AI-generated recipe structure — the MAIN cooking sequence plus zero or more independent
+ * preparation flows (subprocesses whose name is their named output), see {@link GeneratedRecipeProcessDTO} —
+ * before it is returned to the frontend. Reuses {@link ProcessValidationResult} — the
  * same simple valid/errors shape {@code ProcessValidator} already uses for
  * the persisted Process model — since this validates the same kind of
  * concern (structural integrity) one step earlier, before ids/edges exist.
  * <p>
- * Vocabulary and per-action rules (allowed Action On targets, allowed fields,
+ * Structure is strict: only MAIN steps may use a preparation's output, and every such reference must resolve;
+ * preparations never reference each other (the model is flat). A STEP without any target is fine — it acts on
+ * whatever is already in the pan. Vocabulary and per-action rules (allowed Action On targets, allowed fields,
  * allowed preparation styles) come from the shared catalog via
- * {@link RecipeStepVocabularyProvider} — see docs/recipe-vocabulary-v2.md, sections F and G.
+ * {@link RecipeStepVocabularyProvider} — see docs/recipe-vocabulary-v2.md, sections F and G. Most catalog slips
+ * never reach this class: {@link RecipeProcessOutputNormalizer} repairs them first.
  * Error messages name the fix (allowed ids, or the canonical id an alias maps to) so the
  * single retry has what it needs.
  */
@@ -55,7 +56,7 @@ public class RecipeProcessGenerationValidator {
     private static final Pattern DURATION_PATTERN = Pattern.compile("^\\s*(\\d+(?:\\.\\d+)?)\\s*([a-zA-Z]+)\\s*$");
 
     /** Generous but finite caps so a pathological AI response can't produce an unbounded/unusable recipe. */
-    private static final int MAX_SUBPROCESSES = 12;
+    private static final int MAX_PREPARATIONS = 12;
     private static final int MAX_STEPS_PER_PROCESS = 40;
 
     private final RecipeStepVocabularyProvider vocabulary;
@@ -69,58 +70,75 @@ public class RecipeProcessGenerationValidator {
      * fast on the first one.
      *
      * @param mainProcess   the generated MAIN process (required)
-     * @param subprocesses  the generated subprocesses (may be empty, never null)
+     * @param preparations  the generated preparation flows (may be empty, never null)
      */
-    public ProcessValidationResult validate(GeneratedRecipeProcessDTO mainProcess, List<GeneratedRecipeProcessDTO> subprocesses) {
+    public ProcessValidationResult validate(GeneratedRecipeProcessDTO mainProcess, List<GeneratedRecipeProcessDTO> preparations) {
         List<String> errors = new ArrayList<>();
 
         if (mainProcess == null) {
-            errors.add("mainProcess is required");
+            errors.add("main is required");
             return new ProcessValidationResult(false, errors);
         }
-        if (subprocesses == null) {
-            errors.add("subprocesses must be an array");
+        if (preparations == null) {
+            errors.add("preparations must be an array");
             return new ProcessValidationResult(false, errors);
         }
 
-        if (subprocesses.size() > MAX_SUBPROCESSES) {
-            errors.add("too many subprocesses generated (" + subprocesses.size() + " > " + MAX_SUBPROCESSES + ")");
+        if (preparations.size() > MAX_PREPARATIONS) {
+            errors.add("too many preparations generated (" + preparations.size() + " > " + MAX_PREPARATIONS + ")");
         }
 
         Set<String> declaredRefs = new HashSet<>();
-        Map<String, GeneratedRecipeProcessDTO> subprocessByRef = new HashMap<>();
-        for (int i = 0; i < subprocesses.size(); i++) {
-            GeneratedRecipeProcessDTO subprocess = subprocesses.get(i);
-            if (subprocess == null) {
-                errors.add("subprocesses[" + i + "] is null");
+        for (int i = 0; i < preparations.size(); i++) {
+            GeneratedRecipeProcessDTO preparation = preparations.get(i);
+            if (preparation == null) {
+                errors.add("preparations[" + i + "] is null");
                 continue;
             }
-            String ref = subprocess.getRef();
+            String ref = preparation.getRef();
             if (isBlank(ref)) {
-                errors.add("subprocesses[" + i + "].ref is required");
+                errors.add("preparations[" + i + "].ref is required");
             } else if (!declaredRefs.add(ref)) {
-                errors.add("duplicate subprocess ref: " + ref);
-            } else {
-                subprocessByRef.put(ref, subprocess);
+                errors.add("duplicate preparation ref: " + ref);
             }
-            if (isBlank(subprocess.getName())) {
-                errors.add("subprocesses[" + i + "] (ref=" + ref + ") is missing a name");
+            if (isBlank(preparation.getName())) {
+                errors.add("preparations[" + i + "] (ref=" + ref + ") is missing its output name");
             }
         }
 
-        validateProcessSteps(mainProcess, "mainProcess", declaredRefs, null, errors);
-        for (GeneratedRecipeProcessDTO subprocess : subprocesses) {
-            if (subprocess == null || isBlank(subprocess.getRef())) continue;
-            validateProcessSteps(subprocess, "subprocess[" + subprocess.getRef() + "]", declaredRefs, subprocess.getRef(), errors);
+        validateProcessSteps(mainProcess, "main", declaredRefs, errors);
+        // Preparations are flat: none may use another preparation's output (null = no refs may be used at all).
+        for (GeneratedRecipeProcessDTO preparation : preparations) {
+            if (preparation == null || isBlank(preparation.getRef())) continue;
+            validateProcessSteps(preparation, "preparations[" + preparation.getRef() + "]", null, errors);
         }
-
-        validateNoCircularSubprocessReferences(subprocessByRef, errors);
 
         return new ProcessValidationResult(errors.isEmpty(), errors);
     }
 
+    /**
+     * Problems that don't make the result unusable but deserve the user's attention: a preparation whose output no
+     * main step uses (its ingredients still count, but the main process never says when it goes in).
+     */
+    public List<String> warnings(GeneratedRecipeProcessDTO mainProcess, List<GeneratedRecipeProcessDTO> preparations) {
+        if (mainProcess == null || mainProcess.getSteps() == null || preparations == null) return List.of();
+        Set<String> used = new HashSet<>();
+        for (GeneratedRecipeStepDTO step : mainProcess.getSteps()) {
+            if (step != null && step.getActionOn() != null && step.getActionOn().getProcesses() != null) {
+                used.addAll(step.getActionOn().getProcesses());
+            }
+        }
+        List<String> warnings = new ArrayList<>();
+        for (GeneratedRecipeProcessDTO preparation : preparations) {
+            if (preparation != null && !isBlank(preparation.getRef()) && !used.contains(preparation.getRef())) {
+                warnings.add("The output of preparation '" + preparation.getName() + "' is never used by the main process");
+            }
+        }
+        return warnings;
+    }
+
     private void validateProcessSteps(
-            GeneratedRecipeProcessDTO process, String label, Set<String> declaredRefs, String ownRef, List<String> errors
+            GeneratedRecipeProcessDTO process, String label, Set<String> declaredRefs, List<String> errors
     ) {
         List<GeneratedRecipeStepDTO> steps = process.getSteps();
         if (steps == null) {
@@ -135,7 +153,7 @@ public class RecipeProcessGenerationValidator {
             errors.add(label + " has too many steps (" + steps.size() + " > " + MAX_STEPS_PER_PROCESS + ")");
         }
 
-        validateStepList(steps, index -> label + ".steps[" + index + "]", declaredRefs, ownRef, errors);
+        validateStepList(steps, index -> label + ".steps[" + index + "]", declaredRefs, errors);
     }
 
     /**
@@ -143,19 +161,19 @@ public class RecipeProcessGenerationValidator {
      * position — so the labels stay stable when nodes are inserted or removed. Used by the AI edit flow to compare
      * a process before and after a set of edit operations; every node must carry a stepId.
      *
-     * @param declaredRefs the subprocess refs a step's {@code processes} may name
+     * @param declaredRefs the process refs a step's {@code uses} may name
      */
     public List<String> validateSteps(List<GeneratedRecipeStepDTO> steps, Set<String> declaredRefs) {
         List<String> errors = new ArrayList<>();
         if (steps.size() > MAX_STEPS_PER_PROCESS) {
             errors.add("the process has too many steps (" + steps.size() + " > " + MAX_STEPS_PER_PROCESS + ")");
         }
-        validateStepList(steps, index -> "step " + steps.get(index).getStepId(), declaredRefs, null, errors);
+        validateStepList(steps, index -> "step " + steps.get(index).getStepId(), declaredRefs, errors);
         return errors;
     }
 
     private void validateStepList(
-            List<GeneratedRecipeStepDTO> steps, IntFunction<String> stepLabel, Set<String> declaredRefs, String ownRef, List<String> errors
+            List<GeneratedRecipeStepDTO> steps, IntFunction<String> stepLabel, Set<String> declaredRefs, List<String> errors
     ) {
         // stepId -> position, collected up front so each reference can be checked for "earlier".
         Map<String, Integer> stepIndexById = new HashMap<>();
@@ -169,7 +187,7 @@ public class RecipeProcessGenerationValidator {
 
         for (int i = 0; i < steps.size(); i++) {
             StepOutputScope scope = new StepOutputScope(steps, stepIndexById, i);
-            validateStep(steps.get(i), stepLabel.apply(i), declaredRefs, ownRef, scope, errors);
+            validateStep(steps.get(i), stepLabel.apply(i), declaredRefs, scope, errors);
         }
     }
 
@@ -177,7 +195,7 @@ public class RecipeProcessGenerationValidator {
     private record StepOutputScope(List<GeneratedRecipeStepDTO> steps, Map<String, Integer> stepIndexById, int consumerIndex) {}
 
     private void validateStep(
-            GeneratedRecipeStepDTO step, String label, Set<String> declaredRefs, String ownRef, StepOutputScope scope, List<String> errors
+            GeneratedRecipeStepDTO step, String label, Set<String> declaredRefs, StepOutputScope scope, List<String> errors
     ) {
         if (step == null) {
             errors.add(label + " is null");
@@ -232,7 +250,7 @@ public class RecipeProcessGenerationValidator {
         }
 
         // actionOn is flattened onto the step in the model's output, so its errors are labelled at step level.
-        validateActionOn(step.getActionOn(), definition, label, declaredRefs, ownRef, scope, errors);
+        validateActionOn(step.getActionOn(), definition, label, declaredRefs, scope, errors);
         if (definition != null) {
             validateStepFields(step, definition, label, errors);
         }
@@ -279,7 +297,7 @@ public class RecipeProcessGenerationValidator {
     }
 
     private void validateActionOn(
-            GeneratedActionOnDTO actionOn, ActionDefinition action, String label, Set<String> declaredRefs, String ownRef,
+            GeneratedActionOnDTO actionOn, ActionDefinition action, String label, Set<String> declaredRefs,
             StepOutputScope scope, List<String> errors
     ) {
         List<GeneratedActionOnIngredientDTO> ingredients = actionOn == null || actionOn.getIngredients() == null ? List.of() : actionOn.getIngredients();
@@ -291,7 +309,7 @@ public class RecipeProcessGenerationValidator {
                 errors.add(label + ".ingredients: action " + action.id() + " cannot act on ingredients (allowed targets: " + action.actionOn() + ")");
             }
             if (!processes.isEmpty() && !action.actionOn().allowsProcesses()) {
-                errors.add(label + ".processes: action " + action.id() + " cannot act on subprocess outputs (allowed targets: " + action.actionOn() + ")");
+                errors.add(label + ".uses: action " + action.id() + " cannot act on prepared components (allowed targets: " + action.actionOn() + ")");
             }
             // A step output is a prepared intermediate, like a subprocess output — same catalog rule.
             if (!stepRefs.isEmpty() && !action.actionOn().allowsProcesses()) {
@@ -300,9 +318,7 @@ public class RecipeProcessGenerationValidator {
             if (ingredients.size() > 1 && !action.multipleIngredients()) {
                 errors.add(label + ".ingredients: action " + action.id() + " takes at most one ingredient per step, got " + ingredients.size());
             }
-            if (ingredients.isEmpty() && processes.isEmpty() && stepRefs.isEmpty() && action.actionOnRequired()) {
-                errors.add(label + " has no ingredients, processes or fromSteps but action " + action.id() + " needs at least one target");
-            }
+            // No target at all is fine: the step acts on what is already in the pan ("simmer", "transfer to a plate").
         }
 
         for (int i = 0; i < stepRefs.size(); i++) {
@@ -315,17 +331,14 @@ public class RecipeProcessGenerationValidator {
 
         for (int i = 0; i < processes.size(); i++) {
             String ref = processes.get(i);
-            String itemLabel = label + ".processes[" + i + "]";
+            String itemLabel = label + ".uses[" + i + "]";
             if (isBlank(ref)) {
                 errors.add(itemLabel + " is blank");
-                continue;
-            }
-            if (ownRef != null && ownRef.equals(ref)) {
-                errors.add(itemLabel + " is a self-reference: " + ref);
-                continue;
-            }
-            if (!declaredRefs.contains(ref)) {
-                errors.add(itemLabel + " references an unknown subprocess ref: " + ref);
+            } else if (declaredRefs == null) {
+                errors.add(itemLabel + " uses " + ref + ", but only main steps may use a preparation's output"
+                        + " — fold that preparation's steps into this one instead");
+            } else if (!declaredRefs.contains(ref)) {
+                errors.add(itemLabel + " references an unknown preparation ref: " + ref + " (declared: " + String.join(", ", declaredRefs) + ")");
             }
         }
     }
@@ -431,65 +444,6 @@ public class RecipeProcessGenerationValidator {
     /** Names the canonical id when an unknown value is one of the catalog's input aliases (e.g. "dhania" -> "cilantro"). */
     private static String aliasHint(Optional<String> canonical) {
         return canonical.map(id -> " (use the canonical id '" + id + "')").orElse("");
-    }
-
-    /**
-     * Detects cycles among subprocess-to-subprocess Action On references (e.g. A references B, B
-     * references A) via a plain depth-first search over the ref graph. Self-references are already
-     * rejected in {@link #validateActionOn}, so this only needs to catch cycles of length &gt;= 2.
-     */
-    private void validateNoCircularSubprocessReferences(Map<String, GeneratedRecipeProcessDTO> subprocessByRef, List<String> errors) {
-        Map<String, Set<String>> referencesByRef = new HashMap<>();
-        for (Map.Entry<String, GeneratedRecipeProcessDTO> entry : subprocessByRef.entrySet()) {
-            referencesByRef.put(entry.getKey(), collectReferencedSubprocesses(entry.getValue()));
-        }
-
-        Set<String> reportedCycles = new HashSet<>();
-        for (String start : referencesByRef.keySet()) {
-            List<String> cycle = findCycleFrom(start, referencesByRef);
-            if (cycle != null) {
-                String key = new HashSet<>(cycle).toString();
-                if (reportedCycles.add(key)) {
-                    errors.add("circular subprocess reference detected: " + String.join(" -> ", cycle));
-                }
-            }
-        }
-    }
-
-    private Set<String> collectReferencedSubprocesses(GeneratedRecipeProcessDTO subprocess) {
-        Set<String> refs = new HashSet<>();
-        if (subprocess.getSteps() == null) return refs;
-        for (GeneratedRecipeStepDTO step : subprocess.getSteps()) {
-            if (step == null || step.getActionOn() == null || step.getActionOn().getProcesses() == null) continue;
-            for (String ref : step.getActionOn().getProcesses()) {
-                if (!isBlank(ref)) refs.add(ref);
-            }
-        }
-        return refs;
-    }
-
-    private List<String> findCycleFrom(String start, Map<String, Set<String>> referencesByRef) {
-        Deque<String> path = new ArrayDeque<>();
-        Set<String> onPath = new HashSet<>();
-        return dfs(start, referencesByRef, path, onPath);
-    }
-
-    private List<String> dfs(String current, Map<String, Set<String>> referencesByRef, Deque<String> path, Set<String> onPath) {
-        path.addLast(current);
-        onPath.add(current);
-
-        for (String next : referencesByRef.getOrDefault(current, Set.of())) {
-            if (onPath.contains(next)) {
-                path.addLast(next);
-                return new ArrayList<>(path);
-            }
-            List<String> found = dfs(next, referencesByRef, path, onPath);
-            if (found != null) return found;
-        }
-
-        path.removeLast();
-        onPath.remove(current);
-        return null;
     }
 
     private boolean isBlank(String value) {

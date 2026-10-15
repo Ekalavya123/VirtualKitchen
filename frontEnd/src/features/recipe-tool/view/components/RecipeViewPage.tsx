@@ -4,6 +4,8 @@ import '../../../../styles/flow-ui.css'
 import '../styles/recipe-view.css'
 import type { NutritionInfo, RecipeDetail } from '../../../../types/recipe'
 import { useRecipeSession } from '../../session/sessionContext'
+import { useReadinessGate } from '../../session/useRecipeReadiness'
+import type { ReadinessIssue } from '../../model/recipeReadiness'
 import { recipeToolPath } from '../../recipeToolRoutes'
 import { buildRecipePresentation } from '../model/recipeView'
 import { buildCookModeSlides } from '../model/cookModeSlides'
@@ -17,6 +19,8 @@ type RecipeViewPageProps = {
   recipe: RecipeDetail
   isOwner: boolean
   onNutritionSaved: (nutrition: NutritionInfo | null) => void
+  /** Opens an issue that blocks cook mode in the editor (owners only). */
+  onShowIssue?: (issue: ReadinessIssue) => void
 }
 
 const ANCHORS = {
@@ -31,8 +35,9 @@ const ANCHORS = {
  * recipe session the Recipe Editor edits (see buildRecipePresentation), so it always reflects the
  * editor's latest content, including edits that haven't been saved yet.
  */
-export default function RecipeViewPage({ recipe, isOwner, onNutritionSaved }: RecipeViewPageProps) {
+export default function RecipeViewPage({ recipe, isOwner, onNutritionSaved, onShowIssue }: RecipeViewPageProps) {
   const session = useRecipeSession()
+  const readinessGate = useReadinessGate(isOwner ? onShowIssue : undefined)
 
   // `session` changes identity on every process edit (its `version` bumps), which is exactly
   // when this needs re-deriving.
@@ -41,12 +46,13 @@ export default function RecipeViewPage({ recipe, isOwner, onNutritionSaved }: Re
     [session],
   )
 
-  // Cook mode: the whole recipe, one step at a time, narrated. Narration is generated from the
-  // *saved* steps, so the owner's pending edits are saved first (as the editor's Preview does).
+  // Cook mode: the whole recipe, one step at a time, narrated. It needs the whole structure (preparations
+  // feeding one connected main process), and narration is generated from the *saved* steps — the gate saves
+  // the owner's pending edits first, then refuses (explaining why) while the recipe has blockers.
   const [cookMode, setCookMode] = useState<{ ready: Promise<boolean> } | null>(null)
-  const openCookMode = () => {
-    const ready = isOwner && session ? session.saveNow().then((result) => result.ok, () => false) : Promise.resolve(true)
-    setCookMode({ ready })
+  const openCookMode = async () => {
+    if (!(await readinessGate('cooking'))) return
+    setCookMode({ ready: Promise.resolve(true) })
   }
 
   if (session?.loadError) {
@@ -99,7 +105,7 @@ export default function RecipeViewPage({ recipe, isOwner, onNutritionSaved }: Re
               Recipe Steps
             </h2>
             {hasSteps && (
-              <button type="button" className="rp-button" onClick={openCookMode} title="Follow the recipe one step at a time, with narration">
+              <button type="button" className="rp-button" onClick={() => void openCookMode()} title="Follow the recipe one step at a time, with narration">
                 <span aria-hidden>▶</span> Cook mode
               </button>
             )}

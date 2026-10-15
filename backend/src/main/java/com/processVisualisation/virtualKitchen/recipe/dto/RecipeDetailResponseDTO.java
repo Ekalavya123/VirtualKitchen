@@ -24,6 +24,8 @@ public class RecipeDetailResponseDTO {
     private Visibility visibility;
     private List<RecipeIngredientDTO> ingredients;
     private NutritionInfoDTO nutrition;
+    /** The recipe's own default preparation guidance; null means the application's default text. */
+    private String preparationNotes;
     private Long mainProcessId;
     /** The recipe's current process revision (see {@code RecipeTemplate.processRevision}); 0 if never saved. */
     private Long processRevision;

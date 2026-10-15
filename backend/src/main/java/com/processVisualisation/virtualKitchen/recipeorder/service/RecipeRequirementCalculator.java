@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -51,6 +52,8 @@ public final class RecipeRequirementCalculator {
     public Result calculate(List<Process> processes, double scale, Map<Long, Ingredient> ingredientsById) {
         Map<Long, IngredientRequirement> byIngredient = new LinkedHashMap<>();
         List<RequirementIssue> issues = new ArrayList<>();
+        // One issue per uncatalogued ingredient however many steps use it: the list of things to resolve.
+        Map<String, CustomUse> customUses = new LinkedHashMap<>();
         Set<Long> seenProcesses = new HashSet<>();
         int stepCount = 0;
 
@@ -60,28 +63,41 @@ public final class RecipeRequirementCalculator {
                 if (node == null || node.getKind() != ProcessNodeKind.STEP) continue;
                 stepCount++;
                 for (Map<?, ?> line : ingredientLines(node)) {
-                    addLine(process, node, line, scale, ingredientsById, byIngredient, issues);
+                    addLine(process, node, line, scale, ingredientsById, byIngredient, issues, customUses);
                 }
             }
         }
+
+        customUses.values().forEach(use -> use.issue().setMessage("\"" + use.issue().getName() + "\" isn't in the ingredient catalog"
+                + (use.steps() > 1 ? " (used in " + use.steps() + " steps)" : "")
+                + ", so it can't be checked against your kitchen inventory. Match it to a catalog ingredient in the recipe editor."));
 
         List<IngredientRequirement> requirements = new ArrayList<>(byIngredient.values());
         requirements.forEach(requirement -> requirement.setRequiredQuantity(round(requirement.getRequiredQuantity())));
         return new Result(requirements, issues, stepCount);
     }
 
+    /** An uncatalogued ingredient's single issue and how many steps use it. */
+    private record CustomUse(RequirementIssue issue, int steps) {}
+
     private void addLine(Process process, Process.ProcessNode node, Map<?, ?> line, double scale,
                          Map<Long, Ingredient> ingredientsById, Map<Long, IngredientRequirement> byIngredient,
-                         List<RequirementIssue> issues) {
+                         List<RequirementIssue> issues, Map<String, CustomUse> customUses) {
         String ref = asString(line.get("ingredientId"));
         String customName = asString(line.get("customIngredientName"));
         if (ref == null || ref.isBlank()) return; // an empty picker row adds nothing
 
         Long ingredientId = parseId(ref);
         if (ingredientId == null) {
-            String name = customName != null && !customName.isBlank() ? customName : ref;
-            issues.add(issue(ref, name, process, node, "\"" + name + "\" is a custom ingredient, not one from the ingredient catalog, so it "
-                    + "can't be checked against your kitchen inventory. Replace it with a catalog ingredient in the recipe editor."));
+            String name = customName != null && !customName.isBlank() ? customName.trim() : ref;
+            CustomUse use = customUses.get(name.toLowerCase(Locale.ROOT));
+            if (use == null) {
+                RequirementIssue issue = issue(ref, name, process, node, "");
+                issues.add(issue);
+                customUses.put(name.toLowerCase(Locale.ROOT), new CustomUse(issue, 1));
+            } else {
+                customUses.put(name.toLowerCase(Locale.ROOT), new CustomUse(use.issue(), use.steps() + 1));
+            }
             return;
         }
         Ingredient ingredient = ingredientsById.get(ingredientId);
@@ -98,7 +114,12 @@ public final class RecipeRequirementCalculator {
         try {
             converted = conversions.convert(quantity, unit, target, ingredient);
         } catch (UnitConversionException e) {
-            issues.add(issue(ref, ingredient.getName(), process, node, ingredient.getName() + ": " + e.getMessage() + "."));
+            String customUnit = asString(line.get("customUnit"));
+            String message = "custom".equals(unit)
+                    ? ingredient.getName() + ": the unit \"" + (customUnit == null || customUnit.isBlank() ? "custom" : customUnit.trim())
+                        + "\" can't be converted. Use a standard unit for it in the recipe editor."
+                    : ingredient.getName() + ": " + e.getMessage() + ".";
+            issues.add(issue(ref, ingredient.getName(), process, node, message));
             return;
         }
         double amount = converted.value() * scale;

@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.recipe.edit;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.RecipeProcessOutput;
 
 import java.util.List;
@@ -45,6 +46,7 @@ public record RecipeProcessEditOutput(String summary, List<Operation> operations
             String duration,
             String repeatInterval,
             List<String> fromSteps,
-            List<String> processes
+            /* The process aliases (p1, ...) whose output the step uses. */
+            @JsonAlias("processes") List<String> uses
     ) {}
 }

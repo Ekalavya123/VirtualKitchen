@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { RecipeApi, RecipeDetailApi } from '../../../api'
 import type { NutritionInfo, RecipeDetail } from '../../../types/recipe'
 import { RecipeSessionProvider } from '../session/RecipeSessionProvider'
@@ -13,6 +13,7 @@ import { useConfirm } from '../../../shared/components/confirm/confirmContext'
 import { useNotifications } from '../../../shared/components/notifications/notificationContext'
 import { forgetRecipeLocalState } from '../session/forgetRecipeLocalState'
 import { errorMessage } from '../../../shared/errors'
+import type { ReadinessIssue } from '../model/recipeReadiness'
 
 type RecipeToolPageProps = {
   recipeId: number
@@ -49,6 +50,13 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, 
   // process. Not mounted up front: React Flow shouldn't initialise inside a hidden container.
   const [editorMounted, setEditorMounted] = useState(view === 'editor')
   if (view === 'editor' && !editorMounted) setEditorMounted(true)
+  // An issue that blocked ordering or cook mode, opened in the editor from the dialog's "Show me".
+  const navigate = useNavigate()
+  const [issueFocusRequest, setIssueFocusRequest] = useState<{ issue: ReadinessIssue; token: number } | null>(null)
+  const showIssue = useCallback((issue: ReadinessIssue) => {
+    setIssueFocusRequest({ issue, token: Date.now() })
+    navigate(recipeToolPath(recipeId, 'editor'))
+  }, [navigate, recipeId])
 
   useEffect(() => {
     let cancelled = false
@@ -101,6 +109,12 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, 
   const handleNutritionSaved = useCallback((nutrition: NutritionInfo | null) => {
     setRecipe((current) => (current ? { ...current, nutrition } : current))
   }, [])
+
+  const savePreparationNotes = useCallback(async (preparationNotes: string | null) => {
+    const updated = await RecipeApi.updatePreparationNotes(recipeId, currentUserId, preparationNotes)
+    setRecipe((current) => (current ? { ...current, preparationNotes: updated.preparationNotes ?? null } : current))
+    notifySuccess(updated.preparationNotes ? 'Preparation notes saved for this recipe.' : 'Preparation notes reset to the default.')
+  }, [recipeId, currentUserId, notifySuccess])
 
   // --- owner actions (the header's ⋯ menu) ---
 
@@ -192,6 +206,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, 
           onBack={onBack}
           onOrderRecipe={isOwner && onOrderRecipe ? () => onOrderRecipe(recipe.id, recipe.nutrition?.servings) : undefined}
           ordering={orderingRecipeId === recipe.id}
+          onShowIssue={isOwner ? showIssue : undefined}
           onEditDetails={isOwner ? () => setEditingDetails(true) : undefined}
           onToggleVisibility={isOwner ? () => void toggleVisibility() : undefined}
           onDeleteRecipe={isOwner ? () => void deleteRecipe() : undefined}
@@ -205,12 +220,20 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, 
 
         {editorMounted && (
           <div className="min-h-0 flex-1" style={{ display: view === 'editor' ? 'flex' : 'none', flexDirection: 'column' }}>
-            <RecipeEditorView recipeId={recipeId} recipeName={recipe.name} isOwner={isOwner} onMainProcessChanged={handleMainProcessChanged} />
+            <RecipeEditorView
+              recipeId={recipeId}
+              recipeName={recipe.name}
+              isOwner={isOwner}
+              onMainProcessChanged={handleMainProcessChanged}
+              preparationNotes={recipe.preparationNotes ?? null}
+              onSavePreparationNotes={isOwner ? savePreparationNotes : undefined}
+              issueFocusRequest={issueFocusRequest}
+            />
           </div>
         )}
 
         {view === 'process' && (
-          <RecipeViewPage recipe={recipe} isOwner={isOwner} onNutritionSaved={handleNutritionSaved} />
+          <RecipeViewPage recipe={recipe} isOwner={isOwner} onNutritionSaved={handleNutritionSaved} onShowIssue={showIssue} />
         )}
       </div>
     </RecipeSessionProvider>

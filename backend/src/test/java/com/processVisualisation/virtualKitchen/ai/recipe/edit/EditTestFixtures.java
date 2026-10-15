@@ -123,6 +123,10 @@ final class EditTestFixtures {
         return new RecipeProcessEditOutput.StepPatch(null, null, null, null, null, null, null, duration, null, null, null);
     }
 
+    static RecipeProcessEditOutput.StepPatch patchUses(List<String> uses) {
+        return new RecipeProcessEditOutput.StepPatch(null, null, null, null, null, null, null, null, null, null, uses);
+    }
+
     static RecipeProcessEditOutput.StepPatch patchFlame(String flameLevel) {
         return new RecipeProcessEditOutput.StepPatch(null, null, null, null, null, null, flameLevel, null, null, null, null);
     }

@@ -67,7 +67,9 @@ class RecipeProcessGenerationPromptBuilderTest {
         assertTrue(prompt.contains(new RecipeProcessOutputSchema(VOCABULARY).promptBlock()));
         assertTrue(prompt.contains("minified JSON"));
         assertTrue(prompt.contains("OMIT every optional field"));
-        assertTrue(prompt.contains("STEP {stepId, action!, customActionName, ingredients, processes, fromSteps, actionDescription!,"));
+        assertTrue(prompt.contains("STEP {stepId, action!, customActionName, ingredients, uses, fromSteps, actionDescription!,"));
+        assertTrue(prompt.contains("PREPARATION {ref!, output!, steps!}"));
+        assertTrue(prompt.contains("INGREDIENT {ingredientId!, name!, quantity, unit, customUnit, preparationStyle, customPreparationStyle, customIngredientName}"));
         assertTrue(prompt.contains("CONDITION {nodeType!, title!, expectedResult, actionDescription!, expectedOutput}"));
         assertFalse(prompt.contains("\"actionOn\""), "actionOn is flattened onto the step");
         assertFalse(prompt.contains(": \"\""), "the prompt must not show empty-string placeholders the model would echo");
@@ -76,7 +78,17 @@ class RecipeProcessGenerationPromptBuilderTest {
     @Test
     void describesStepIdsOnlyForReferencedStepsAndFromSteps() {
         assertTrue(prompt.contains("STEP OUTPUTS"));
-        assertTrue(prompt.contains("\"fromSteps\":[\"s1\"]"));
+        assertTrue(prompt.contains("\"fromSteps\":[\"b1\"]"));
         assertTrue(prompt.contains("Set \"stepId\" ONLY on a step that a later step lists in \"fromSteps\""));
+    }
+
+    @Test
+    void describesFlatNamedPreparationsAndOneMainSequence() {
+        assertTrue(prompt.contains("RECIPE STRUCTURE: PREPARATIONS + MAIN"));
+        assertTrue(prompt.contains("a preparation never uses another preparation's output"));
+        assertTrue(prompt.contains("Every preparation's output must be used by at least one MAIN step."));
+        assertTrue(prompt.contains("a step with no target acts on what is already in the pan"));
+        assertTrue(prompt.contains("default preparation notes"), "routine washing/peeling is left to the notes");
+        assertFalse(prompt.contains("subprocess"), "the model only ever hears about preparations");
     }
 }

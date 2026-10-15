@@ -156,10 +156,14 @@ public class RecipeProcessGenerationService {
 
         try {
             RecipeProcessOutput output = responseSupport.readValue(content, RecipeProcessOutput.class);
-            GeneratedRecipeProcessDTO mainProcess = outputNormalizer.toProcess(output.mainProcess());
-            List<GeneratedRecipeProcessDTO> subprocesses = outputNormalizer.toSubprocesses(output.subprocesses());
+            // Cosmetic slips (aliases, uncatalogued values, fields the action doesn't take) are repaired here, so a
+            // retry is only spent on real structural errors.
+            RecipeProcessOutputNormalizer.Normalized normalized = outputNormalizer.normalize(output);
+            GeneratedRecipeProcessDTO mainProcess = normalized.main();
+            List<GeneratedRecipeProcessDTO> preparations = normalized.preparations();
+            logRepairs(normalized.repairs());
 
-            ProcessValidationResult validationResult = validator.validate(mainProcess, subprocesses);
+            ProcessValidationResult validationResult = validator.validate(mainProcess, preparations);
             if (!validationResult.isValid()) {
                 responseSupport.persistAIResponse("process-generation", userPrompt, response, false, durationMs, validationResult.getErrors());
                 return AttemptResult.invalid(content, validationResult.getErrors());
@@ -167,7 +171,9 @@ public class RecipeProcessGenerationService {
 
             RecipeProcessGenerationResultDTO generated = RecipeProcessGenerationResultDTO.builder()
                     .mainProcess(mainProcess)
-                    .subprocesses(subprocesses)
+                    .subprocesses(preparations)
+                    .repairs(normalized.repairs())
+                    .warnings(validator.warnings(mainProcess, preparations))
                     .build();
             responseSupport.persistAIResponse("process-generation", userPrompt, response, true, durationMs, List.of());
             return AttemptResult.valid(content, generated);
@@ -176,6 +182,13 @@ public class RecipeProcessGenerationService {
             responseSupport.persistAIResponse("process-generation", userPrompt, response, false, durationMs, errors);
             return AttemptResult.invalid(content, errors);
         }
+    }
+
+    private void logRepairs(List<String> repairs) {
+        if (repairs.isEmpty()) return;
+        logger.info("event=process_output_repaired promptVersion={} repairCount={}", RecipeProcessGenerationPromptBuilder.PROMPT_VERSION, repairs.size());
+        // The messages quote fragments of the model output, so they stay at DEBUG.
+        logger.debug("event=process_output_repairs repairs={}", repairs);
     }
 
     private void logValidationCompleted(int attempt, RecipeProcessGenerationResultDTO result) {

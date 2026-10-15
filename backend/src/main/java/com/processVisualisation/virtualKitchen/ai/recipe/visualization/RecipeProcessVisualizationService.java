@@ -98,13 +98,13 @@ public class RecipeProcessVisualizationService {
                 .orElseThrow(() -> new RecipeProcessAiException("Process not found: " + processId));
 
         List<Process.ProcessNode> orderedSteps = ProcessStepOrder.orderedSteps(process);
-        Map<Long, String> subprocessNameById = resolveSubprocessNames(orderedSteps);
+        Map<String, String> preparedNameByKey = resolvePreparedNames(orderedSteps);
 
         List<StepContext> contexts = new ArrayList<>();
         String previousExpectedOutput = null;
         for (Process.ProcessNode node : orderedSteps) {
             Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
-            RecipeProcessVisualizationInput input = extractVisualizationInput(data, subprocessNameById, previousExpectedOutput);
+            RecipeProcessVisualizationInput input = extractVisualizationInput(data, preparedNameByKey, previousExpectedOutput);
             contexts.add(new StepContext(node, input));
             previousExpectedOutput = input.expectedOutput();
         }
@@ -316,20 +316,46 @@ public class RecipeProcessVisualizationService {
         return content;
     }
 
-    /** Batch-resolves every subprocess name referenced by any step's Action On, in one query. */
-    private Map<Long, String> resolveSubprocessNames(List<Process.ProcessNode> stepNodes) {
-        Set<Long> referencedIds = new LinkedHashSet<>();
+    /** A step's use of a prepared component: a Preparation step's output ({@code stepId}), or (older data) a whole process. */
+    private record PreparedRef(long processId, String stepId) {
+        String key() {
+            return stepId == null ? String.valueOf(processId) : processId + ":" + stepId;
+        }
+    }
+
+    /**
+     * Batch-resolves the name of every prepared component used by any step's Action On, in one query: a Preparation
+     * step's Expected Output (falling back to the process's name), or a whole process's name.
+     */
+    private Map<String, String> resolvePreparedNames(List<Process.ProcessNode> stepNodes) {
+        List<PreparedRef> references = new ArrayList<>();
         for (Process.ProcessNode node : stepNodes) {
             Map<String, Object> data = node.getData() != null ? node.getData() : Map.of();
-            for (Long processId : extractSubprocessIds(extractStepFields(data))) {
-                referencedIds.add(processId);
-            }
+            references.addAll(extractPreparedRefs(extractStepFields(data)));
         }
-        if (referencedIds.isEmpty()) {
+        if (references.isEmpty()) {
             return Map.of();
         }
-        return processRepository.findAllById(referencedIds).stream()
-                .collect(Collectors.toMap(Process::getId, Process::getName, (a, b) -> a));
+        Set<Long> processIds = new LinkedHashSet<>();
+        references.forEach(reference -> processIds.add(reference.processId()));
+        Map<Long, Process> processesById = processRepository.findAllById(processIds).stream()
+                .collect(Collectors.toMap(Process::getId, process -> process, (a, b) -> a));
+
+        Map<String, String> names = new LinkedHashMap<>();
+        for (PreparedRef reference : references) {
+            Process process = processesById.get(reference.processId());
+            if (process == null) continue;
+            String name = process.getName();
+            if (reference.stepId() != null && process.getNodes() != null) {
+                for (Process.ProcessNode node : process.getNodes()) {
+                    if (node == null || !reference.stepId().equals(node.getId())) continue;
+                    String output = asString(extractStepFields(node.getData() != null ? node.getData() : Map.of()).get("expectedOutput")).trim();
+                    if (!output.isEmpty()) name = output;
+                }
+            }
+            names.put(reference.key(), name);
+        }
+        return names;
     }
 
     @SuppressWarnings("unchecked")
@@ -339,7 +365,7 @@ public class RecipeProcessVisualizationService {
     }
 
     private RecipeProcessVisualizationInput extractVisualizationInput(
-            Map<String, Object> data, Map<Long, String> subprocessNameById, String previousExpectedOutput) {
+            Map<String, Object> data, Map<String, String> preparedNameByKey, String previousExpectedOutput) {
         Map<String, Object> step = extractStepFields(data);
 
         String actionId = asString(step.get("action"));
@@ -348,8 +374,8 @@ public class RecipeProcessVisualizationService {
                 : vocabularyProvider.actionLabel(actionId);
 
         List<RecipeProcessVisualizationInput.IngredientTarget> ingredients = extractIngredients(step);
-        List<String> subprocessNames = extractSubprocessIds(step).stream()
-                .map(id -> subprocessNameById.getOrDefault(id, "a prepared subprocess"))
+        List<String> subprocessNames = extractPreparedRefs(step).stream()
+                .map(reference -> preparedNameByKey.getOrDefault(reference.key(), "a prepared component"))
                 .toList();
 
         String flameLevelId = asString(step.get("flameLevelId"));
@@ -396,7 +422,10 @@ public class RecipeProcessVisualizationService {
                     : vocabularyProvider.ingredientLabel(ingredientId);
 
             String quantity = formatQuantity(ingredient.get("quantity"));
-            String unit = vocabularyProvider.unitLabel(asString(ingredient.get("unit")));
+            String unitId = asString(ingredient.get("unit"));
+            String unit = "custom".equals(unitId) && StringUtils.hasText(asString(ingredient.get("customUnit")))
+                    ? asString(ingredient.get("customUnit")).trim()
+                    : vocabularyProvider.unitLabel(unitId);
 
             String preparationStyleId = asString(ingredient.get("preparationStyleId"));
             String preparationStyle = "custom".equals(preparationStyleId)
@@ -409,21 +438,22 @@ public class RecipeProcessVisualizationService {
     }
 
     @SuppressWarnings("unchecked")
-    private List<Long> extractSubprocessIds(Map<String, Object> step) {
+    private List<PreparedRef> extractPreparedRefs(Map<String, Object> step) {
         Object actionOn = step.get("actionOn");
         if (!(actionOn instanceof Map)) return List.of();
         Object rawProcesses = ((Map<String, Object>) actionOn).get("processes");
         if (!(rawProcesses instanceof List)) return List.of();
 
-        List<Long> ids = new ArrayList<>();
+        List<PreparedRef> references = new ArrayList<>();
         for (Object entry : (List<Object>) rawProcesses) {
             if (!(entry instanceof Map)) continue;
             Object processId = ((Map<String, Object>) entry).get("processId");
             if (processId instanceof Number number) {
-                ids.add(number.longValue());
+                String stepId = asString(((Map<String, Object>) entry).get("stepId")).trim();
+                references.add(new PreparedRef(number.longValue(), stepId.isEmpty() ? null : stepId));
             }
         }
-        return ids;
+        return references;
     }
 
     private String asString(Object value) {

@@ -1,0 +1,174 @@
+[
+  {
+    "name": "a complete recipe: one Preparation whose flows' outputs one connected main process uses",
+    "processes": [
+      { "id": 1, "type": "MAIN", "name": "Chicken Curry",
+        "nodes": [
+          { "id": "m1", "kind": "STEP", "data": { "step": { "action": "heat", "actionDescription": "Heat the oil",
+            "actionOn": { "ingredients": [ { "ingredientId": "19", "quantity": 2, "unit": "tbsp" } ], "processes": [], "steps": [] } } } },
+          { "id": "m2", "kind": "STEP", "data": { "step": { "action": "saute", "actionDescription": "Fry the onions",
+            "actionOn": { "ingredients": [], "processes": [ { "processId": 2, "stepId": "p1" } ], "steps": [] } } } },
+          { "id": "c1", "kind": "CONDITION", "data": { "title": "Are the onions golden?" } },
+          { "id": "m3", "kind": "STEP", "data": { "step": { "action": "add", "actionDescription": "Add the chicken",
+            "actionOn": { "ingredients": [], "processes": [ { "processId": 2, "stepId": "q2" } ], "steps": [] } } } },
+          { "id": "m4", "kind": "STEP", "data": { "step": { "action": "simmer", "actionDescription": "Simmer for 20 minutes",
+            "actionOn": { "ingredients": [], "processes": [], "steps": [] } } } }
+        ],
+        "edges": [
+          { "id": "e1", "source": "m1", "target": "m2" },
+          { "id": "e2", "source": "m2", "target": "c1" },
+          { "id": "e3", "source": "c1", "target": "m3", "sourceHandle": "condition-yes" },
+          { "id": "e4", "source": "c1", "target": "m2", "sourceHandle": "condition-no" },
+          { "id": "e5", "source": "m3", "target": "m4" }
+        ] },
+      { "id": 2, "type": "SUBPROCESS", "name": "Preparation",
+        "nodes": [
+          { "id": "p1", "kind": "STEP", "data": { "step": { "action": "chop", "expectedOutput": "Chopped Onions",
+            "actionOn": { "ingredients": [ { "ingredientId": "107", "quantity": 2, "unit": "piece", "preparationStyleId": "chopped" } ], "processes": [], "steps": [] } } } },
+          { "id": "q1", "kind": "STEP", "data": { "step": { "action": "cut",
+            "actionOn": { "ingredients": [ { "ingredientId": "308", "quantity": 500, "unit": "g", "preparationStyleId": "bite-sized" } ], "processes": [], "steps": [] } } } },
+          { "id": "q2", "kind": "STEP", "data": { "step": { "action": "marinate", "expectedOutput": "Marinated Chicken",
+            "actionOn": { "ingredients": [ { "ingredientId": "custom", "customIngredientName": "Kashmiri chilli paste", "quantity": 1, "unit": "custom", "customUnit": "knob" } ], "processes": [], "steps": [] } } } }
+        ],
+        "edges": [ { "id": "f1", "source": "q1", "target": "q2" } ] }
+    ],
+    "expected": [
+      { "code": "CUSTOM_INGREDIENT", "severity": "WARNING", "processId": 2, "nodeId": "q2" },
+      { "code": "CUSTOM_UNIT", "severity": "WARNING", "processId": 2, "nodeId": "q2" }
+    ]
+  },
+  {
+    "name": "no main process",
+    "processes": [
+      { "id": 2, "type": "SUBPROCESS", "name": "Preparation",
+        "nodes": [ { "id": "p1", "kind": "STEP", "data": { "step": { "action": "chop", "expectedOutput": "Chopped Onions" } } } ], "edges": [] }
+    ],
+    "expected": [
+      { "code": "MAIN_MISSING", "severity": "BLOCKER", "processId": null, "nodeId": null }
+    ]
+  },
+  {
+    "name": "an empty main process, and an empty Preparation nothing uses",
+    "processes": [
+      { "id": 1, "type": "MAIN", "name": "Main", "nodes": [], "edges": [] },
+      { "id": 2, "type": "SUBPROCESS", "name": "Preparation", "nodes": [], "edges": [] }
+    ],
+    "expected": [
+      { "code": "MAIN_EMPTY", "severity": "BLOCKER", "processId": 1, "nodeId": null },
+      { "code": "PREP_EMPTY", "severity": "WARNING", "processId": 2, "nodeId": null }
+    ]
+  },
+  {
+    "name": "a main step that is not connected to the rest (reported instead of the extra starting step)",
+    "processes": [
+      { "id": 1, "type": "MAIN", "name": "Main",
+        "nodes": [
+          { "id": "a", "kind": "STEP", "data": { "step": { "action": "heat", "actionDescription": "Heat the pan" } } },
+          { "id": "b", "kind": "STEP", "data": { "step": { "action": "boil", "actionDescription": "Boil water" } } },
+          { "id": "c", "kind": "STEP", "data": { "step": { "action": "add", "actionDescription": "Combine" } } },
+          { "id": "d", "kind": "STEP", "data": { "step": { "action": "serve", "actionDescription": "Serve" } } }
+        ],
+        "edges": [ { "id": "e1", "source": "a", "target": "c" }, { "id": "e2", "source": "b", "target": "c" } ] }
+    ],
+    "expected": [
+      { "code": "MAIN_DISCONNECTED", "severity": "BLOCKER", "processId": 1, "nodeId": "d" }
+    ]
+  },
+  {
+    "name": "two starting steps that join later are connected, but worth a warning",
+    "processes": [
+      { "id": 1, "type": "MAIN", "name": "Main",
+        "nodes": [
+          { "id": "a", "kind": "STEP", "data": { "step": { "action": "heat", "actionDescription": "Heat the pan" } } },
+          { "id": "b", "kind": "STEP", "data": { "step": { "action": "boil", "actionDescription": "Boil water" } } },
+          { "id": "c", "kind": "STEP", "data": { "step": { "action": "add", "actionDescription": "Combine" } } }
+        ],
+        "edges": [ { "id": "e1", "source": "a", "target": "c" }, { "id": "e2", "source": "b", "target": "c" } ] }
+    ],
+    "expected": [
+      { "code": "MAIN_MULTIPLE_STARTS", "severity": "WARNING", "processId": 1, "nodeId": "b" }
+    ]
+  },
+  {
+    "name": "incomplete steps: no action, an unnamed custom action, an unknown action, a main step without an instruction",
+    "processes": [
+      { "id": 1, "type": "MAIN", "name": "Main",
+        "nodes": [
+          { "id": "a", "kind": "STEP", "data": { "step": { "action": "", "actionDescription": "Do something" } } },
+          { "id": "b", "kind": "STEP", "data": { "step": { "action": "custom", "customActionName": " ", "actionDescription": "Spherify" } } },
+          { "id": "c", "kind": "STEP", "data": { "step": { "action": "teleport", "actionDescription": "Teleport it" } } },
+          { "id": "d", "kind": "STEP", "data": { "step": { "action": "simmer", "actionDescription": "" } } },
+          { "id": "e", "kind": "STEP", "data": { "action": "serve", "actionDescription": "Serve (flat, older data shape)" } }
+        ],
+        "edges": [
+          { "id": "e1", "source": "a", "target": "b" }, { "id": "e2", "source": "b", "target": "c" },
+          { "id": "e3", "source": "c", "target": "d" }, { "id": "e4", "source": "d", "target": "e" }
+        ] },
+      { "id": 2, "type": "SUBPROCESS", "name": "Preparation",
+        "nodes": [ { "id": "p1", "kind": "STEP", "data": { "step": { "action": "chop", "actionDescription": "", "expectedOutput": "Chopped Onions" } } } ], "edges": [] }
+    ],
+    "expected": [
+      { "code": "STEP_INCOMPLETE", "severity": "BLOCKER", "processId": 1, "nodeId": "a" },
+      { "code": "STEP_INCOMPLETE", "severity": "BLOCKER", "processId": 1, "nodeId": "b" },
+      { "code": "STEP_INCOMPLETE", "severity": "BLOCKER", "processId": 1, "nodeId": "c" },
+      { "code": "STEP_INCOMPLETE", "severity": "BLOCKER", "processId": 1, "nodeId": "d" },
+      { "code": "PREP_OUTPUT_UNUSED", "severity": "WARNING", "processId": 2, "nodeId": "p1" }
+    ]
+  },
+  {
+    "name": "preparation flow problems: no named output, two ends, one flow using another, legacy extra preparation processes",
+    "processes": [
+      { "id": 1, "type": "MAIN", "name": "Main",
+        "nodes": [ { "id": "m1", "kind": "STEP", "data": { "step": { "action": "add", "actionDescription": "Add everything",
+          "actionOn": { "processes": [ { "processId": 2, "stepId": "a2" }, { "processId": 2, "stepId": "c1" }, { "processId": 3 }, { "processId": 4 } ] } } } } ],
+        "edges": [] },
+      { "id": 2, "type": "SUBPROCESS", "name": "Preparation",
+        "nodes": [
+          { "id": "a1", "kind": "STEP", "data": { "step": { "action": "cut" } } },
+          { "id": "a2", "kind": "STEP", "data": { "step": { "action": "marinate" } } },
+          { "id": "b1", "kind": "STEP", "data": { "step": { "action": "chop" } } },
+          { "id": "b2", "kind": "STEP", "data": { "step": { "action": "mix", "expectedOutput": "Salsa" } } },
+          { "id": "b3", "kind": "STEP", "data": { "step": { "action": "mix", "expectedOutput": "Raita" } } },
+          { "id": "c1", "kind": "STEP", "data": { "step": { "action": "grind", "expectedOutput": "Paste",
+            "actionOn": { "processes": [ { "processId": 2, "stepId": "b2" } ] } } } }
+        ],
+        "edges": [
+          { "id": "f1", "source": "a1", "target": "a2" },
+          { "id": "f2", "source": "b1", "target": "b2" }, { "id": "f3", "source": "b1", "target": "b3" }
+        ] },
+      { "id": 3, "type": "SUBPROCESS", "name": "Old Sauce",
+        "nodes": [ { "id": "s1", "kind": "STEP", "data": { "step": { "action": "simmer", "expectedOutput": "Sauce" } } } ], "edges": [] },
+      { "id": 4, "type": "SUBPROCESS", "name": "Empty", "nodes": [], "edges": [] }
+    ],
+    "expected": [
+      { "code": "PREP_MULTIPLE_PROCESSES", "severity": "WARNING", "processId": 3, "nodeId": null },
+      { "code": "PREP_MULTIPLE_PROCESSES", "severity": "WARNING", "processId": 4, "nodeId": null },
+      { "code": "PREP_OUTPUT_MISSING", "severity": "BLOCKER", "processId": 2, "nodeId": "a2" },
+      { "code": "PREP_MULTIPLE_ENDS", "severity": "WARNING", "processId": 2, "nodeId": "b3" },
+      { "code": "PREP_OUTPUT_UNUSED", "severity": "WARNING", "processId": 2, "nodeId": "b2" },
+      { "code": "PREP_REFERENCES_PROCESS", "severity": "WARNING", "processId": 2, "nodeId": "c1" },
+      { "code": "REF_DANGLING", "severity": "BLOCKER", "processId": 1, "nodeId": "m1" },
+      { "code": "PREP_EMPTY", "severity": "BLOCKER", "processId": 4, "nodeId": null }
+    ]
+  },
+  {
+    "name": "dangling references: a deleted preparation, the main process itself, a step output that is gone",
+    "processes": [
+      { "id": 1, "type": "MAIN", "name": "Main",
+        "nodes": [
+          { "id": "m1", "kind": "STEP", "data": { "step": { "action": "boil", "actionDescription": "Boil", "expectedOutput": "" } } },
+          { "id": "m2", "kind": "STEP", "data": { "step": { "action": "add", "actionDescription": "Add the sauce",
+            "actionOn": { "processes": [ { "processId": 999 } ], "steps": [ { "stepId": "m1" } ] } } } },
+          { "id": "m3", "kind": "STEP", "data": { "step": { "action": "add", "actionDescription": "Add main?",
+            "actionOn": { "processes": [ { "processId": 1 } ], "steps": [ { "stepId": "gone" } ] } } } }
+        ],
+        "edges": [ { "id": "e1", "source": "m1", "target": "m2" }, { "id": "e2", "source": "m2", "target": "m3" } ] }
+    ],
+    "expected": [
+      { "code": "REF_DANGLING", "severity": "BLOCKER", "processId": 1, "nodeId": "m2" },
+      { "code": "REF_DANGLING", "severity": "BLOCKER", "processId": 1, "nodeId": "m2" },
+      { "code": "REF_DANGLING", "severity": "BLOCKER", "processId": 1, "nodeId": "m3" },
+      { "code": "REF_DANGLING", "severity": "BLOCKER", "processId": 1, "nodeId": "m3" }
+    ]
+  }
+]

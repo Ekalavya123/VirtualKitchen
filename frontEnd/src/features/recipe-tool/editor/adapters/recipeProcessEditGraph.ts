@@ -13,6 +13,8 @@ import type { ProcessEdge, ProcessNode } from '../../../../types/process'
 import { CONDITION_HANDLES, DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes.ts'
 
 export const EDIT_START = 'START'
+/** Anchor of an added step that starts a new, unconnected flow (in the Preparation). */
+export const EDIT_NEW_FLOW = 'NEW_FLOW'
 
 const YES_HANDLE = CONDITION_HANDLES.yes
 const NO_HANDLE = CONDITION_HANDLES.no
@@ -66,6 +68,12 @@ export const findFreePosition = (
  */
 export const preferredInsertPosition = (graph: ProcessGraph, anchorId: string, firstNodeId: string | null): { x: number; y: number } => {
   const byId = new Map(graph.nodes.map((node) => [node.id, node]))
+  if (anchorId === EDIT_NEW_FLOW) {
+    // A new flow starts in its own column, right of everything already there.
+    const rights = graph.nodes.map((node) => positionOf(node).x + (node.width ?? DEFAULT_SIZE.width))
+    const tops = graph.nodes.map((node) => positionOf(node).y)
+    return { x: rights.length > 0 ? Math.max(...rights) + ROW_GAP / 2 : 0, y: tops.length > 0 ? Math.min(...tops) : 0 }
+  }
   if (anchorId === EDIT_START) {
     const at = positionOf(firstNodeId ? byId.get(firstNodeId) : undefined)
     return { x: at.x, y: at.y - ROW_GAP }
@@ -88,6 +96,7 @@ export const insertNodeAfter = (
   graph: ProcessGraph, node: ProcessNode, anchorId: string, firstNodeId: string | null, newEdgeId: () => string,
 ): ProcessGraph => {
   const nodes = [...graph.nodes, node]
+  if (anchorId === EDIT_NEW_FLOW) return { nodes, edges: graph.edges }
   if (anchorId === EDIT_START) {
     const edges = firstNodeId ? [...graph.edges, { id: newEdgeId(), source: node.id, target: firstNodeId }] : graph.edges
     return { nodes, edges }
