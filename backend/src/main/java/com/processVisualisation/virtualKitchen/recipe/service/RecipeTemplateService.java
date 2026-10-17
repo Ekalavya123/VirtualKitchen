@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -49,6 +50,13 @@ public class RecipeTemplateService {
 
     @Autowired
     private ProcessService processService;
+
+    /**
+     * One lock per recipe for {@link #createMainProcess}: concurrent calls for the same recipe (a page opened twice
+     * at once) run one after another, so the second finds the first's MAIN process instead of briefly inserting a
+     * duplicate that a reader could load before it is cleaned up.
+     */
+    private final ConcurrentHashMap<Long, Object> mainProcessLocks = new ConcurrentHashMap<>();
 
     /**
      * Creates and persists a new recipe template, assigning it a new sequence-generated id.
@@ -268,6 +276,13 @@ public class RecipeTemplateService {
      * {@inheritDoc}
      */
     public ProcessResponseDTO createMainProcess(Long recipeId, Long userId) {
+        synchronized (mainProcessLocks.computeIfAbsent(recipeId, id -> new Object())) {
+            return createMainProcessOnce(recipeId, userId);
+        }
+    }
+
+    /** The body of {@link #createMainProcess}; its race handling still covers calls from other instances. */
+    private ProcessResponseDTO createMainProcessOnce(Long recipeId, Long userId) {
         RecipeTemplate recipe = repo.findById(recipeId)
                 .orElseThrow(() -> new NoSuchElementException("Recipe not found: " + recipeId));
         requireOwner(recipe, userId);

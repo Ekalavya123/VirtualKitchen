@@ -14,6 +14,7 @@ import { RecipeSessionContext, type RecipeSessionContextValue } from './sessionC
 import RecoveryPrompt from './RecoveryPrompt'
 import { useRecoveryMirror } from './useRecoveryMirror'
 import { useVisualsApplier } from './useVisualsApplier'
+import { withoutStrayMainProcesses } from '../model/mainProcess'
 import { errorMessage } from '../../../shared/errors'
 
 /** Pause in editing after which the session autosaves. */
@@ -96,8 +97,10 @@ export function RecipeSessionProvider({ recipeId, canEdit = true, children }: { 
     const load = async () => {
       // The revision is read *before* the processes: a save landing between the two reads can then
       // only cause a false conflict later, never a silent overwrite.
-      const revision = canEdit ? ((await RecipeDetailApi.getRecipeDetail(recipeId)).processRevision ?? 0) : 0
-      const processes = await ProcessApi.listByRecipe(recipeId)
+      const detail = canEdit ? await RecipeDetailApi.getRecipeDetail(recipeId) : null
+      const revision = detail?.processRevision ?? 0
+      // A MAIN process created twice at once is briefly duplicated on the backend; never keep the doomed copy.
+      const processes = withoutStrayMainProcesses(await ProcessApi.listByRecipe(recipeId), detail?.mainProcessId)
       return { revision, processes }
     }
     load()
@@ -218,7 +221,9 @@ export function RecipeSessionProvider({ recipeId, canEdit = true, children }: { 
     const { snapshot } = recoveryOffer
     // Undoable like any other operation: Undo returns to what the backend had.
     history.record(store.processes, { focusProcessId: null })
-    store.setProcesses(mergeRecoveredProcesses(snapshot.processes, snapshot.persistedIds, store.processes))
+    // A recovered copy can hold a MAIN process the backend has since dropped as a duplicate; keep the backend's.
+    const backendMainId = store.processes.find((process) => process.type === 'MAIN')?.id
+    store.setProcesses(withoutStrayMainProcesses(mergeRecoveredProcesses(snapshot.processes, snapshot.persistedIds, store.processes), backendMainId))
     setRecoveryOffer(null)
     syncHistoryFlags()
     notifyReseed()
