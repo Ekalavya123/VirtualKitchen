@@ -334,13 +334,13 @@ const ingredientSubject = (entry: ActionOnIngredient) =>
   (entry.ingredientId === CUSTOM_INGREDIENT_ID ? getActionOnIngredientDisplayName(entry) : getActionOnIngredientDisplayName(entry).toLowerCase())
 
 /**
- * Live names for a description's @ annotations: catalog ingredients by id, and — when `resolve` is given —
- * prepared outputs and earlier results. Anything unresolved falls back to the annotation's snapshot label.
+ * Live names for a description's @ annotations — prepared outputs and earlier results, which can be renamed, when
+ * `resolve` is given. An ingredient reads as the words it was written with ("onions"): its id is stable, and the
+ * instruction's own wording reads better in a sentence than the catalog's name. Anything unresolved falls back to
+ * the annotation's label.
  */
 export const stepAnnotationLabelResolver = (resolve?: Partial<RecipeStepNameResolver>): AnnotationLabelResolver => (annotation) => {
-  if (annotation.kind === 'ingredient') {
-    return isIngredientId(annotation.id) ? getIngredientDisplayName(annotation.id, '') : null
-  }
+  if (annotation.kind === 'ingredient') return null
   if (annotation.kind === 'prepared') {
     const reference = parsePreparedAnnotationId(annotation.id)
     return reference && resolve?.preparedName ? resolve.preparedName(reference) : null

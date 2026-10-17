@@ -29,6 +29,7 @@ import { orderProcesses, orderProcessNodes, type OrderedProcess } from '../../mo
 import { CONDITION_HANDLES } from '../../model/recipeNodeTypes'
 import { toPlainText, type AnnotationLabelResolver } from '../../model/stepAnnotations'
 import { actionVerbOf, deriveStepTitle } from '../../model/stepTitle'
+import { explainPreparationFlows, nodesContinuingPrevious, type ExplainedFlow } from './processExplanation'
 
 // ---------------------------------------------------------------------------------------------
 // Presentation types
@@ -74,6 +75,16 @@ export type StepContinuation =
 
 export type RecipeBranchTag = { answer: string; question: string }
 
+/** Something a main step brings in: an ingredient (with its amount) or a prepared component (linking to its card). */
+export type AddedEntity = {
+  key: string
+  kind: 'ingredient' | 'prepared'
+  label: string
+  /** "1 cup" — '' when no amount is stated. */
+  amount: string
+  anchorId?: string
+}
+
 export type RecipeTimelineStep = {
   kind: 'step'
   key: string
@@ -99,6 +110,16 @@ export type RecipeTimelineStep = {
   imageUrl?: string
   branch?: RecipeBranchTag
   continuation?: StepContinuation
+  /** Where the step lives, to open it in the editor. */
+  processId: number
+  nodeId: string
+  /** Main process: the ingredients and prepared components this step introduces. */
+  adds: AddedEntity[]
+  /**
+   * Main process: the step follows straight on from the one before (an edge leads from it) and introduces nothing
+   * new — it carries on with what is already cooking.
+   */
+  continues: boolean
 }
 
 export type CheckOutcome = {
@@ -122,7 +143,18 @@ export type RecipeTimelineCheck = {
 
 export type RecipeTimelineItem = RecipeTimelineStep | RecipeTimelineCheck
 
-/** One stage of the recipe: a process (each subprocess, then the main process last). */
+/** One preparation flow, read as one item: "Prepare Marinated Chicken", its steps in order, and what it makes. */
+export type RecipeTimelineFlow = {
+  key: string
+  anchorId: string
+  /** "Prepare <output>" (or "Preparation flow N" while the flow has no named output). */
+  title: string
+  outputName: string
+  stepCount: number
+  items: RecipeTimelineItem[]
+}
+
+/** One stage of the recipe: a process (the Preparation, then the main process last). */
 export type RecipeTimelineSection = {
   key: string
   anchorId: string
@@ -132,7 +164,10 @@ export type RecipeTimelineSection = {
   isMain: boolean
   /** Numbered steps in this stage (checks not counted). */
   stepCount: number
+  /** Every item, in order (for a Preparation: flow after flow). */
   items: RecipeTimelineItem[]
+  /** A Preparation's flows, each shown as one card. */
+  flows?: RecipeTimelineFlow[]
 }
 
 export type RecipePresentation = {
@@ -385,6 +420,15 @@ const sectionTitleOf = (process: Process) => {
  */
 export const buildRecipePresentation = (processes: Process[]): RecipePresentation => {
   const orderedById = new Map(processes.map((process) => [process.id, orderProcessNodes(process)]))
+  // A Preparation reads flow by flow, each flow in cooking order (see processExplanation.ts).
+  const flowsById = new Map<number, ExplainedFlow[]>()
+  processes.filter((process) => process.type === 'SUBPROCESS').forEach((process) => {
+    const ordered = orderedById.get(process.id) as OrderedProcess
+    const flows = explainPreparationFlows(process, ordered.nodes.map((node) => node.id))
+    const nodeById = new Map(ordered.nodes.map((node) => [node.id, node]))
+    flowsById.set(process.id, flows)
+    orderedById.set(process.id, { ...ordered, nodes: flows.flatMap((flow) => flow.nodeIds).map((id) => nodeById.get(id) as ProcessNode) })
+  })
   const processById = new Map(processes.map((process) => [process.id, process]))
   const sectionProcesses = orderProcesses(processes, orderedById).filter((process) => process.nodes.length > 0)
   /** What a used prepared component is called: the Preparation step's output, or (legacy) a whole process's product. */
@@ -414,6 +458,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
   const sections = sectionProcesses.map<RecipeTimelineSection>((process) => {
     const ordered = orderedById.get(process.id) as OrderedProcess
     const stepById = new Map(ordered.nodes.map((node) => [node.id, node]))
+    const continuing = process.type === 'MAIN' ? nodesContinuingPrevious(process, ordered.nodes.map((node) => node.id)) : new Set<string>()
     const titles = new Map<string, string>()
     const indexOf = new Map(ordered.nodes.map((node, index) => [node.id, index]))
     const refOf = (nodeId: string): RecipeItemRef => ({
@@ -586,10 +631,31 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
         continuation = { kind: 'choice', targets: targets.map(refOf) }
       }
 
+      // What a main step brings in, said explicitly; a prepared component links to its card.
+      const adds: AddedEntity[] = process.type !== 'MAIN' ? [] : [
+        ...step.actionOn.ingredients.map((entry, at) => ({
+          key: `ingredient-${at}`,
+          kind: 'ingredient' as const,
+          label: getActionOnIngredientDisplayName(entry),
+          amount: formatQuantityWithUnit(entry.quantity, entry.unit, entry.customUnit),
+        })),
+        ...step.actionOn.processes.map((entry, at) => {
+          const sub = processById.get(entry.processId)
+          const anchor = sub && sectionProcesses.includes(sub)
+            ? (entry.stepId ? itemAnchorId(sub.id, entry.stepId) : sectionAnchorId(sub.id))
+            : undefined
+          return { key: `prepared-${at}`, kind: 'prepared' as const, label: productOf(entry) || 'prepared component', amount: '', anchorId: anchor }
+        }),
+      ]
+
       return {
         kind: 'step',
         key,
         anchorId,
+        processId: process.id,
+        nodeId: node.id,
+        adds,
+        continues: continuing.has(node.id) && adds.length === 0,
         number: numberOf.get(key) ?? 0,
         name,
         showName: composed.length > 0,
@@ -604,6 +670,19 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
       }
     })
 
+    const itemByNode = new Map(ordered.nodes.map((node, at) => [node.id, items[at]]))
+    const flows = flowsById.get(process.id)?.map<RecipeTimelineFlow>((flow) => {
+      const flowItems = flow.nodeIds.map((id) => itemByNode.get(id) as RecipeTimelineItem)
+      return {
+        key: `${process.id}:flow-${flow.index}`,
+        anchorId: `recipe-flow-${process.id}-${flow.index}`,
+        title: flow.title,
+        outputName: flow.outputName,
+        stepCount: flowItems.filter((item) => item.kind === 'step').length,
+        items: flowItems,
+      }
+    })
+
     return {
       key: String(process.id),
       anchorId: sectionAnchorId(process.id),
@@ -612,6 +691,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
       isMain: process.type === 'MAIN',
       stepCount: items.filter((item) => item.kind === 'step').length,
       items,
+      flows,
     }
   })
 

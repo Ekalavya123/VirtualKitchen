@@ -46,7 +46,7 @@ export const buildAnnotationOptions = (context: StepAnnotationContext, query: st
     if (!id || !matches(query, name)) return
     options.push({
       key: `own-ingredient-${index}`,
-      annotation: { kind: 'ingredient', id, label: name },
+      annotation: { kind: 'ingredient', id, label: id.startsWith(CUSTOM_INGREDIENT_PREFIX) ? name : name.toLowerCase() },
       group: 'In this step',
       title: name,
       hint: formatQuantityWithUnit(entry.quantity, entry.unit, entry.customUnit) || 'no amount',
@@ -81,7 +81,8 @@ export const buildAnnotationOptions = (context: StepAnnotationContext, query: st
     found.sort((a, b) => Number(!a.name.toLowerCase().startsWith(wanted)) - Number(!b.name.toLowerCase().startsWith(wanted)))
     found.slice(0, MAX_CATALOG_MATCHES).forEach((item) => options.push({
       key: `ingredient-${item.id}`,
-      annotation: { kind: 'ingredient', id: item.id, label: item.name },
+      // Written in lower case, as it reads in a sentence ("Chop the onion"); the id keeps the link.
+      annotation: { kind: 'ingredient', id: item.id, label: item.name.toLowerCase() },
       group: 'Ingredients',
       title: item.name,
       hint: getIngredientCategoryLabel(item.category),

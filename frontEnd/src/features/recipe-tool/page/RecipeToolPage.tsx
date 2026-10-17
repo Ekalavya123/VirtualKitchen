@@ -58,6 +58,13 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, 
     navigate(recipeToolPath(recipeId, 'editor'))
   }, [navigate, recipeId])
 
+  // A step picked on the Recipe Process page: the editor opens on it (selected and centred).
+  const [stepFocusRequest, setStepFocusRequest] = useState<{ processId: number; nodeId: string; token: number } | null>(null)
+  const openStep = useCallback((processId: number, nodeId: string) => {
+    setStepFocusRequest({ processId, nodeId, token: Date.now() })
+    navigate(recipeToolPath(recipeId, 'editor'))
+  }, [navigate, recipeId])
+
   useEffect(() => {
     let cancelled = false
     // No sync setLoading(true) here: `loading` already starts true (useState(true) above), and this
@@ -228,12 +235,13 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, 
               preparationNotes={recipe.preparationNotes ?? null}
               onSavePreparationNotes={isOwner ? savePreparationNotes : undefined}
               issueFocusRequest={issueFocusRequest}
+              stepFocusRequest={stepFocusRequest}
             />
           </div>
         )}
 
         {view === 'process' && (
-          <RecipeViewPage recipe={recipe} isOwner={isOwner} onNutritionSaved={handleNutritionSaved} onShowIssue={showIssue} />
+          <RecipeViewPage recipe={recipe} isOwner={isOwner} onNutritionSaved={handleNutritionSaved} onShowIssue={showIssue} onOpenStep={openStep} />
         )}
       </div>
     </RecipeSessionProvider>
