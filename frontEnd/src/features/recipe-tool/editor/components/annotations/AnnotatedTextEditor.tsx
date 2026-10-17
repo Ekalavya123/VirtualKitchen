@@ -154,8 +154,17 @@ export default function AnnotatedTextEditor({
     })
   })
 
+  // Focused with the caret at the end, ready to continue the instruction.
   useEffect(() => {
-    if (autoFocus) rootRef.current?.focus()
+    const root = rootRef.current
+    if (!autoFocus || !root) return
+    root.focus()
+    const range = document.createRange()
+    range.selectNodeContents(root)
+    range.collapse(false)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
   }, [autoFocus])
 
   const emit = useCallback((inserted?: Annotation) => {

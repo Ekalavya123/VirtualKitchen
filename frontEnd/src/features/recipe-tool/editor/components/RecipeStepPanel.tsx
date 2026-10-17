@@ -21,7 +21,14 @@ import { getIngredientById } from '../../../../shared/catalog/ingredientCatalog'
 import { CUSTOM_UNIT_ID, isQuantifiableUnit } from '../../../../shared/catalog/unitCatalog'
 import { DURATION_UNIT_OPTIONS, TEMPERATURE_UNIT_OPTIONS } from '../../../../shared/catalog/stepFieldCatalog'
 import { CUSTOM_FLAME_LEVEL_ID, FLAME_LEVEL_CATALOG } from '../../../../shared/catalog/flameLevelCatalog'
-import { getActionOnIngredientDisplayName, normalizeRecipeStepNodeData, type ActionOnIngredient, type RecipeStepActionOnProcess } from '../../model/recipeStepData'
+import {
+  getActionOnIngredientDisplayName,
+  getRecipeStepTitle,
+  normalizeRecipeStepNodeData,
+  type ActionOnIngredient,
+  type RecipeStepActionOnProcess,
+} from '../../model/recipeStepData'
+import type { ReadinessIssue } from '../../model/recipeReadiness'
 import {
   PREPARED_REFERENCE_PROBLEM_LABELS,
   describePreparedReference,
@@ -67,6 +74,13 @@ type RecipeStepPanelProps = {
   isGeneratingVisuals?: boolean
   /** Button label while generating, e.g. "Generating… 2/5" — falls back to "Generating…". */
   visualsProgressLabel?: string
+  /** Readiness issues about this step (shown under its description). */
+  issues?: ReadinessIssue[]
+  /** 'popup': the editor opened on the node itself — a close button, and Save & close at the bottom. */
+  variant?: 'panel' | 'popup'
+  autoFocusDescription?: boolean
+  onClose?: () => void
+  onSaveAndClose?: () => void
 }
 
 type ActionOnTab = 'INGREDIENTS' | 'PROCESSES' | 'STEPS'
@@ -112,6 +126,11 @@ export default function RecipeStepPanel({
   onGenerateVisuals,
   isGeneratingVisuals,
   visualsProgressLabel,
+  issues = [],
+  variant = 'panel',
+  autoFocusDescription,
+  onClose,
+  onSaveAndClose,
 }: RecipeStepPanelProps) {
   const [actionOnTab, setActionOnTab] = useState<ActionOnTab>('INGREDIENTS')
   const [advancedOpen, setAdvancedOpen] = useState(false)
@@ -122,6 +141,10 @@ export default function RecipeStepPanel({
   const closeEdit = () => setActionOnEdit(null)
   const normalized = normalizeRecipeStepNodeData(node.data)
   const step = normalized.step
+  const title = getRecipeStepTitle(step, {
+    preparedName: (reference) => describePreparedReference(recipeProcesses, reference).label,
+    stepOutputLabel: (stepId) => getStepOutputLabel(stepOutputGraph, stepId),
+  })
   const visualization = normalized.visualization
   const schema = getStepActionSchema(step.action)
   const actionDefinition = step.action ? getStepActionById(step.action) : null
@@ -352,16 +375,21 @@ export default function RecipeStepPanel({
   }
 
   return (
-    <div className="flow-properties-panel">
+    <div className={`flow-properties-panel${variant === 'popup' ? ' flow-step-popup-panel' : ''}`}>
       <div className="flow-properties-header">
         <div className="flow-properties-header-content">
           <span className="flow-properties-icon">🍳</span>
           <div className="flow-properties-header-info">
-            <div className="flow-properties-header-title">{normalized.title}</div>
+            <div className="flow-properties-header-title">{title}</div>
             <span className="flow-properties-type-badge" style={{ background: '#f0fdf4', border: '1px solid #86efac', color: '#16a34a' }}>
               Step
             </span>
           </div>
+          {variant === 'popup' && onClose && (
+            <button type="button" className="flow-step-popup-close" onClick={onClose} aria-label="Close the step editor" title="Close (Esc)">
+              ✕
+            </button>
+          )}
         </div>
       </div>
 
@@ -391,8 +419,33 @@ export default function RecipeStepPanel({
           </div>
         )}
 
+        <div className="flow-editor-section-heading">Action Description *</div>
+        <div className="flow-properties-field">
+          <StepDescriptionField
+            nodeId={node.id}
+            step={step}
+            recipeProcesses={recipeProcesses}
+            isPreparation={isPreparation}
+            stepOutputGraph={stepOutputGraph}
+            updateStepData={updateStepData}
+            updateActionOnIngredients={updateActionOnIngredients}
+            onOpenSubprocess={onOpenSubprocess}
+            autoFocus={autoFocusDescription}
+          />
+        </div>
+
+        {issues.length > 0 && (
+          <div className="flow-step-issues" role="status">
+            {issues.map((issue, index) => (
+              <div key={index} className={`flow-step-issue is-${issue.severity.toLowerCase()}`}>
+                {issue.severity === 'BLOCKER' ? '⛔' : '⚠️'} {issue.message}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="mt-2 h-px" style={{ background: 'var(--flow-border)' }} />
-        <div className="flow-editor-section-heading">Action On</div>
+        <div className="flow-editor-section-heading">Used in this step</div>
         {effectiveTab === null ? (
           <div style={{ fontSize: 12, color: 'var(--flow-text-subtle)', marginBottom: 10 }}>
             {actionDefinition?.displayName ?? 'This action'} has no Action On target — it acts on equipment or time.
@@ -693,20 +746,6 @@ export default function RecipeStepPanel({
         )}
 
         <div className="mt-2 h-px" style={{ background: 'var(--flow-border)' }} />
-        <div className="flow-editor-section-heading">Action Description *</div>
-        <div className="flow-properties-field">
-          <StepDescriptionField
-            nodeId={node.id}
-            step={step}
-            recipeProcesses={recipeProcesses}
-            isPreparation={isPreparation}
-            stepOutputGraph={stepOutputGraph}
-            updateStepData={updateStepData}
-            updateActionOnIngredients={updateActionOnIngredients}
-            onOpenSubprocess={onOpenSubprocess}
-          />
-        </div>
-
         <div className="flow-editor-section-heading">Expected Output *</div>
         <div className="flow-properties-field">
           <textarea
@@ -773,6 +812,12 @@ export default function RecipeStepPanel({
           </button>
         </div>
       </div>
+      {variant === 'popup' && onSaveAndClose && (
+        <div className="flow-step-popup-footer">
+          <span className="flow-step-popup-hint">Changes apply as you type · click outside to close</span>
+          <button type="button" className="flow-step-popup-save" onClick={onSaveAndClose}>Save &amp; close</button>
+        </div>
+      )}
     </div>
   )
 }

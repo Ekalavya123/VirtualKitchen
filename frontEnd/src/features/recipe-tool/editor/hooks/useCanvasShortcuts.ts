@@ -20,6 +20,8 @@ export function useCanvasShortcuts({ onDelete, onUndo, onRedo }: {
       const target = event.target as HTMLElement | null
       const tag = target?.tagName
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return
+      // Inside an editor that sits over the canvas (the step popup), keys belong to that editor.
+      if (target?.closest?.('[data-canvas-shortcuts="off"]')) return
       if (event.key === 'Delete' || event.key === 'Backspace') onDelete()
       if ((event.ctrlKey || event.metaKey) && event.key === 'z') { event.preventDefault(); onUndo() }
       if ((event.ctrlKey || event.metaKey) && event.key === 'y') { event.preventDefault(); onRedo() }
