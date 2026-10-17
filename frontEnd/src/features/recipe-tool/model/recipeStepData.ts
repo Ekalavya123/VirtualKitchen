@@ -28,6 +28,8 @@ import {
   type PreparationStyleId,
 } from '../../../shared/catalog/preparationStyleCatalog'
 import { resolveFlameLevelId, type FlameLevelId } from '../../../shared/catalog/flameLevelCatalog'
+import { parsePreparedAnnotationId, type AnnotationLabelResolver } from './stepAnnotations'
+import { deriveStepTitle } from './stepTitle'
 import { CUSTOM_UNIT_ID, resolveUnitId, type UnitId } from '../../../shared/catalog/unitCatalog'
 import {
   buildDurationLabel,
@@ -306,8 +308,51 @@ export const createDefaultRecipeStepNodeData = (): RecipeStepNodeData => ({
   sectionId: null,
 })
 
-export function getRecipeStepTitle(step: RecipeStepFields): string {
-  return getActionDisplayName(step.action, step.customActionName)
+/** The action's display name ("Mix / Combine", a custom action's name, or "Select Action" when none is chosen). */
+export const getRecipeStepActionName = (step: Pick<RecipeStepFields, 'action' | 'customActionName'>) =>
+  getActionDisplayName(step.action, step.customActionName)
+
+/** Names that live outside the step: prepared outputs (other processes) and earlier steps' results. */
+export type RecipeStepNameResolver = {
+  preparedName: (reference: RecipeStepActionOnProcess) => string
+  stepOutputLabel: (stepId: string) => string
+}
+
+/** Catalog ingredient names read in lower case inside a heading or sentence; custom names are kept as typed. */
+const ingredientSubject = (entry: ActionOnIngredient) =>
+  (entry.ingredientId === CUSTOM_INGREDIENT_ID ? getActionOnIngredientDisplayName(entry) : getActionOnIngredientDisplayName(entry).toLowerCase())
+
+/**
+ * Live names for a description's @ annotations: catalog ingredients by id, and — when `resolve` is given —
+ * prepared outputs and earlier results. Anything unresolved falls back to the annotation's snapshot label.
+ */
+export const stepAnnotationLabelResolver = (resolve?: Partial<RecipeStepNameResolver>): AnnotationLabelResolver => (annotation) => {
+  if (annotation.kind === 'ingredient') {
+    return isIngredientId(annotation.id) ? getIngredientDisplayName(annotation.id, '') : null
+  }
+  if (annotation.kind === 'prepared') {
+    const reference = parsePreparedAnnotationId(annotation.id)
+    return reference && resolve?.preparedName ? resolve.preparedName(reference) : null
+  }
+  return resolve?.stepOutputLabel ? resolve.stepOutputLabel(annotation.id) : null
+}
+
+/**
+ * The step's derived title — "Chop onions", "Heat Marinated Chicken" (see stepTitle.ts). Without `resolve`,
+ * prepared outputs and earlier results are named only by their annotations' snapshot labels.
+ */
+export function getRecipeStepTitle(step: RecipeStepFields, resolve?: Partial<RecipeStepNameResolver>): string {
+  const subjects = [
+    ...(resolve?.stepOutputLabel ? step.actionOn.steps.map((entry) => resolve.stepOutputLabel!(entry.stepId)) : []),
+    ...step.actionOn.ingredients.map(ingredientSubject),
+    ...(resolve?.preparedName ? step.actionOn.processes.map((entry) => resolve.preparedName!(entry)) : []),
+  ]
+  return deriveStepTitle({
+    actionName: step.action ? getRecipeStepActionName(step) : '',
+    description: step.actionDescription,
+    subjects,
+    resolveLabel: stepAnnotationLabelResolver(resolve),
+  })
 }
 
 /** Effective duration label ("5 minutes"), derived rather than stored redundantly. */
@@ -349,31 +394,29 @@ export const applyRecipeStepFieldUpdate = (data: unknown, field: string, value: 
   return { ...normalized, step: reNormalized, title: getRecipeStepTitle(reNormalized) }
 }
 
+/** The node data with a new step — and the title that follows from it (the stored title is always derived). */
+const withStep = (normalized: RecipeStepNodeData, step: RecipeStepFields): RecipeStepNodeData =>
+  ({ ...normalized, step, title: getRecipeStepTitle(step) })
+
 export const withRecipeStepActionOnIngredients = (data: unknown, ingredients: ActionOnIngredient[]): RecipeStepNodeData => {
   const normalized = normalizeRecipeStepNodeData(data)
-  return { ...normalized, step: { ...normalized.step, actionOn: { ...normalized.step.actionOn, ingredients } } }
+  return withStep(normalized, { ...normalized.step, actionOn: { ...normalized.step.actionOn, ingredients } })
 }
 
 export const withRecipeStepActionOnProcesses = (data: unknown, references: RecipeStepActionOnProcess[]): RecipeStepNodeData => {
   const normalized = normalizeRecipeStepNodeData(data)
-  return {
-    ...normalized,
-    step: {
-      ...normalized.step,
-      actionOn: {
-        ...normalized.step.actionOn,
-        processes: references.map(({ processId, stepId }) => (stepId ? { processId, stepId } : { processId })),
-      },
+  return withStep(normalized, {
+    ...normalized.step,
+    actionOn: {
+      ...normalized.step.actionOn,
+      processes: references.map(({ processId, stepId }) => (stepId ? { processId, stepId } : { processId })),
     },
-  }
+  })
 }
 
 export const withRecipeStepActionOnSteps = (data: unknown, stepIds: string[]): RecipeStepNodeData => {
   const normalized = normalizeRecipeStepNodeData(data)
-  return {
-    ...normalized,
-    step: { ...normalized.step, actionOn: { ...normalized.step.actionOn, steps: stepIds.map((stepId) => ({ stepId })) } },
-  }
+  return withStep(normalized, { ...normalized.step, actionOn: { ...normalized.step.actionOn, steps: stepIds.map((stepId) => ({ stepId })) } })
 }
 
 /**
@@ -381,16 +424,13 @@ export const withRecipeStepActionOnSteps = (data: unknown, stepIds: string[]): R
  * target names the rest of the UI shows — e.g. "Fry marinated chicken + fried onions". Subprocess
  * and step-output names come from the caller (they live in other documents / other nodes).
  */
-export const getRecipeStepActionSummary = (
-  step: RecipeStepFields,
-  resolve: { preparedName: (reference: RecipeStepActionOnProcess) => string; stepOutputLabel: (stepId: string) => string },
-) => {
+export const getRecipeStepActionSummary = (step: RecipeStepFields, resolve: RecipeStepNameResolver) => {
   const targets = [
     ...step.actionOn.steps.map((entry) => resolve.stepOutputLabel(entry.stepId)),
     ...step.actionOn.ingredients.map(getActionOnIngredientDisplayName),
     ...step.actionOn.processes.map((entry) => resolve.preparedName(entry)),
   ].filter(Boolean)
-  const action = getRecipeStepTitle(step)
+  const action = getRecipeStepActionName(step)
   return targets.length > 0 ? `${action} ${targets.join(' + ')}` : action
 }
 

@@ -4,14 +4,18 @@ import { Handle, Position, NodeResizeControl, useNodeId, useUpdateNodeInternals 
 import '../../../../styles/flow-ui.css'
 import {
   getActionOnIngredientDisplayName,
+  getRecipeStepActionName,
   getRecipeStepActionSummary,
   getRecipeStepDurationLabel,
   getRecipeStepRepeatIntervalLabel,
   getRecipeStepTemperatureLabel,
+  getRecipeStepTitle,
   normalizeRecipeStepNodeData,
+  stepAnnotationLabelResolver,
   type RecipeStepActionOnProcess,
   type RecipeStepNodeData,
 } from '../../model/recipeStepData'
+import { toPlainText } from '../../model/stepAnnotations'
 import { useNodeHandleSides, useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'
 import { DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes'
 import { getStepOutputLabel, getStepOutputReferenceProblem } from '../../model/recipeStepOutputs'
@@ -199,10 +203,10 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
     }
   })
 
-  const actionSummary = getRecipeStepActionSummary(step, {
-    preparedName,
-    stepOutputLabel: (stepId) => getStepOutputLabel(stepOutputGraph, stepId),
-  })
+  const names = { preparedName, stepOutputLabel: (stepId: string) => getStepOutputLabel(stepOutputGraph, stepId) }
+  const title = getRecipeStepTitle(step, names)
+  const actionSummary = getRecipeStepActionSummary(step, names)
+  const description = toPlainText(step.actionDescription, stepAnnotationLabelResolver(names)).trim()
 
   const actionOnLines = [...stepOutputLines, ...ingredientLines, ...subprocessLines]
   const visibleLines = expanded ? actionOnLines : actionOnLines.slice(0, COLLAPSED_ACTION_ON_LIMIT)
@@ -287,14 +291,14 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontWeight: 700, fontSize: 13, color: theme.accentStrong, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {normalized.title}
+            {title}
           </div>
           <div
             style={{ fontSize: 9.5, color: 'var(--flow-text-subtle)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
             title={actionSummary}
           >
             {stepNumber != null ? `Step ${stepNumber}` : 'Step'}
-            {step.action && actionSummary !== normalized.title && ` · ${actionSummary}`}
+            {step.action && ` · ${getRecipeStepActionName(step)}`}
           </div>
         </div>
       </div>
@@ -365,13 +369,13 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
             </div>
           )}
 
-          {step.actionDescription.trim() && (
+          {description && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, borderTop: '1px dashed var(--flow-border)', paddingTop: 6 }}>
               <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--flow-text)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                 Description
               </span>
               <span style={{ fontSize: 10, color: 'var(--flow-text-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {step.actionDescription.trim()}
+                {description}
               </span>
             </div>
           )}

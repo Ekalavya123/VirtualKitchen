@@ -19,13 +19,16 @@ import { descriptionTail, restatesText } from './textOverlap'
 import {
   getActionOnIngredientDisplayName,
   getRecipeStepTemperatureLabel,
-  getRecipeStepTitle,
+  getRecipeStepActionName,
   normalizeRecipeStepNodeData,
+  stepAnnotationLabelResolver,
   type ActionOnIngredient,
   type RecipeStepFields,
 } from '../../model/recipeStepData'
 import { orderProcesses, orderProcessNodes, type OrderedProcess } from '../../model/processReadingOrder'
 import { CONDITION_HANDLES } from '../../model/recipeNodeTypes'
+import { toPlainText, type AnnotationLabelResolver } from '../../model/stepAnnotations'
+import { actionVerbOf, deriveStepTitle } from '../../model/stepTitle'
 
 // ---------------------------------------------------------------------------------------------
 // Presentation types
@@ -161,8 +164,6 @@ const firstSentence = (text: string, max = 64) => {
 const ingredientNameInSentence = (entry: ActionOnIngredient) =>
   entry.ingredientId === CUSTOM_INGREDIENT_ID ? getActionOnIngredientDisplayName(entry) : getActionOnIngredientDisplayName(entry).toLowerCase()
 
-const shortList = (items: string[]) => joinNatural(items.length > 3 ? [...items.slice(0, 2), `${items.length - 2} more`] : items)
-
 /**
  * The basic ingredient behind a step's result: "chicken" for "the marinated chicken", followed
  * back through the steps that made it (marinated ← cut ← cleaned 500 g chicken).
@@ -181,13 +182,15 @@ const rootIngredientName = (node: ProcessNode | undefined, stepById: Map<string,
  * chicken", "Marinate chicken", "Chop onion and potato". No amounts or details; those are in its
  * sentence (see composeInstruction). Without an action, the first sentence of its description.
  */
-const buildStepHeading = (step: RecipeStepFields, earlierBases: string[]) => {
-  if (!step.action) return step.actionDescription.trim() ? firstSentence(step.actionDescription) : 'Next step'
-  const verb = actionVerb(step)
+const buildStepHeading = (step: RecipeStepFields, earlierBases: string[], resolveLabel: AnnotationLabelResolver) => {
+  if (!step.action) {
+    const description = toPlainText(step.actionDescription, resolveLabel).trim()
+    return description ? firstSentence(description) : 'Next step'
+  }
   const own = step.actionOn.ingredients.map(ingredientNameInSentence)
   const subjects = earlierBases.length > 0 ? earlierBases : worksOnAll(step) ? own : own.slice(0, 1)
-  const unique = [...new Set(subjects.filter(Boolean))]
-  return unique.length > 0 ? `${verb} ${shortList(unique)}` : verb
+  // What the instruction names (@ annotations) comes first; otherwise what the step works on.
+  return deriveStepTitle({ actionName: getRecipeStepActionName(step), description: step.actionDescription, subjects, resolveLabel })
 }
 
 /** What a step produces, in words: its Expected Output, else what it worked on. */
@@ -227,7 +230,7 @@ const heatLabel = (step: RecipeStepFields) => {
 }
 
 /** "Mix" for "Mix / Combine" — the catalog's first name reads as a verb in a sentence. */
-const actionVerb = (step: RecipeStepFields) => getRecipeStepTitle(step).split(' / ')[0].trim()
+const actionVerb = (step: RecipeStepFields) => actionVerbOf(getRecipeStepActionName(step))
 
 /** "onions" for 2 onion — only for plain counts of a catalog ingredient whose name isn't already plural. */
 const pluralize = (name: string) => {
@@ -421,6 +424,12 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
       isCheck: stepById.get(nodeId)?.kind === 'CONDITION',
     })
 
+    // Annotations read as live names: prepared outputs and earlier results as this view names them.
+    const resolveLabel = stepAnnotationLabelResolver({
+      preparedName: productOf,
+      stepOutputLabel: (stepId) => stepProductLabel(stepById.get(stepId)),
+    })
+
     // Titles first too — outcomes and jumps quote their target's title.
     const stepFields = new Map<string, RecipeStepFields>()
     for (const node of ordered.nodes) {
@@ -434,7 +443,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
         ...step.actionOn.steps.map((entry) => rootIngredientName(stepById.get(entry.stepId), stepById)),
         ...step.actionOn.processes.map(productOf),
       ].filter(Boolean)
-      titles.set(node.id, buildStepHeading(step, earlierBases))
+      titles.set(node.id, buildStepHeading(step, earlierBases, resolveLabel))
     }
 
     const relativeDirection = (fromId: string, toId: string): CheckOutcome['direction'] => {
@@ -527,7 +536,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
       // Say each thing once: one sentence from the step's fields; its description and expected
       // result only show when they add something that sentence doesn't already say.
       const name = titles.get(node.id) ?? ''
-      const description = step.actionDescription.trim()
+      const description = toPlainText(step.actionDescription, resolveLabel).trim()
       const products = [
         ...step.actionOn.steps.flatMap((entry) => {
           const label = stepProductLabel(stepById.get(entry.stepId))
