@@ -8,6 +8,7 @@ import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVo
 import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVocabularyProvider.ActionDefinition;
 import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVocabularyProvider.FieldRequirement;
 import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVocabularyProvider.IngredientDefinition;
+import com.processVisualisation.virtualKitchen.recipe.model.StepAnnotations;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -128,6 +129,7 @@ public class RecipeProcessOutputNormalizer {
                 }
             }
             resolveStepReferencesByOutput(steps, label, repairs);
+            fitStepAnnotations(steps, label, repairs);
             fillReferencedOutputs(steps, label, repairs);
         }
         return new GeneratedRecipeProcessDTO(ref, name, steps);
@@ -146,6 +148,11 @@ public class RecipeProcessOutputNormalizer {
         step.setExpectedOutput(node.expectedOutput() == null ? "" : node.expectedOutput());
 
         if ("CONDITION".equals(step.getNodeType())) {
+            // A check is read, not linked: any annotation in its text becomes plain words.
+            if (StepAnnotations.hasAnnotations(step.getActionDescription())) {
+                step.setActionDescription(StepAnnotations.toPlainText(step.getActionDescription()));
+                repairs.add(label + ": a check's text has no annotations — kept as plain text");
+            }
             step.setStepId(stepId);
             step.setTitle(node.title());
             step.setExpectedResult(node.expectedResult() == null || node.expectedResult().isBlank() ? "success" : node.expectedResult());
@@ -175,7 +182,71 @@ public class RecipeProcessOutputNormalizer {
         step.setDuration(node.duration());
         step.setRepeatInterval(node.repeatInterval());
         if (action != null) normalizeStepFields(step, action, label, repairs);
+        // Step annotations are fitted once the flow's step references are resolved (see fitStepAnnotations).
+        step.setActionDescription(normalizeAnnotations(step.getActionDescription(), step, node.ingredients(), false, label, repairs));
         return step;
+    }
+
+    /**
+     * The description of an edited step with its annotations fitted to the step (see the private overload). Used by
+     * the edit flow, whose step fields arrive already normalized.
+     */
+    public String normalizeAnnotations(String description, GeneratedRecipeStepDTO step) {
+        return normalizeAnnotations(description, step, null, true, "step", new ArrayList<>());
+    }
+
+    /**
+     * Fits a step's @ annotations to the step itself, so each points at one of its own targets the way the editor
+     * stores them: an ingredient annotation written with a catalog id, an alias or the ingredient's name becomes that
+     * Action On entry's id (or {@code custom:<name>}); a {@code prepared:} or {@code step:} annotation must name one of
+     * the step's "uses" refs or "fromSteps" ids. Anything else is turned back into its plain words — a repair, never
+     * a failure (annotations are optional).
+     */
+    private String normalizeAnnotations(String description, GeneratedRecipeStepDTO step, List<RecipeProcessOutput.Ingredient> raw,
+                                        boolean checkSteps, String label, List<String> repairs) {
+        if (!StepAnnotations.hasAnnotations(description) || step.getActionOn() == null) return description;
+        Map<String, String> ingredientIds = new HashMap<>();
+        List<GeneratedActionOnIngredientDTO> ingredients = step.getActionOn().getIngredients() == null ? List.of() : step.getActionOn().getIngredients();
+        for (int i = 0; i < ingredients.size(); i++) {
+            GeneratedActionOnIngredientDTO ingredient = ingredients.get(i);
+            if (ingredient == null) continue;
+            String id = StepAnnotations.ingredientId(ingredient.getIngredientId(), ingredient.getCustomIngredientName());
+            if (id.isEmpty()) continue;
+            List<String> keys = new ArrayList<>(List.of(id, String.valueOf(ingredient.getIngredientId())));
+            if (ingredient.getCustomIngredientName() != null) keys.add(ingredient.getCustomIngredientName());
+            RecipeProcessOutput.Ingredient source = raw != null && i < raw.size() ? raw.get(i) : null;
+            if (source != null) {
+                if (source.ingredientId() != null && !CUSTOM_ID.equals(source.ingredientId())) keys.add(source.ingredientId());
+                if (source.name() != null) keys.add(source.name());
+                if (source.customIngredientName() != null) keys.add(source.customIngredientName());
+            }
+            keys.forEach(key -> ingredientIds.putIfAbsent(annotationKey(key), id));
+        }
+        List<String> uses = step.getActionOn().getProcesses() == null ? List.of() : step.getActionOn().getProcesses();
+        List<String> fromSteps = step.getActionOn().getSteps() == null ? List.of() : step.getActionOn().getSteps();
+
+        return StepAnnotations.remapIds(description, annotation -> {
+            String id = switch (annotation.kind()) {
+                case StepAnnotations.INGREDIENT -> {
+                    String written = annotation.id().startsWith(StepAnnotations.CUSTOM_INGREDIENT_PREFIX)
+                            ? annotation.id().substring(StepAnnotations.CUSTOM_INGREDIENT_PREFIX.length()) : annotation.id();
+                    String found = ingredientIds.get(annotationKey(annotation.id()));
+                    if (found == null) found = ingredientIds.get(annotationKey(written));
+                    if (found == null && vocabulary != null) found = ingredientIds.get(annotationKey(resolveIngredientId(written)));
+                    yield found;
+                }
+                case StepAnnotations.PREPARED -> uses.contains(annotation.id()) ? annotation.id() : null;
+                default -> !checkSteps || fromSteps.contains(annotation.id()) ? annotation.id() : null;
+            };
+            if (id == null) {
+                repairs.add(label + ": the annotation \"" + annotation.label() + "\" names something the step doesn't list — kept as plain text");
+            }
+            return id;
+        });
+    }
+
+    private static String annotationKey(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     /** One ingredient of an edit operation: catalog/alias/custom resolution only (no step context for action rules). */
@@ -465,6 +536,27 @@ public class RecipeProcessOutputNormalizer {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT).replaceAll("[\\s_-]+", " ");
     }
 
+    /**
+     * A {@code step:} annotation must name one of the step's "fromSteps": written as that step's stepId, or as its
+     * expected output (like a fromSteps entry, see {@link #resolveStepReferencesByOutput}). Others become plain words.
+     */
+    private void fitStepAnnotations(List<GeneratedRecipeStepDTO> steps, String label, List<String> repairs) {
+        for (int i = 0; i < steps.size(); i++) {
+            GeneratedRecipeStepDTO step = steps.get(i);
+            if (step == null || step.getActionOn() == null || !StepAnnotations.hasAnnotations(step.getActionDescription())) continue;
+            List<String> fromSteps = step.getActionOn().getSteps() == null ? List.of() : step.getActionOn().getSteps();
+            int index = i;
+            step.setActionDescription(StepAnnotations.remapIds(step.getActionDescription(), annotation -> {
+                if (!StepAnnotations.STEP.equals(annotation.kind()) || fromSteps.contains(annotation.id())) return annotation.id();
+                String byOutput = earlierStepWithOutput(steps, index, annotation.id());
+                if (byOutput != null && fromSteps.contains(byOutput)) return byOutput;
+                repairs.add(label + " step " + (index + 1) + ": the annotation \"" + annotation.label()
+                        + "\" names a step this step doesn't use — kept as plain text");
+                return null;
+            }));
+        }
+    }
+
     /** A step whose output a later step uses must name that output; its own description stands in when it has none. */
     private void fillReferencedOutputs(List<GeneratedRecipeStepDTO> steps, String label, List<String> repairs) {
         Map<String, GeneratedRecipeStepDTO> byId = new HashMap<>();
@@ -475,7 +567,7 @@ public class RecipeProcessOutputNormalizer {
                     GeneratedRecipeStepDTO source = ref == null ? null : byId.get(ref);
                     if (source != null && "STEP".equals(source.getNodeType())
                             && isBlank(source.getExpectedOutput()) && !isBlank(source.getActionDescription())) {
-                        source.setExpectedOutput(source.getActionDescription());
+                        source.setExpectedOutput(StepAnnotations.toPlainText(source.getActionDescription()));
                         repairs.add(label + ": step " + ref + " is used by a later step, so its description became its expected output");
                     }
                 }

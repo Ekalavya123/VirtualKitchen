@@ -26,6 +26,7 @@ import {
 } from '../../model/recipeStepData'
 import { getProcessReadingOrder } from '../../model/processReadingOrder'
 import { decodePreparedReference } from '../../model/preparationFlows'
+import { remapAnnotationIds } from '../../model/stepAnnotations'
 import { buildConditionNode, buildStepNode } from './recipeProcessGenerationConverter'
 import { EDIT_NEW_FLOW, EDIT_START, detachNode, findFreePosition, insertNodeAfter, preferredInsertPosition, type ProcessGraph } from './recipeProcessEditGraph'
 import { DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes'
@@ -66,7 +67,11 @@ const patchStepFields = (
   const actionOn = raw.actionOn as Record<string, unknown>
   if (patch.action != null) raw.action = patch.action
   if (patch.customActionName != null) raw.customActionName = patch.customActionName
-  if (patch.actionDescription != null) raw.actionDescription = patch.actionDescription
+  // Its annotations of steps added earlier in this edit ("new-1") point at the nodes made for them.
+  if (patch.actionDescription != null) {
+    raw.actionDescription = remapAnnotationIds(patch.actionDescription, (annotation) =>
+      (annotation.kind === 'step' ? resolveNode(annotation.id) : undefined))
+  }
   if (patch.expectedOutput != null) raw.expectedOutput = patch.expectedOutput
   if (patch.flameLevel != null) Object.assign(raw, { flameLevelId: patch.flameLevel, customFlameLevel: '' })
   if (patch.temperatureValue != null) raw.temperatureValue = String(patch.temperatureValue)

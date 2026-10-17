@@ -9,6 +9,7 @@ import {
   preparedAnnotationId,
   refreshSnapshotLabels,
   remapAnnotationIds,
+  resolveGeneratedAnnotations,
   serializeSegments,
   toPlainText,
   unbackedAnnotations,
@@ -81,6 +82,14 @@ describe('step annotations', () => {
       step: [],
     })
     assert.deepEqual(unbacked.map((annotation) => annotation.label), ['onions'])
+  })
+
+  it('resolves generated annotations to the editor ids, unwrapping what resolves to nothing', () => {
+    const description = 'Fry the @[onions](prepared:chopped_onions) with @[browned chicken](step:b1), @[x](step:zz) and @[salt](ingredient:33)'
+    const resolved = resolveGeneratedAnnotations(description,
+      new Map([['chopped_onions', { processId: -2, stepId: 'node-7' }]]), new Map([['b1', 'node-3']]))
+    assert.equal(resolved, 'Fry the @[onions](prepared:-2:node-7) with @[browned chicken](step:node-3), x and @[salt](ingredient:33)')
+    assert.deepEqual(parsePreparedAnnotationId('-2:node-7'), { processId: -2, stepId: 'node-7' })
   })
 
   it('builds and parses target ids', () => {

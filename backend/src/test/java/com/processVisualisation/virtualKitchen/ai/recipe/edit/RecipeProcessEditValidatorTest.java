@@ -91,6 +91,40 @@ class RecipeProcessEditValidatorTest {
     }
 
     @Test
+    void annotationsReachTheModelAsAliasesAndComeBackAsTheEditorsIds() {
+        EditTargetProcessDTO target = EditTestFixtures.pastaProcess();
+        target.setSubprocesses(List.of(new EditSubprocessRefDTO(SAUCE_PROCESS_ID, "sauce-step", "Tomato Sauce")));
+        target.getNodes().get(2).getContent().setActionDescription(
+                "Cook the @[pasta](step:" + ADD_ID + ") with @[sauce](prepared:" + SAUCE_PROCESS_ID + ":sauce-step) and @[old](prepared:99)");
+        RecipeProcessEditContext context = RecipeProcessEditContext.of(target, null);
+
+        assertThat(context.steps().get(2).getActionDescription())
+                .isEqualTo("Cook the @[pasta](step:s2) with @[sauce](prepared:p1) and old");
+
+        RecipeProcessEditOutput.StepPatch patch = new RecipeProcessEditOutput.StepPatch(null, null,
+                "Cook the @[pasta](step:s2) in the @[sauce](prepared:p1) with @[salt](ingredient:salt)",
+                null, null, null, null, null, null, List.of("s2"), List.of("p1"));
+        RecipeProcessEditValidator.Result result = validator.validate(output(op("UPDATE_STEP").target("s3").set(patch).build()), context);
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.operations().get(0).getStep().getActionDescription()).isEqualTo(
+                "Cook the @[pasta](step:" + ADD_ID + ") in the @[sauce](prepared:" + SAUCE_PROCESS_ID + ":sauce-step) with salt");
+    }
+
+    @Test
+    void anAddedStepsAnnotationsUseTheEditorsIds() {
+        RecipeProcessOutput.Node step = new RecipeProcessOutput.Node(null, null, "toss", null,
+                List.of(outIngredient("salt", null, "to-taste")), null, List.of("s4"),
+                "Toss the @[drained pasta](step:s4) with @[salt](ingredient:salt)", null,
+                null, null, null, null, null, null, null);
+        RecipeProcessEditValidator.Result result = validator.validate(output(op("ADD_STEP").after("s4").step(step).build()), pastaContext());
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.operations().get(0).getStep().getActionDescription())
+                .isEqualTo("Toss the @[drained pasta](step:" + DRAIN_ID + ") with @[salt](ingredient:salt)");
+    }
+
+    @Test
     void updateStepDuration_carriesOnlyTheChangedField() {
         RecipeProcessEditValidator.Result result = validator.validate(output(
                 op("UPDATE_STEP").target("s3").set(patchDuration("8 minutes")).build()

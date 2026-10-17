@@ -25,7 +25,7 @@ import java.util.Objects;
 public class RecipeProcessEditPromptBuilder {
 
     /** Logged with every edit; bump it whenever the edit prompt wording or structure changes. */
-    public static final String PROMPT_VERSION = "1";
+    public static final String PROMPT_VERSION = "2";
 
     private final RecipeProcessGenerationPromptBuilder generationPromptBuilder;
     private final RecipeProcessEditOutputSchema outputSchema;
@@ -72,6 +72,9 @@ public class RecipeProcessEditPromptBuilder {
                   the step it checks) instead.
                 - PREPARED COMPONENTS lists what the recipe's Preparation makes (each flow's named output, and
                   intermediate results) as p1, p2, ...; a main step's "uses" lists these ids.
+                - @[words](ingredient:...), @[words](prepared:p1) and @[words](step:s2) inside an actionDescription mark what
+                  that step uses (see ANNOTATIONS below). Keep them when you reword a description, and annotate what a
+                  step you add or change uses.
                 - A Preparation holds independent flows (separate connected groups of steps). Its steps never "use"
                   anything. A flow's last step names its output in "expectedOutput". To start a new flow, ADD_STEP
                   with "after":"NEW_FLOW" (then add its next steps after that one).

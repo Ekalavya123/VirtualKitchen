@@ -156,3 +156,22 @@ export type StepAnnotationTargets = Record<AnnotationKind, readonly string[]>
 export const unbackedAnnotations = (text: string | null | undefined, targets: StepAnnotationTargets): Annotation[] =>
   annotationsOf(text).filter((annotation) =>
     !targets[annotation.kind].some((id) => sameAnnotationTarget(annotation, annotation.kind, id)))
+
+/**
+ * A generated description's annotations in the editor's ids (AI generation and AI edits): `prepared:<ref>` becomes
+ * the Preparation step the ref stands for, `step:<ref>` the node made for that step. One that resolves to nothing
+ * reads as plain words — the backend already fitted each annotation to the step's own targets, so this only guards
+ * against a mismatch.
+ */
+export const resolveGeneratedAnnotations = (
+  description: string,
+  preparedByRef: ReadonlyMap<string, { processId: number; stepId?: string }>,
+  nodeIdByStepRef: ReadonlyMap<string, string>,
+) => remapAnnotationIds(description, (annotation) => {
+  if (annotation.kind === 'prepared') {
+    const reference = preparedByRef.get(annotation.id)
+    return reference ? preparedAnnotationId(reference) : null
+  }
+  if (annotation.kind === 'step') return nodeIdByStepRef.get(annotation.id) ?? null
+  return undefined
+})
