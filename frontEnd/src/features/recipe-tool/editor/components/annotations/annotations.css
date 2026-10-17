@@ -1,0 +1,173 @@
+/* @ annotations: the description editor, its chips, the suggestion list and the amount popover. */
+
+.annotated-editor {
+  width: 100%;
+  min-height: 64px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1.5px solid var(--flow-border);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--flow-text);
+  background: var(--flow-surface);
+  outline: none;
+  box-sizing: border-box;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+  transition: border-color 0.15s ease;
+}
+
+.annotated-editor:focus {
+  border-color: var(--flow-accent);
+}
+
+.annotated-editor.is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--flow-text-muted);
+  pointer-events: none;
+}
+
+.annotation-chip {
+  display: inline-block;
+  padding: 0 6px;
+  margin: 0 1px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: all;
+  background: var(--flow-accent-soft);
+  color: var(--flow-accent-strong);
+  border: 1px solid var(--flow-border);
+}
+
+.annotation-chip--prepared {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #fcd34d;
+}
+
+.annotation-chip--step {
+  background: var(--flow-surface-muted);
+  color: var(--flow-text);
+}
+
+.annotation-chip.is-missing {
+  background: var(--flow-danger-soft);
+  color: var(--flow-danger);
+  border-color: var(--flow-danger);
+  text-decoration: line-through;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .annotation-chip--prepared {
+    background: #451a03;
+    color: #fcd34d;
+    border-color: #92400e;
+  }
+}
+
+:root[data-theme='dark'] .annotation-chip--prepared {
+  background: #451a03;
+  color: #fcd34d;
+  border-color: #92400e;
+}
+
+.annotation-suggestions {
+  position: fixed;
+  z-index: 10000;
+  width: 290px;
+  max-height: 250px;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--flow-surface);
+  border: 1px solid var(--flow-border-strong);
+  box-shadow: var(--flow-shadow-panel);
+  font-size: 13px;
+}
+
+.annotation-suggestions-heading {
+  padding: 6px 8px 2px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--flow-text-muted);
+}
+
+.annotation-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--flow-text);
+}
+
+.annotation-suggestion.is-active {
+  background: var(--flow-accent-soft);
+}
+
+.annotation-suggestion-icon {
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.annotation-suggestion-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.annotation-suggestion-prefix {
+  color: #b45309;
+  font-weight: 700;
+}
+
+.annotation-suggestion-hint {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--flow-text-muted);
+}
+
+.annotation-amount-popover {
+  position: fixed;
+  z-index: 10000;
+  width: 280px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--flow-surface);
+  border: 1px solid var(--flow-border-strong);
+  box-shadow: var(--flow-shadow-panel);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--flow-text);
+}
+
+.annotation-amount-title {
+  font-weight: 700;
+}
+
+.annotation-amount-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.annotation-amount-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}

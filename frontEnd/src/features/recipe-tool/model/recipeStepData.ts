@@ -17,6 +17,7 @@ import { CUSTOM_ACTION_ID, getActionDisplayName, resolveStepActionId, type StepA
 import { STEP_LEVEL_FIELD_KEYS, isStepFieldEnabled, type StepSchemaFieldKey } from '../../../shared/catalog/actionSchemaCatalog'
 import {
   CUSTOM_INGREDIENT_ID,
+  getIngredientDefaultUnit,
   getIngredientDisplayName,
   isIngredientCatalogLoaded,
   isIngredientId,
@@ -28,7 +29,17 @@ import {
   type PreparationStyleId,
 } from '../../../shared/catalog/preparationStyleCatalog'
 import { resolveFlameLevelId, type FlameLevelId } from '../../../shared/catalog/flameLevelCatalog'
-import { parsePreparedAnnotationId, type AnnotationLabelResolver } from './stepAnnotations'
+import {
+  CUSTOM_INGREDIENT_PREFIX,
+  ingredientAnnotationId,
+  parsePreparedAnnotationId,
+  preparedAnnotationId,
+  type Annotation,
+  type AnnotationLabelResolver,
+  type StepAnnotationTargets,
+  sameAnnotationTarget,
+  unwrapAnnotations,
+} from './stepAnnotations'
 import { deriveStepTitle } from './stepTitle'
 import { CUSTOM_UNIT_ID, resolveUnitId, type UnitId } from '../../../shared/catalog/unitCatalog'
 import {
@@ -432,6 +443,58 @@ export const getRecipeStepActionSummary = (step: RecipeStepFields, resolve: Reci
   ].filter(Boolean)
   const action = getRecipeStepActionName(step)
   return targets.length > 0 ? `${action} ${targets.join(' + ')}` : action
+}
+
+/** The annotation ids of a step's own targets — what its description's @ annotations may point at. */
+export const getStepAnnotationTargets = (step: RecipeStepFields): StepAnnotationTargets => ({
+  ingredient: step.actionOn.ingredients.map(ingredientAnnotationId).filter(Boolean),
+  prepared: step.actionOn.processes.map(preparedAnnotationId),
+  step: step.actionOn.steps.map((entry) => entry.stepId),
+})
+
+/** The index of the Action On ingredient an ingredient annotation points at (-1 when none). */
+export const findAnnotatedIngredientIndex = (step: RecipeStepFields, annotationId: string) =>
+  step.actionOn.ingredients.findIndex((entry) => ingredientAnnotationId(entry).toLowerCase() === annotationId.toLowerCase())
+
+/**
+ * The step with an annotation's target in its Action On — added (without an amount, in the ingredient's default
+ * unit) when it isn't there yet. The Action On entry stays the one place amounts live; an annotation only points at it.
+ */
+export const withAnnotationTarget = (data: unknown, annotation: Annotation): RecipeStepNodeData => {
+  const normalized = normalizeRecipeStepNodeData(data)
+  const { actionOn } = normalized.step
+  if (annotation.kind === 'ingredient') {
+    if (findAnnotatedIngredientIndex(normalized.step, annotation.id) >= 0) return normalized
+    const custom = annotation.id.startsWith(CUSTOM_INGREDIENT_PREFIX)
+    const ingredientId = custom ? CUSTOM_INGREDIENT_ID : resolveIngredientId(annotation.id)
+    if (!ingredientId) return normalized
+    const entry: ActionOnIngredient = custom
+      ? { ingredientId: CUSTOM_INGREDIENT_ID, customIngredientName: annotation.id.slice(CUSTOM_INGREDIENT_PREFIX.length).trim() || annotation.label, quantity: null, unit: '' }
+      : { ingredientId, quantity: null, unit: getIngredientDefaultUnit(ingredientId) }
+    return withRecipeStepActionOnIngredients(normalized, [...actionOn.ingredients, entry])
+  }
+  if (annotation.kind === 'prepared') {
+    const reference = parsePreparedAnnotationId(annotation.id)
+    if (!reference || actionOn.processes.some((entry) => preparedAnnotationId(entry) === annotation.id)) return normalized
+    return withRecipeStepActionOnProcesses(normalized, [...actionOn.processes, reference])
+  }
+  if (actionOn.steps.some((entry) => entry.stepId === annotation.id)) return normalized
+  return withRecipeStepActionOnSteps(normalized, [...actionOn.steps.map((entry) => entry.stepId), annotation.id])
+}
+
+/**
+ * After targets were removed from a step's Action On (in the editor), its annotations of them read as plain words
+ * again — the prose stays, only the link goes.
+ */
+export const withoutAnnotationsOfRemovedTargets = (previous: RecipeStepFields, next: RecipeStepNodeData): RecipeStepNodeData => {
+  const before = getStepAnnotationTargets(previous)
+  const after = getStepAnnotationTargets(next.step)
+  const removed = (Object.keys(before) as Array<keyof StepAnnotationTargets>).flatMap((kind) =>
+    before[kind].filter((id) => !after[kind].includes(id)).map((id) => ({ kind, id })))
+  if (removed.length === 0) return next
+  const actionDescription = unwrapAnnotations(next.step.actionDescription, (annotation) =>
+    removed.some((target) => sameAnnotationTarget(annotation, target.kind, target.id)))
+  return actionDescription === next.step.actionDescription ? next : withStep(next, { ...next.step, actionDescription })
 }
 
 /** Applies a freshly generated visualization result (from a visualization job's step result) onto a STEP's data. */

@@ -58,6 +58,8 @@ import {
   withRecipeStepActionOnIngredients,
   withRecipeStepActionOnProcesses,
   withRecipeStepActionOnSteps,
+  withoutAnnotationsOfRemovedTargets,
+  type RecipeStepNodeData,
   withRecipeStepVisualization,
   type ActionOnIngredient,
   type RecipeStepActionOnProcess,
@@ -724,20 +726,27 @@ function RecipeProcessCanvasContent({
     setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: applyRecipeStepFieldUpdate(node.data, field, value) } : node)))
   }, [setNodes, recordFieldEdit])
 
-  const updateActionOnIngredients = useCallback((nodeId: string, ingredients: ActionOnIngredient[]) => {
-    recordFieldEdit(nodeId, 'actionOn.ingredients')
-    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnIngredients(node.data, ingredients) } : node)))
+  /** One undoable change of a step's data (e.g. its description together with the target an annotation adds). */
+  const updateStepData = useCallback((nodeId: string, coalesceField: string, update: (data: unknown) => RecipeStepNodeData) => {
+    recordFieldEdit(nodeId, coalesceField)
+    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: update(node.data) } : node)))
   }, [setNodes, recordFieldEdit])
+
+  // Removing a target in the editor turns the description's annotations of it back into plain words.
+  const updateActionOnIngredients = useCallback((nodeId: string, ingredients: ActionOnIngredient[]) => {
+    updateStepData(nodeId, 'actionOn.ingredients', (data) =>
+      withoutAnnotationsOfRemovedTargets(normalizeRecipeStepNodeData(data).step, withRecipeStepActionOnIngredients(data, ingredients)))
+  }, [updateStepData])
 
   const updateActionOnProcesses = useCallback((nodeId: string, references: RecipeStepActionOnProcess[]) => {
-    recordFieldEdit(nodeId, 'actionOn.processes')
-    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnProcesses(node.data, references) } : node)))
-  }, [setNodes, recordFieldEdit])
+    updateStepData(nodeId, 'actionOn.processes', (data) =>
+      withoutAnnotationsOfRemovedTargets(normalizeRecipeStepNodeData(data).step, withRecipeStepActionOnProcesses(data, references)))
+  }, [updateStepData])
 
   const updateActionOnSteps = useCallback((nodeId: string, stepIds: string[]) => {
-    recordFieldEdit(nodeId, 'actionOn.steps')
-    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnSteps(node.data, stepIds) } : node)))
-  }, [setNodes, recordFieldEdit])
+    updateStepData(nodeId, 'actionOn.steps', (data) =>
+      withoutAnnotationsOfRemovedTargets(normalizeRecipeStepNodeData(data).step, withRecipeStepActionOnSteps(data, stepIds)))
+  }, [updateStepData])
 
   // Which earlier steps' Expected Outputs each step may reference, and their live labels — derived
   // from the current nodes/edges (see recipeStepOutputs.ts), never stored.
@@ -1127,6 +1136,7 @@ function RecipeProcessCanvasContent({
                   updateActionOnIngredients={updateActionOnIngredients}
                   updateActionOnProcesses={updateActionOnProcesses}
                   updateActionOnSteps={updateActionOnSteps}
+                  updateStepData={updateStepData}
                   stepOutputGraph={stepOutputGraph}
                   onDeleteNode={(id) => void requestDeleteNode(id)}
                   onDuplicateNode={duplicateNode}

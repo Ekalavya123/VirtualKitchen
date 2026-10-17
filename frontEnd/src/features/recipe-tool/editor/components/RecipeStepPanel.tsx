@@ -37,6 +37,7 @@ import {
   getStepsMissingOutput,
   type StepOutputGraph,
 } from '../../model/recipeStepOutputs'
+import StepDescriptionField, { type StepDataUpdater } from './annotations/StepDescriptionField'
 
 type RecipeStepPanelProps = {
   node: { id: string; data: unknown }
@@ -48,6 +49,8 @@ type RecipeStepPanelProps = {
   updateActionOnIngredients: (nodeId: string, ingredients: ActionOnIngredient[]) => void
   updateActionOnProcesses: (nodeId: string, references: RecipeStepActionOnProcess[]) => void
   updateActionOnSteps: (nodeId: string, stepIds: string[]) => void
+  /** One undoable change of the step's data — the description editor adds an annotation's target with its text. */
+  updateStepData: StepDataUpdater
   /** The open process's step-output sources/reachability — decides which earlier steps' outputs this step may use. */
   stepOutputGraph: StepOutputGraph
   onDeleteNode?: (nodeId: string) => void
@@ -101,6 +104,7 @@ export default function RecipeStepPanel({
   updateActionOnIngredients,
   updateActionOnProcesses,
   updateActionOnSteps,
+  updateStepData,
   stepOutputGraph,
   onDeleteNode,
   onDuplicateNode,
@@ -691,12 +695,15 @@ export default function RecipeStepPanel({
         <div className="mt-2 h-px" style={{ background: 'var(--flow-border)' }} />
         <div className="flow-editor-section-heading">Action Description *</div>
         <div className="flow-properties-field">
-          <textarea
-            className="flow-properties-textarea"
-            rows={3}
-            value={step.actionDescription}
-            onChange={(e) => updateStepField(node.id, 'actionDescription', e.target.value)}
-            placeholder="Describe what this step does"
+          <StepDescriptionField
+            nodeId={node.id}
+            step={step}
+            recipeProcesses={recipeProcesses}
+            isPreparation={isPreparation}
+            stepOutputGraph={stepOutputGraph}
+            updateStepData={updateStepData}
+            updateActionOnIngredients={updateActionOnIngredients}
+            onOpenSubprocess={onOpenSubprocess}
           />
         </div>
 
