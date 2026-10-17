@@ -738,3 +738,52 @@ An unused preparation is a warning. The single retry is spent only on structural
 |---|---|---|
 | BLOCKER | stops ordering, cook mode, and whole-recipe visuals/narration (AI workflow approval) | no or empty MAIN; MAIN not connected; a step without an action, a custom action without a name, a MAIN step without an instruction; a flow whose final step has no Expected Output (no named output); an empty Preparation that is used; a use of a missing process/step or of a step without an Expected Output |
 | WARNING | shown only | an unused flow output; an empty Preparation nothing uses; a Preparation step using a prepared component; a flow with several ends; extra legacy preparation processes; MAIN starting in several places; custom ingredients/units (resolved when ordering) |
+
+## J. Step descriptions with @ annotations, derived titles, and the explanation (prompt v6)
+
+**Annotations.** A step's `actionDescription` stays a plain string. It can name what the step uses with inline tokens:
+
+```text
+Add @[onions](ingredient:107) and @[marinated chicken](prepared:12:<stepId>), then heat for 5 minutes.
+```
+
+| Token | Points at |
+|---|---|
+| `ingredient:<ingredientId>` or `ingredient:custom:<name>` | an `actionOn.ingredients` entry |
+| `prepared:<processId>:<stepId>` (legacy `prepared:<processId>`) | an `actionOn.processes` entry (a Preparation step's output) |
+| `step:<stepId>` | an `actionOn.steps` entry (an earlier step's result) |
+
+**How the data stays consistent**
+- The step's `actionOn` stays the single source of truth. Amounts, units and styles live only there, never in the text.
+- An annotation is a link to one of those targets. Inserting one adds its target; removing a target in the editor turns its annotations back into plain words.
+- The id is the reference. The bracketed label is the author's wording ("onions"). Prepared outputs and earlier results show their live names, so renaming a flow's output updates every annotation of it.
+- Text without tokens is ordinary text, so older recipes need no migration. Only these three kinds are parsed; anything else stays plain text.
+
+**Shared parsers.** `model/stepAnnotations.ts` and `recipe/model/StepAnnotations.java`, tested against `backend/src/test/resources/annotations/annotation-cases.json`.
+
+**Backend readers.** Narration, visualization and readiness read descriptions as plain words.
+
+**Ids follow their targets** on:
+- recipe copies (`ProcessGraphCloner`);
+- the slug ingredient-id migration;
+- the legacy Preparation merge;
+- pending-to-real process ids.
+
+**Readiness.** An annotation whose target the step no longer uses is the warning `ANNOTATION_DANGLING`.
+
+**AI.**
+- Generation and edits write annotations as `@[words](ingredient:<id or name>)`, `@[words](prepared:<uses ref>)` and `@[words](step:<fromSteps id>)`. AI edits use the `p*`/`s*` aliases instead of refs.
+- The normalizer fits each annotation to the step's own targets. Anything else, and any annotation in a check, becomes plain words and is reported as a repair. It is never a failure.
+
+**Derived title.** A step's title is never typed. `model/stepTitle.ts` builds it from:
+- the action's verb ("Mix" for "Mix / Combine");
+- what the step works on: the description's annotations in order, else its Action On targets.
+
+Examples: "Chop onions", "Heat Marinated Chicken", "Add cumin, turmeric +2". It is stored as `data.title`, which the backend only uses as a fallback label.
+
+**Explanation.** The Recipe Process tab and cook mode are derived from the graph only (`view/model/processExplanation.ts` + `recipeView.ts`), so AI-generated and hand-built recipes read the same way:
+- **Preparation flows:** each flow is a card titled "Prepare <output name>", with its steps in cooking order and "Output: …".
+- **Main process:** one ordered list.
+  - Each step lists what it newly brings in ("Adds").
+  - A step that follows straight on along an edge and adds nothing is marked "Continue".
+  - Nothing the graph doesn't record (such as "the same pan") is claimed.

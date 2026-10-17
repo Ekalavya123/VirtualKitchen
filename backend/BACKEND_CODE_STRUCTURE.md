@@ -143,6 +143,7 @@ A text request flows: feature service → `AiRequestQueueService.executeBounded`
 - `ai.globalasset` — admin-triggered image generation for catalog ingredients/equipment.
 - `ai.recipe.generation` — recipe text → preparation flows + the MAIN process (prompt builder, output schema, normalizer that repairs cosmetic slips, structural validator, async job); the frontend stores the flows in the recipe's one Preparation process.
 - `ai.recipe.edit` — AI edits of an existing process (builds on the generation schema and validator).
+- Step descriptions may carry @ annotations (`recipe.model.StepAnnotations`): readers that show or speak text use its plain-text form, and copies/migrations remap the ids inside them.
 - `ai.recipe.visualization` — per-step image generation for a process (async job, artifact consumer, `VisualizationStepImageLookup`).
 - `ai.recipe.narration` — per-step text-to-speech with fingerprint-based reuse; audio on the filesystem or Supabase.
 - `ai.recipe.workflow` — "AI Recipe Creation": orchestrates generation → approval → visuals → narration, plus the active-jobs view.
