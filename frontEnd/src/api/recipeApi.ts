@@ -130,12 +130,21 @@ export const RecipeDetailApi = {
 
   /**
    * Ensure a recipe has a MAIN process, creating one if it doesn't already have one
-   * (idempotent — safe to call repeatedly). Requires ownership.
+   * (idempotent — safe to call repeatedly). Requires ownership. Calls for the same recipe made while one is
+   * still in flight share its request, so a page mounting twice (StrictMode, a quick remount) asks only once.
    */
-  async createMainProcess(recipeId: number): Promise<Process> {
-    return apiPost<Process>(API.recipeDetail.mainProcess(recipeId), undefined)
+  createMainProcess(recipeId: number): Promise<Process> {
+    const pending = pendingMainProcess.get(recipeId)
+    if (pending) return pending
+    const request = apiPost<Process>(API.recipeDetail.mainProcess(recipeId), undefined)
+      .finally(() => pendingMainProcess.delete(recipeId))
+    pendingMainProcess.set(recipeId, request)
+    return request
   },
 }
+
+/** In-flight "ensure a MAIN process" requests, by recipe id (see RecipeDetailApi.createMainProcess). */
+const pendingMainProcess = new Map<number, Promise<Process>>()
 
 /**
  * Process (MAIN/SUBPROCESS) graph CRUD + recipe-scoped copy-on-insert reuse, backed
