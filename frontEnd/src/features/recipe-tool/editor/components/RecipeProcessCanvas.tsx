@@ -42,7 +42,7 @@ import {
 import { normalizeConditionNodeData } from '../../model/recipeConditionData'
 import { type FlowViewport } from '../model/canvasGraph'
 import { ROW_LAYOUT, arrangeFlowGrid, arrangeRows, findLoopEdges, getHandleSides, planFlowColumns, planRows, type RowPlan } from '../model/processLayout'
-import { getPreparationFlows } from '../../model/preparationFlows'
+import { describePreparedReference, getPreparationFlows } from '../../model/preparationFlows'
 import { findPreparedOutputUses, withoutSubprocessReferences } from '../../model/subprocessReferences'
 import { findFreePosition } from '../adapters/recipeProcessEditGraph'
 import { getProcessReadingOrder } from '../../model/processReadingOrder'
@@ -941,12 +941,42 @@ function RecipeProcessCanvasContent({
   // A node asked for from outside the canvas (a readiness issue): selected once it exists here — adjusted while
   // rendering, like the editor's other requests, so it applies on this process's first render.
   const [handledFocusToken, setHandledFocusToken] = useState<number | null>(null)
+  // The node just navigated to: centred (keeping the zoom) and briefly highlighted.
+  const [focusTarget, setFocusTarget] = useState<{ nodeId: string; token: number } | null>(null)
   if (focusNodeRequest && focusNodeRequest.token !== handledFocusToken && nodes.some((node) => node.id === focusNodeRequest.nodeId)) {
     setHandledFocusToken(focusNodeRequest.token)
+    setFocusTarget(focusNodeRequest)
     setSelectedNodeId(focusNodeRequest.nodeId)
     setSelectedEdgeId(null)
     setNodes((nds) => nds.map((node) => (node.selected === (node.id === focusNodeRequest.nodeId) ? node : { ...node, selected: node.id === focusNodeRequest.nodeId })))
   }
+
+  useEffect(() => {
+    if (!focusTarget || !flowReady) return
+    // After this render's own viewport work (the initial view), so the centring wins.
+    const frame = requestAnimationFrame(() => {
+      const instance = reactFlowInstance.current
+      const node = nodesRef.current.find((candidate) => candidate.id === focusTarget.nodeId)
+      if (!instance || !node) return
+      const width = node.measured?.width ?? node.width ?? DEFAULT_NODE_SIZE.step.width
+      const height = node.measured?.height ?? node.height ?? DEFAULT_NODE_SIZE.step.height
+      void instance.setCenter(node.position.x + width / 2, node.position.y + height / 2, { zoom: instance.getZoom(), duration: 300 })
+    })
+    const clear = setTimeout(() => setFocusTarget((current) => (current?.token === focusTarget.token ? null : current)), 1800)
+    return () => {
+      cancelAnimationFrame(frame)
+      clearTimeout(clear)
+    }
+  }, [focusTarget, flowReady])
+
+  /** A prepared chip or "Used in this step" row: follows the reference by ids, or says it no longer resolves. */
+  const handleOpenPrepared = useCallback((reference: { processId: number; stepId?: string }) => {
+    if (describePreparedReference(recipeProcesses, reference).problem) {
+      notifyError('This prepared component no longer exists.')
+      return
+    }
+    handleOpenSubprocess(reference.processId, reference.stepId)
+  }, [recipeProcesses, notifyError, handleOpenSubprocess])
 
   return (
     <div className="flow-canvas-container flex h-full w-full flex-col">
@@ -1042,7 +1072,18 @@ function RecipeProcessCanvasContent({
                   the brief) — provided via context rather than extra node props, since React Flow's
                   custom node components only receive their own node's data. Ingredient names come
                   from the static catalog module directly, no context needed for those. */}
-              <RecipeProcessGraphProvider value={{ recipeProcesses, stepOrder, stepOutputGraph, onNodeResizeStart: handleNodeResizeStart, onNodeResizeEnd: handleNodeResizeEnd, handleSides }}>
+              <RecipeProcessGraphProvider
+                value={{
+                  recipeProcesses,
+                  stepOrder,
+                  stepOutputGraph,
+                  onNodeResizeStart: handleNodeResizeStart,
+                  onNodeResizeEnd: handleNodeResizeEnd,
+                  handleSides,
+                  onOpenPrepared: handleOpenPrepared,
+                  highlightedNodeId: focusTarget?.nodeId ?? null,
+                }}
+              >
                 <ReactFlow
                   nodes={displayedNodes}
                   edges={displayedEdges}

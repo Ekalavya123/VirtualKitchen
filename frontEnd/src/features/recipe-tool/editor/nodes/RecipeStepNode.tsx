@@ -1,5 +1,5 @@
 import { useCallback, useLayoutEffect, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { Handle, Position, NodeResizeControl, useNodeId, useUpdateNodeInternals } from '@xyflow/react'
 import '../../../../styles/flow-ui.css'
 import {
@@ -10,12 +10,15 @@ import {
   getRecipeStepRepeatIntervalLabel,
   getRecipeStepTemperatureLabel,
   getRecipeStepTitle,
+  getStepAnnotationTargets,
   normalizeRecipeStepNodeData,
   stepAnnotationLabelResolver,
   type RecipeStepActionOnProcess,
   type RecipeStepNodeData,
 } from '../../model/recipeStepData'
-import { toPlainText } from '../../model/stepAnnotations'
+import { parsePreparedAnnotationId, sameAnnotationTarget, unbackedAnnotations, type Annotation } from '../../model/stepAnnotations'
+import AnnotatedText from '../components/annotations/AnnotatedText'
+import type { ChipState } from '../components/annotations/AnnotatedTextEditor'
 import { useNodeHandleSides, useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'
 import { DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes'
 import { getStepOutputLabel, getStepOutputReferenceProblem } from '../../model/recipeStepOutputs'
@@ -107,13 +110,15 @@ const HANDLE_PLACEMENT: Record<'top' | 'left' | 'right' | 'bottom', { position: 
   right: { position: Position.Right, style: { top: '50%', right: 0, transform: 'translate(50%, -50%)' } },
 }
 
-/** Action On lines shown before collapsing into "+N more" (a compact summary, not the full detail — that stays in the Step Properties panel). */
-const COLLAPSED_ACTION_ON_LIMIT = 3
+/** "Used in this step" rows shown before collapsing into "+N more" (the full detail stays in the step editor). */
+const COLLAPSED_USED_LIMIT = 4
+
+type UsedRow = { key: string; content: ReactNode; missing?: boolean }
 
 export default function RecipeStepNode({ selected, style: nodeStyle, width: nodeWidth, height: nodeHeight, data }: RecipeStepNodeProps) {
   const nodeId = useNodeId()
   const updateNodeInternals = useUpdateNodeInternals()
-  const { recipeProcesses, stepOrder, stepOutputGraph, onNodeResizeStart, onNodeResizeEnd } = useRecipeProcessGraphContext()
+  const { recipeProcesses, stepOrder, stepOutputGraph, onNodeResizeStart, onNodeResizeEnd, onOpenPrepared, highlightedNodeId } = useRecipeProcessGraphContext()
   const [expanded, setExpanded] = useState(false)
   const normalized = normalizeRecipeStepNodeData(data)
   const step = normalized.step
@@ -146,71 +151,95 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
     syncNodeLayout()
   }, [syncNodeLayout, width, minHeight, expanded, imageUrl, handleSides.target, handleSides.source])
 
-  const ingredientLines = step.actionOn.ingredients.map((entry, index) => {
-    const name = getActionOnIngredientDisplayName(entry)
-    const quantity = formatQuantityWithUnit(entry.quantity, entry.unit, entry.customUnit)
-    const prepStyle = getPreparationStyleDisplayName(entry.preparationStyleId ?? '', entry.customPreparationStyle)
-    return {
-      key: `ingredient-${index}`,
-      content: (
-        <>
-          <span style={{ fontWeight: 700, color: theme.accentStrong }}>{name}</span>
-          {quantity && (
-            <>
-              {' × '}
-              <span
-                style={{
-                  fontWeight: 700, fontSize: 10, color: theme.accentStrong, background: theme.soft,
-                  border: `1px solid ${theme.border}`, borderRadius: 999, padding: '0 6px',
-                }}
-              >
-                {quantity}
-              </span>
-            </>
-          )}
-          {prepStyle && <span style={{ color: 'var(--flow-text-muted)', fontWeight: 500 }}> ({prepStyle})</span>}
-        </>
-      ),
-    }
-  })
-
   // A used prepared component shows its *current* name: the Preparation step's live Expected Output.
   const preparedName = (reference: RecipeStepActionOnProcess) => describePreparedReference(recipeProcesses, reference).label
+  const names = { preparedName, stepOutputLabel: (stepId: string) => getStepOutputLabel(stepOutputGraph, stepId) }
+  const title = getRecipeStepTitle(step, names)
+  const actionSummary = getRecipeStepActionSummary(step, names)
+  const resolveLabel = stepAnnotationLabelResolver(names)
+  const targets = getStepAnnotationTargets(step)
 
-  const subprocessLines = step.actionOn.processes.map((entry) => {
-    const { label, problem } = describePreparedReference(recipeProcesses, entry)
-    return {
-      key: `prepared-${entry.processId}-${entry.stepId ?? ''}`,
-      content: (
-        <span style={{ fontWeight: 700, color: problem ? '#dc2626' : theme.accentStrong }} title={problem ? PREPARED_REFERENCE_PROBLEM_LABELS[problem] : 'Prepared in Preparation'}>
-          🔪 {problem ? PREPARED_REFERENCE_PROBLEM_LABELS[problem] : label}
-        </span>
-      ),
+  const chipState = (annotation: Annotation): ChipState => {
+    if (!targets[annotation.kind].some((id) => sameAnnotationTarget(annotation, annotation.kind, id))) return 'missing'
+    if (annotation.kind === 'prepared') {
+      const reference = parsePreparedAnnotationId(annotation.id)
+      return reference && !describePreparedReference(recipeProcesses, reference).problem ? 'ok' : 'missing'
     }
-  })
+    if (annotation.kind === 'step') return nodeId && getStepOutputReferenceProblem(stepOutputGraph, annotation.id, nodeId) ? 'missing' : 'ok'
+    return 'ok'
+  }
+  const openPreparedAnnotation = (annotation: Annotation) => {
+    const reference = parsePreparedAnnotationId(annotation.id)
+    if (reference) onOpenPrepared?.(reference)
+  }
 
-  // Labels are the referenced step's *current* Expected Output, resolved live from the graph.
-  const stepOutputLines = step.actionOn.steps.map((entry) => {
+  const stepOutputRows: UsedRow[] = step.actionOn.steps.map((entry) => {
     const label = getStepOutputLabel(stepOutputGraph, entry.stepId)
     const available = nodeId != null && getStepOutputReferenceProblem(stepOutputGraph, entry.stepId, nodeId) == null
     return {
       key: `step-output-${entry.stepId}`,
+      missing: !available,
       content: (
-        <span style={{ fontWeight: 700, color: available ? theme.accentStrong : '#dc2626' }} title={available ? 'Output of an earlier step' : 'Unavailable step output'}>
+        <span className="step-used-name" style={{ fontWeight: 700 }} title={available ? 'Result of an earlier step' : 'Unavailable step output'}>
           ↳ {label || 'Unavailable step output'}
         </span>
       ),
     }
   })
 
-  const names = { preparedName, stepOutputLabel: (stepId: string) => getStepOutputLabel(stepOutputGraph, stepId) }
-  const title = getRecipeStepTitle(step, names)
-  const actionSummary = getRecipeStepActionSummary(step, names)
-  const description = toPlainText(step.actionDescription, stepAnnotationLabelResolver(names)).trim()
+  const ingredientRows: UsedRow[] = step.actionOn.ingredients.map((entry, index) => {
+    const quantity = formatQuantityWithUnit(entry.quantity, entry.unit, entry.customUnit)
+    const prepStyle = getPreparationStyleDisplayName(entry.preparationStyleId ?? '', entry.customPreparationStyle)
+    return {
+      key: `ingredient-${index}`,
+      content: (
+        <>
+          <span className="step-used-name" style={{ fontWeight: 700, color: theme.accentStrong }}>{getActionOnIngredientDisplayName(entry)}</span>
+          {quantity && <span className="step-used-amount">· {quantity}</span>}
+          {prepStyle && <span className="step-used-amount" style={{ fontWeight: 500 }}>({prepStyle})</span>}
+        </>
+      ),
+    }
+  })
 
-  const actionOnLines = [...stepOutputLines, ...ingredientLines, ...subprocessLines]
-  const visibleLines = expanded ? actionOnLines : actionOnLines.slice(0, COLLAPSED_ACTION_ON_LIMIT)
-  const hiddenCount = actionOnLines.length - visibleLines.length
+  const preparedRows: UsedRow[] = step.actionOn.processes.map((entry) => {
+    const { label, problem } = describePreparedReference(recipeProcesses, entry)
+    return {
+      key: `prepared-${entry.processId}-${entry.stepId ?? ''}`,
+      missing: problem != null,
+      content: (
+        <>
+          <span className="step-used-badge">prepared</span>
+          {problem ? (
+            <span className="step-used-name" style={{ fontWeight: 700 }}>{PREPARED_REFERENCE_PROBLEM_LABELS[problem]}</span>
+          ) : (
+            <button
+              type="button"
+              className="step-used-link nodrag"
+              title="Open the flow that makes it"
+              onClick={(event) => {
+                event.stopPropagation()
+                onOpenPrepared?.(entry)
+              }}
+            >
+              {label}
+            </button>
+          )}
+        </>
+      ),
+    }
+  })
+
+  // Mentioned with @ but no longer used by the step (its target was removed or deleted elsewhere).
+  const danglingRows: UsedRow[] = unbackedAnnotations(step.actionDescription, targets).map((annotation, index) => ({
+    key: `dangling-${index}`,
+    missing: true,
+    content: <span className="step-used-name" title="Mentioned in the description, but the step doesn't use it">⚠ {annotation.label} · not used</span>,
+  }))
+
+  const usedRows = [...stepOutputRows, ...ingredientRows, ...preparedRows, ...danglingRows]
+  const visibleRows = expanded ? usedRows : usedRows.slice(0, COLLAPSED_USED_LIMIT)
+  const hiddenCount = usedRows.length - visibleRows.length
 
   const flameLevel = getFlameLevelDisplayName(step.flameLevelId, step.customFlameLevel)
   const duration = getRecipeStepDurationLabel(step)
@@ -246,7 +275,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
         gap: 8,
         position: 'relative',
       }}
-      className="flow-editor-surface process-step-node"
+      className={`flow-editor-surface process-step-node${highlightedNodeId != null && highlightedNodeId === nodeId ? ' step-node-highlight' : ''}`}
     >
       {selected && (
         <NodeResizeControl
@@ -319,46 +348,6 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
         )}
 
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {actionOnLines.length > 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <div style={{ fontSize: 9.5, fontWeight: 700, color: 'var(--flow-text-subtle)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>On:</div>
-              {visibleLines.map((line) => (
-                <div key={line.key} style={{ fontSize: 11, color: 'var(--flow-text)', display: 'flex', gap: 4, lineHeight: 1.35 }}>
-                  <span style={{ color: theme.accentStrong, flexShrink: 0 }}>•</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{line.content}</span>
-                </div>
-              ))}
-              {hiddenCount > 0 && (
-                <button
-                  type="button"
-                  className="nodrag"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setExpanded(true)
-                  }}
-                  style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', padding: 0, fontSize: 10.5, fontWeight: 700, color: theme.accentStrong, cursor: 'pointer' }}
-                >
-                  +{hiddenCount} more
-                </button>
-              )}
-              {expanded && actionOnLines.length > COLLAPSED_ACTION_ON_LIMIT && (
-                <button
-                  type="button"
-                  className="nodrag"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    setExpanded(false)
-                  }}
-                  style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', padding: 0, fontSize: 10.5, fontWeight: 700, color: 'var(--flow-text-subtle)', cursor: 'pointer' }}
-                >
-                  Show less
-                </button>
-              )}
-            </div>
-          ) : (
-            <div style={{ fontSize: 10.5, color: 'var(--flow-text-subtle)', fontStyle: 'italic' }}>No Action On targets yet</div>
-          )}
-
           {detailBadges.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {detailBadges.map((badge) => (
@@ -369,15 +358,16 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
             </div>
           )}
 
-          {description && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, borderTop: '1px dashed var(--flow-border)', paddingTop: 6 }}>
-              <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--flow-text)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                Description
-              </span>
-              <span style={{ fontSize: 10, color: 'var(--flow-text-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                {description}
-              </span>
-            </div>
+          {step.actionDescription.trim() ? (
+            <AnnotatedText
+              text={step.actionDescription.trim()}
+              resolveLabel={resolveLabel}
+              chipState={chipState}
+              onOpenPrepared={openPreparedAnnotation}
+              style={{ fontSize: 10.5, color: 'var(--flow-text-muted)', lineHeight: 1.55, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+            />
+          ) : (
+            <div style={{ fontSize: 10.5, color: 'var(--flow-text-subtle)', fontStyle: 'italic' }}>No description yet</div>
           )}
         </div>
       </div>
@@ -393,6 +383,44 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
           </span>
         </div>
       )}
+
+      {/* Used in this step — every structured input the step really has (its Action On), so what the system
+          recognises can be checked against the description. Annotations without a target show as missing. */}
+      <div className="step-used-list">
+        <span className="step-used-heading">Used in this step</span>
+        {usedRows.length === 0 && (
+          <span style={{ fontSize: 10.5, color: 'var(--flow-text-subtle)', fontStyle: 'italic' }}>Nothing yet — type @ in the description</span>
+        )}
+        {visibleRows.map((row) => (
+          <div key={row.key} className={`step-used-row${row.missing ? ' is-missing' : ''}`}>{row.content}</div>
+        ))}
+        {hiddenCount > 0 && (
+          <button
+            type="button"
+            className="nodrag"
+            onClick={(event) => {
+              event.stopPropagation()
+              setExpanded(true)
+            }}
+            style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', padding: 0, fontSize: 10.5, fontWeight: 700, color: theme.accentStrong, cursor: 'pointer' }}
+          >
+            +{hiddenCount} more
+          </button>
+        )}
+        {expanded && usedRows.length > COLLAPSED_USED_LIMIT && (
+          <button
+            type="button"
+            className="nodrag"
+            onClick={(event) => {
+              event.stopPropagation()
+              setExpanded(false)
+            }}
+            style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', padding: 0, fontSize: 10.5, fontWeight: 700, color: 'var(--flow-text-subtle)', cursor: 'pointer' }}
+          >
+            Show less
+          </button>
+        )}
+      </div>
 
       <Handle
         type="source"
