@@ -16,7 +16,9 @@ export const buildCookModeSlides = (sections: RecipeTimelineSection[]): Slidesho
   const staged = sections.length > 1
 
   return sections.flatMap((section) => section.items.map<SlideshowStep>((item) => {
-    const where = staged ? `${section.title} · ` : ''
+    // A preparation step says which flow it belongs to ("Prepare Marinated Chicken · Step 2 of 9").
+    const flow = section.flows?.find((candidate) => candidate.items.includes(item))
+    const where = flow ? `${flow.title} · ` : staged ? `${section.title} · ` : ''
 
     if (item.kind === 'check') {
       return {

@@ -38,7 +38,7 @@ public class RecipeProcessGenerationPromptBuilder {
      * Logged with every generation so a change in output quality can be tied to a prompt change.
      * Bump it whenever the system/initial/retry prompt wording or structure changes.
      */
-    public static final String PROMPT_VERSION = "5";
+    public static final String PROMPT_VERSION = "6";
 
     /** Aliases shown per ingredient — enough to recognise regional names without bloating the prompt. */
     private static final int MAX_INGREDIENT_ALIASES = 3;
@@ -109,9 +109,17 @@ public class RecipeProcessGenerationPromptBuilder {
 
                 CORE STEP FIELDS
                 - actionDescription: a short natural-language description of what this step does. Always include it.
+                  Mark what the step uses in it as @[words](target), keeping the recipe's own words (see ANNOTATIONS).
                 - expectedOutput: the expected result/state after this step. Include it whenever it can be
                   reasonably inferred from the recipe (e.g. "onions turn golden brown"); omit it only when the
                   recipe gives no basis for it. Do not invent specific, unstated outcomes.
+
+                ANNOTATIONS (IN actionDescription)
+                - @[onions](ingredient:<that ingredient's ingredientId; its "name" when custom>),
+                  @[marinated chicken](prepared:<the "uses" ref>), @[browned chicken](step:<the "fromSteps" stepId>).
+                - Only annotate what THIS step lists in "ingredients", "uses" or "fromSteps"; each at most once.
+                  Leave ordinary words plain. Never annotate a CONDITION.
+                - Amounts stay in the ingredient entry, never in the annotation.
 
                 ADVANCED PROPERTIES (OPTIONAL, ACTION-SPECIFIC)
                 - Only use temperatureValue/temperatureUnit, flameLevel, duration, repeatInterval when the chosen
@@ -272,7 +280,7 @@ public class RecipeProcessGenerationPromptBuilder {
                 - Return ONLY minified JSON matching the OUTPUT shape, with every empty/default field omitted.
 
                 EXAMPLE (shortened)
-                {"preparations":[{"ref":"marinated_chicken","output":"Marinated Chicken","steps":[{"action":"cut","ingredients":[{"ingredientId":"chicken","name":"boneless chicken","quantity":500,"unit":"g","preparationStyle":"bite-sized"}],"actionDescription":"Cut the chicken into bite-sized pieces"},{"action":"marinate","ingredients":[{"ingredientId":"yogurt","name":"yogurt","quantity":0.5,"unit":"cup"}],"actionDescription":"Coat the chicken in yogurt and rest","expectedOutput":"Marinated Chicken","duration":"30 minutes"}]},{"ref":"chopped_onions","output":"Chopped Onions","steps":[{"action":"chop","ingredients":[{"ingredientId":"onion","name":"onions","quantity":2,"unit":"piece","preparationStyle":"chopped"}],"actionDescription":"Chop the onions","expectedOutput":"Chopped Onions"}]}],"main":{"name":"Chicken Curry","steps":[{"action":"heat","ingredients":[{"ingredientId":"oil","name":"oil","quantity":3,"unit":"tbsp"}],"actionDescription":"Heat the oil in a deep pan","flameLevel":"medium"},{"action":"saute","uses":["chopped_onions"],"actionDescription":"Fry the onions until golden","duration":"8 minutes"},{"nodeType":"CONDITION","title":"Are the onions golden?","actionDescription":"Check the colour of the onions"},{"action":"add","uses":["marinated_chicken"],"actionDescription":"Add the chicken and its marinade"},{"action":"simmer","actionDescription":"Cover and simmer until the chicken is cooked","flameLevel":"low","duration":"20 minutes"}]}}
+                {"preparations":[{"ref":"marinated_chicken","output":"Marinated Chicken","steps":[{"action":"cut","ingredients":[{"ingredientId":"chicken","name":"boneless chicken","quantity":500,"unit":"g","preparationStyle":"bite-sized"}],"actionDescription":"Cut the @[chicken](ingredient:chicken) into bite-sized pieces"},{"action":"marinate","ingredients":[{"ingredientId":"yogurt","name":"yogurt","quantity":0.5,"unit":"cup"}],"actionDescription":"Coat the chicken in @[yogurt](ingredient:yogurt) and rest","expectedOutput":"Marinated Chicken","duration":"30 minutes"}]},{"ref":"chopped_onions","output":"Chopped Onions","steps":[{"action":"chop","ingredients":[{"ingredientId":"onion","name":"onions","quantity":2,"unit":"piece","preparationStyle":"chopped"}],"actionDescription":"Chop the @[onions](ingredient:onion)","expectedOutput":"Chopped Onions"}]}],"main":{"name":"Chicken Curry","steps":[{"action":"heat","ingredients":[{"ingredientId":"oil","name":"oil","quantity":3,"unit":"tbsp"}],"actionDescription":"Heat the @[oil](ingredient:oil) in a deep pan","flameLevel":"medium"},{"action":"saute","uses":["chopped_onions"],"actionDescription":"Fry the @[onions](prepared:chopped_onions) until golden","duration":"8 minutes"},{"nodeType":"CONDITION","title":"Are the onions golden?","actionDescription":"Check the colour of the onions"},{"action":"add","uses":["marinated_chicken"],"actionDescription":"Add the @[chicken](prepared:marinated_chicken) and its marinade"},{"action":"simmer","actionDescription":"Cover and simmer until the chicken is cooked","flameLevel":"low","duration":"20 minutes"}]}}
                 (The ingredientIds above are illustrative: always use the ids listed in INGREDIENTS.)
                 """;
     }

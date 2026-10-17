@@ -26,6 +26,7 @@ import {
   stepFieldsOf,
   stepRefsOf,
 } from './preparationFlows.ts'
+import { ingredientAnnotationId, preparedAnnotationId, toPlainText, unbackedAnnotations } from './stepAnnotations.ts'
 
 export type ReadinessSeverity = 'BLOCKER' | 'WARNING'
 
@@ -44,6 +45,7 @@ export type ReadinessIssueCode =
   | 'REF_DANGLING'
   | 'CUSTOM_INGREDIENT'
   | 'CUSTOM_UNIT'
+  | 'ANNOTATION_DANGLING'
 
 export type ReadinessIssue = {
   code: ReadinessIssueCode
@@ -70,9 +72,13 @@ export type ReadinessOptions = {
 
 const CUSTOM_ID = 'custom'
 
+/** A step's instruction as prose (annotations read as their labels). */
+const instructionOf = (fields: Record<string, unknown>) =>
+  (typeof fields.actionDescription === 'string' ? toPlainText(fields.actionDescription).trim() : '')
+
 /** "“Fry the onions”", or the step's position when it has no description yet. */
 const describeNode = (process: Process, node: ProcessNode) => {
-  const description = asText(stepFieldsOf(node).actionDescription) || asText((node.data ?? {}).title)
+  const description = instructionOf(stepFieldsOf(node)) || asText((node.data ?? {}).title)
   if (description) return `“${description.length > 48 ? `${description.slice(0, 45)}…` : description}”`
   const index = process.nodes.filter((candidate) => candidate.kind === node.kind).indexOf(node)
   return node.kind === 'CONDITION' ? `check ${index + 1}` : `step ${index + 1}`
@@ -184,7 +190,7 @@ export const evaluateRecipeReadiness = (processes: readonly Process[], options: 
         add('STEP_INCOMPLETE', 'BLOCKER', process.id, node.id, `${label} uses a custom action without a name.`)
       } else if (action !== CUSTOM_ID && options.isKnownAction && !options.isKnownAction(action)) {
         add('STEP_INCOMPLETE', 'BLOCKER', process.id, node.id, `${label} has an unknown action “${action}”.`)
-      } else if (process.type === 'MAIN' && !asText(fields.actionDescription)) {
+      } else if (process.type === 'MAIN' && !instructionOf(fields)) {
         add('STEP_INCOMPLETE', 'BLOCKER', process.id, node.id, `${label} has no instruction (Action Description).`)
       }
 
@@ -214,6 +220,18 @@ export const evaluateRecipeReadiness = (processes: readonly Process[], options: 
           add('REF_DANGLING', 'BLOCKER', process.id, node.id, `${label} uses the output of a step that no longer provides one.`)
         }
       })
+
+      const unbacked = typeof fields.actionDescription === 'string'
+        ? unbackedAnnotations(fields.actionDescription, {
+          ingredient: ingredientsOf(fields).map(ingredientAnnotationId),
+          prepared: processRefsOf(fields).map(preparedAnnotationId),
+          step: stepRefsOf(fields),
+        })
+        : []
+      if (unbacked.length > 0) {
+        add('ANNOTATION_DANGLING', 'WARNING', process.id, node.id,
+          `${label} mentions ${unbacked.map((annotation) => `“${annotation.label}”`).join(', ')}, which the step no longer uses.`)
+      }
 
       ingredientsOf(fields).forEach((ingredient) => {
         if (asText(ingredient.ingredientId) === CUSTOM_ID) {

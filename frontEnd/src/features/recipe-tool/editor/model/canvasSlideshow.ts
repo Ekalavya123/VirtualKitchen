@@ -6,8 +6,11 @@ import {
   getActionOnIngredientDisplayName,
   getRecipeStepDurationLabel,
   getRecipeStepTemperatureLabel,
+  getRecipeStepTitle,
   normalizeRecipeStepNodeData,
+  stepAnnotationLabelResolver,
 } from '../../model/recipeStepData'
+import { toPlainText } from '../../model/stepAnnotations'
 import { getStepOutputLabel, type StepOutputGraph } from '../../model/recipeStepOutputs'
 import { describePreparedReference } from '../../model/preparationFlows'
 import type { SlideshowStep } from '../../walkthrough/RecipeVisualizationSlideshow'
@@ -30,6 +33,10 @@ export const buildCanvasSlideshowSteps = (
   return stepNodes.map((node, index) => {
     const normalized = normalizeRecipeStepNodeData(node.data)
     const { step } = normalized
+    const names = {
+      preparedName: (entry: { processId: number; stepId?: string }) => describePreparedReference(recipeProcesses, entry).label,
+      stepOutputLabel: (stepId: string) => getStepOutputLabel(stepOutputGraph, stepId),
+    }
     const ingredientNames = [
       ...step.actionOn.steps.map((entry) => getStepOutputLabel(stepOutputGraph, entry.stepId)).filter(Boolean),
       ...step.actionOn.ingredients.map(getActionOnIngredientDisplayName),
@@ -48,8 +55,8 @@ export const buildCanvasSlideshowSteps = (
 
     return {
       id: node.id,
-      title: normalized.title,
-      instruction: step.actionDescription?.trim() || undefined,
+      title: getRecipeStepTitle(step, names),
+      instruction: toPlainText(step.actionDescription, stepAnnotationLabelResolver(names)).trim() || undefined,
       description: descriptionParts.join(' · ') || undefined,
       imageUrl: normalized.visualization?.imageUrl,
       stepNumber: index + 1,

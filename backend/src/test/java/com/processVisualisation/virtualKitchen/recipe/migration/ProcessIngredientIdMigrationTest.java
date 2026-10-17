@@ -49,6 +49,15 @@ class ProcessIngredientIdMigrationTest {
         assertFalse(ProcessIngredientIdMigration.migrateNodes(nodes, catalog), "already-migrated data is left alone");
     }
 
+    @Test
+    void rewritesIngredientAnnotationsLikeTheirEntries() {
+        assertEquals("Fry @[onion](ingredient:42), @[fruit](ingredient:custom:Dragon Fruit) and @[salt](ingredient:33)",
+                ProcessIngredientIdMigration.migrateAnnotations(
+                        "Fry @[onion](ingredient:onion), @[fruit](ingredient:dragon-fruit) and @[salt](ingredient:33)", catalog));
+        assertEquals("Add @[ghee](ingredient:custom:ghee)",
+                ProcessIngredientIdMigration.migrateAnnotations("Add @[ghee](ingredient:custom:ghee)", catalog));
+    }
+
     private static Map<String, Object> line(String ingredientId, String customName) {
         Map<String, Object> line = new LinkedHashMap<>();
         line.put("ingredientId", ingredientId);

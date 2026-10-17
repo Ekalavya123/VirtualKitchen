@@ -7,6 +7,7 @@ import com.processVisualisation.virtualKitchen.ai.recipe.generation.RecipeProces
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.dto.GeneratedActionOnDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.dto.GeneratedActionOnIngredientDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.dto.GeneratedRecipeStepDTO;
+import com.processVisualisation.virtualKitchen.recipe.model.StepAnnotations;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -87,6 +88,7 @@ final class RecipeProcessEditContext {
             if (step.getExpectedOutput() == null) step.setExpectedOutput("");
             step.getActionOn().setSteps(translate(step.getActionOn().getSteps(), aliasByNodeId));
             step.getActionOn().setProcesses(translate(step.getActionOn().getProcesses(), aliasByProcessId));
+            step.setActionDescription(toModelAnnotations(step.getActionDescription(), aliasByNodeId, aliasByProcessId));
             steps.add(step);
         });
 
@@ -174,6 +176,18 @@ final class RecipeProcessEditContext {
         return new GeneratedActionOnIngredientDTO(source.getIngredientId(), source.getQuantity(), source.getUnit(),
                 source.getPreparationStyle(), source.getCustomIngredientName(), source.getCustomUnit(),
                 source.getCustomPreparationStyle(), source.getNotes());
+    }
+
+    /**
+     * A description's annotations in the model's terms: a prepared component as its "p*" alias, an earlier step as its
+     * "s*" alias. One that points at nothing the model is shown reads as plain words.
+     */
+    private static String toModelAnnotations(String description, Map<String, String> aliasByNodeId, Map<String, String> aliasByProcessId) {
+        return StepAnnotations.remapIds(description, annotation -> switch (annotation.kind()) {
+            case StepAnnotations.PREPARED -> aliasByProcessId.get(annotation.id());
+            case StepAnnotations.STEP -> aliasByNodeId.get(annotation.id());
+            default -> annotation.id();
+        });
     }
 
     /** Maps each id through {@code mapping}, dropping ids it does not know (dangling references). */

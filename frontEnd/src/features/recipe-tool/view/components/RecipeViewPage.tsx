@@ -21,6 +21,8 @@ type RecipeViewPageProps = {
   onNutritionSaved: (nutrition: NutritionInfo | null) => void
   /** Opens an issue that blocks cook mode in the editor (owners only). */
   onShowIssue?: (issue: ReadinessIssue) => void
+  /** Opens one step in the editor (owners only). */
+  onOpenStep?: (processId: number, nodeId: string) => void
 }
 
 const ANCHORS = {
@@ -35,7 +37,7 @@ const ANCHORS = {
  * recipe session the Recipe Editor edits (see buildRecipePresentation), so it always reflects the
  * editor's latest content, including edits that haven't been saved yet.
  */
-export default function RecipeViewPage({ recipe, isOwner, onNutritionSaved, onShowIssue }: RecipeViewPageProps) {
+export default function RecipeViewPage({ recipe, isOwner, onNutritionSaved, onShowIssue, onOpenStep }: RecipeViewPageProps) {
   const session = useRecipeSession()
   const readinessGate = useReadinessGate(isOwner ? onShowIssue : undefined)
 
@@ -111,7 +113,7 @@ export default function RecipeViewPage({ recipe, isOwner, onNutritionSaved, onSh
             )}
           </div>
           {hasSteps ? (
-            <RecipeStepsTimeline sections={presentation.sections} />
+            <RecipeStepsTimeline sections={presentation.sections} onOpenStep={isOwner ? onOpenStep : undefined} />
           ) : (
             <div className="rp-empty-card">
               <span className="rp-empty-card-icon" aria-hidden>📝</span>

@@ -1,6 +1,7 @@
 package com.processVisualisation.virtualKitchen.recipe.service;
 
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
+import com.processVisualisation.virtualKitchen.recipe.model.StepAnnotations;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -53,6 +54,7 @@ public final class ProcessGraphCloner {
                 remapActionOnProcessRefs(data, processIdMap, nodeIdMaps);
             }
             remapActionOnStepRefs(data, nodeIdMap);
+            remapDescriptionAnnotations(data, processIdMap, nodeIdMaps, nodeIdMap);
             nodeCopy.setData(data);
             copiedNodes.add(nodeCopy);
         }
@@ -156,6 +158,34 @@ public final class ProcessGraphCloner {
             remapped.add(entryCopy);
         }
         ((Map<String, Object>) actionOn).put("steps", remapped);
+    }
+
+    /**
+     * Points the @ annotations in a STEP's description at the copies, like the Action On references they mirror:
+     * a prepared annotation follows its process (and step) — or turns back into plain text when that process isn't
+     * part of the copy — and a step annotation follows its node. Ingredient ids don't change in a copy.
+     */
+    @SuppressWarnings("unchecked")
+    private static void remapDescriptionAnnotations(Map<String, Object> data, Map<Long, Long> processIdMap,
+                                                    Map<Long, Map<String, String>> nodeIdMaps, Map<String, String> nodeIdMap) {
+        if (!(data.get("step") instanceof Map<?, ?> step)) return;
+        if (!(step.get("actionDescription") instanceof String description) || !StepAnnotations.hasAnnotations(description)) return;
+        String remapped = StepAnnotations.remapIds(description, annotation -> switch (annotation.kind()) {
+            case StepAnnotations.STEP -> nodeIdMap.getOrDefault(annotation.id(), annotation.id());
+            case StepAnnotations.PREPARED -> {
+                if (processIdMap == null) yield annotation.id();
+                int separator = annotation.id().indexOf(':');
+                Long oldId = asLong(separator < 0 ? annotation.id() : annotation.id().substring(0, separator));
+                Long newId = oldId == null ? null : processIdMap.get(oldId);
+                if (newId == null) yield null;
+                if (separator < 0) yield String.valueOf(newId);
+                String stepId = annotation.id().substring(separator + 1);
+                Map<String, String> stepIds = nodeIdMaps == null ? null : nodeIdMaps.get(oldId);
+                yield newId + ":" + (stepIds == null ? stepId : stepIds.getOrDefault(stepId, stepId));
+            }
+            default -> annotation.id();
+        });
+        ((Map<String, Object>) step).put("actionDescription", remapped);
     }
 
     private static Long asLong(Object value) {

@@ -19,13 +19,17 @@ import { descriptionTail, restatesText } from './textOverlap'
 import {
   getActionOnIngredientDisplayName,
   getRecipeStepTemperatureLabel,
-  getRecipeStepTitle,
+  getRecipeStepActionName,
   normalizeRecipeStepNodeData,
+  stepAnnotationLabelResolver,
   type ActionOnIngredient,
   type RecipeStepFields,
 } from '../../model/recipeStepData'
 import { orderProcesses, orderProcessNodes, type OrderedProcess } from '../../model/processReadingOrder'
 import { CONDITION_HANDLES } from '../../model/recipeNodeTypes'
+import { toPlainText, type AnnotationLabelResolver } from '../../model/stepAnnotations'
+import { actionVerbOf, deriveStepTitle } from '../../model/stepTitle'
+import { explainPreparationFlows, nodesContinuingPrevious, type ExplainedFlow } from './processExplanation'
 
 // ---------------------------------------------------------------------------------------------
 // Presentation types
@@ -71,6 +75,7 @@ export type StepContinuation =
 
 export type RecipeBranchTag = { answer: string; question: string }
 
+
 export type RecipeTimelineStep = {
   kind: 'step'
   key: string
@@ -96,6 +101,14 @@ export type RecipeTimelineStep = {
   imageUrl?: string
   branch?: RecipeBranchTag
   continuation?: StepContinuation
+  /** Where the step lives, to open it in the editor. */
+  processId: number
+  nodeId: string
+  /**
+   * Main process: the step follows straight on from the one before (an edge leads from it) and introduces nothing
+   * new — it carries on with what is already cooking.
+   */
+  continues: boolean
 }
 
 export type CheckOutcome = {
@@ -119,7 +132,26 @@ export type RecipeTimelineCheck = {
 
 export type RecipeTimelineItem = RecipeTimelineStep | RecipeTimelineCheck
 
-/** One stage of the recipe: a process (each subprocess, then the main process last). */
+/**
+ * One preparation flow, read as ONE recipe step: "Prepare Marinated Chicken", its steps as explanatory points in
+ * order, and what it makes. Its points share the flow's step number.
+ */
+export type RecipeTimelineFlow = {
+  key: string
+  anchorId: string
+  /** The flow's step number (counted like any other step). */
+  number: number
+  /** Where "Open in editor" goes: the step that makes the flow's output (else its first node). */
+  processId: number
+  nodeId: string
+  /** "Prepare <output>" (or "Preparation flow N" while the flow has no named output). */
+  title: string
+  outputName: string
+  stepCount: number
+  items: RecipeTimelineItem[]
+}
+
+/** One stage of the recipe: a process (the Preparation, then the main process last). */
 export type RecipeTimelineSection = {
   key: string
   anchorId: string
@@ -127,9 +159,12 @@ export type RecipeTimelineSection = {
   /** The process's own description, '' when it has none. */
   summary: string
   isMain: boolean
-  /** Numbered steps in this stage (checks not counted). */
+  /** Numbered steps in this stage (checks not counted; a preparation flow counts as one). */
   stepCount: number
+  /** Every item, in order (for a Preparation: flow after flow). */
   items: RecipeTimelineItem[]
+  /** A Preparation's flows, each shown as one card. */
+  flows?: RecipeTimelineFlow[]
 }
 
 export type RecipePresentation = {
@@ -161,8 +196,6 @@ const firstSentence = (text: string, max = 64) => {
 const ingredientNameInSentence = (entry: ActionOnIngredient) =>
   entry.ingredientId === CUSTOM_INGREDIENT_ID ? getActionOnIngredientDisplayName(entry) : getActionOnIngredientDisplayName(entry).toLowerCase()
 
-const shortList = (items: string[]) => joinNatural(items.length > 3 ? [...items.slice(0, 2), `${items.length - 2} more`] : items)
-
 /**
  * The basic ingredient behind a step's result: "chicken" for "the marinated chicken", followed
  * back through the steps that made it (marinated ← cut ← cleaned 500 g chicken).
@@ -181,13 +214,15 @@ const rootIngredientName = (node: ProcessNode | undefined, stepById: Map<string,
  * chicken", "Marinate chicken", "Chop onion and potato". No amounts or details; those are in its
  * sentence (see composeInstruction). Without an action, the first sentence of its description.
  */
-const buildStepHeading = (step: RecipeStepFields, earlierBases: string[]) => {
-  if (!step.action) return step.actionDescription.trim() ? firstSentence(step.actionDescription) : 'Next step'
-  const verb = actionVerb(step)
+const buildStepHeading = (step: RecipeStepFields, earlierBases: string[], resolveLabel: AnnotationLabelResolver) => {
+  if (!step.action) {
+    const description = toPlainText(step.actionDescription, resolveLabel).trim()
+    return description ? firstSentence(description) : 'Next step'
+  }
   const own = step.actionOn.ingredients.map(ingredientNameInSentence)
   const subjects = earlierBases.length > 0 ? earlierBases : worksOnAll(step) ? own : own.slice(0, 1)
-  const unique = [...new Set(subjects.filter(Boolean))]
-  return unique.length > 0 ? `${verb} ${shortList(unique)}` : verb
+  // What the instruction names (@ annotations) comes first; otherwise what the step works on.
+  return deriveStepTitle({ actionName: getRecipeStepActionName(step), description: step.actionDescription, subjects, resolveLabel })
 }
 
 /** What a step produces, in words: its Expected Output, else what it worked on. */
@@ -227,7 +262,7 @@ const heatLabel = (step: RecipeStepFields) => {
 }
 
 /** "Mix" for "Mix / Combine" — the catalog's first name reads as a verb in a sentence. */
-const actionVerb = (step: RecipeStepFields) => getRecipeStepTitle(step).split(' / ')[0].trim()
+const actionVerb = (step: RecipeStepFields) => actionVerbOf(getRecipeStepActionName(step))
 
 /** "onions" for 2 onion — only for plain counts of a catalog ingredient whose name isn't already plural. */
 const pluralize = (name: string) => {
@@ -382,6 +417,15 @@ const sectionTitleOf = (process: Process) => {
  */
 export const buildRecipePresentation = (processes: Process[]): RecipePresentation => {
   const orderedById = new Map(processes.map((process) => [process.id, orderProcessNodes(process)]))
+  // A Preparation reads flow by flow, each flow in cooking order (see processExplanation.ts).
+  const flowsById = new Map<number, ExplainedFlow[]>()
+  processes.filter((process) => process.type === 'SUBPROCESS').forEach((process) => {
+    const ordered = orderedById.get(process.id) as OrderedProcess
+    const flows = explainPreparationFlows(process, ordered.nodes.map((node) => node.id))
+    const nodeById = new Map(ordered.nodes.map((node) => [node.id, node]))
+    flowsById.set(process.id, flows)
+    orderedById.set(process.id, { ...ordered, nodes: flows.flatMap((flow) => flow.nodeIds).map((id) => nodeById.get(id) as ProcessNode) })
+  })
   const processById = new Map(processes.map((process) => [process.id, process]))
   const sectionProcesses = orderProcesses(processes, orderedById).filter((process) => process.nodes.length > 0)
   /** What a used prepared component is called: the Preparation step's output, or (legacy) a whole process's product. */
@@ -396,6 +440,18 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
   const numberOf = new Map<string, number>()
   let counter = 0
   for (const process of sectionProcesses) {
+    const flows = flowsById.get(process.id)
+    if (flows) {
+      // A preparation flow is one step of the recipe; every point in it carries that number.
+      const nodeById = new Map(process.nodes.map((node) => [node.id, node]))
+      for (const flow of flows) {
+        const stepIds = flow.nodeIds.filter((id) => nodeById.get(id)?.kind === 'STEP')
+        if (stepIds.length === 0) continue
+        const number = ++counter
+        stepIds.forEach((id) => numberOf.set(`${process.id}:${id}`, number))
+      }
+      continue
+    }
     for (const node of orderedById.get(process.id)?.nodes ?? []) {
       if (node.kind === 'STEP') numberOf.set(`${process.id}:${node.id}`, ++counter)
     }
@@ -411,6 +467,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
   const sections = sectionProcesses.map<RecipeTimelineSection>((process) => {
     const ordered = orderedById.get(process.id) as OrderedProcess
     const stepById = new Map(ordered.nodes.map((node) => [node.id, node]))
+    const continuing = process.type === 'MAIN' ? nodesContinuingPrevious(process, ordered.nodes.map((node) => node.id)) : new Set<string>()
     const titles = new Map<string, string>()
     const indexOf = new Map(ordered.nodes.map((node, index) => [node.id, index]))
     const refOf = (nodeId: string): RecipeItemRef => ({
@@ -419,6 +476,12 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
       number: numberOf.get(`${process.id}:${nodeId}`),
       title: titles.get(nodeId) ?? '',
       isCheck: stepById.get(nodeId)?.kind === 'CONDITION',
+    })
+
+    // Annotations read as live names: prepared outputs and earlier results as this view names them.
+    const resolveLabel = stepAnnotationLabelResolver({
+      preparedName: productOf,
+      stepOutputLabel: (stepId) => stepProductLabel(stepById.get(stepId)),
     })
 
     // Titles first too — outcomes and jumps quote their target's title.
@@ -434,7 +497,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
         ...step.actionOn.steps.map((entry) => rootIngredientName(stepById.get(entry.stepId), stepById)),
         ...step.actionOn.processes.map(productOf),
       ].filter(Boolean)
-      titles.set(node.id, buildStepHeading(step, earlierBases))
+      titles.set(node.id, buildStepHeading(step, earlierBases, resolveLabel))
     }
 
     const relativeDirection = (fromId: string, toId: string): CheckOutcome['direction'] => {
@@ -527,7 +590,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
       // Say each thing once: one sentence from the step's fields; its description and expected
       // result only show when they add something that sentence doesn't already say.
       const name = titles.get(node.id) ?? ''
-      const description = step.actionDescription.trim()
+      const description = toPlainText(step.actionDescription, resolveLabel).trim()
       const products = [
         ...step.actionOn.steps.flatMap((entry) => {
           const label = stepProductLabel(stepById.get(entry.stepId))
@@ -581,6 +644,10 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
         kind: 'step',
         key,
         anchorId,
+        processId: process.id,
+        nodeId: node.id,
+        // Carries on with what is already cooking: follows straight on, and brings in nothing new.
+        continues: continuing.has(node.id) && step.actionOn.ingredients.length === 0 && step.actionOn.processes.length === 0,
         number: numberOf.get(key) ?? 0,
         name,
         showName: composed.length > 0,
@@ -595,14 +662,32 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
       }
     })
 
+    const itemByNode = new Map(ordered.nodes.map((node, at) => [node.id, items[at]]))
+    const flows = flowsById.get(process.id)?.map<RecipeTimelineFlow>((flow) => {
+      const flowItems = flow.nodeIds.map((id) => itemByNode.get(id) as RecipeTimelineItem)
+      const firstStep = flowItems.find((item) => item.kind === 'step')
+      return {
+        key: `${process.id}:flow-${flow.index}`,
+        anchorId: `recipe-flow-${process.id}-${flow.index}`,
+        number: firstStep?.kind === 'step' ? firstStep.number : 0,
+        processId: process.id,
+        nodeId: flow.outputNodeId ?? flow.nodeIds[0],
+        title: flow.title,
+        outputName: flow.outputName,
+        stepCount: flowItems.filter((item) => item.kind === 'step').length,
+        items: flowItems,
+      }
+    })
+
     return {
       key: String(process.id),
       anchorId: sectionAnchorId(process.id),
       title: sectionTitleOf(process),
       summary: process.description?.trim() ?? '',
       isMain: process.type === 'MAIN',
-      stepCount: items.filter((item) => item.kind === 'step').length,
+      stepCount: flows ? flows.filter((flow) => flow.stepCount > 0).length : items.filter((item) => item.kind === 'step').length,
       items,
+      flows,
     }
   })
 

@@ -15,6 +15,7 @@ import { CONDITION_HANDLES, DEFAULT_NODE_SIZE, RECIPE_NODE_TYPES } from '../../m
 import { normalizeConditionNodeData, type ConditionNodeData } from '../../model/recipeConditionData'
 import { normalizeRecipeStepNodeData, type RecipeStepActionOnProcess, type RecipeStepNodeData } from '../../model/recipeStepData'
 import { PREPARATION_NAME } from '../../model/mergePreparations'
+import { resolveGeneratedAnnotations, toPlainText } from '../../model/stepAnnotations'
 import { ROW_LAYOUT, arrangeFlowGrid, arrangeRows, planFlowColumns, planRows } from '../model/processLayout'
 import { parseDurationLabel } from '../../../../shared/catalog/stepFieldCatalog'
 import type { Process, ProcessEdge, ProcessNode } from '../../../../types/process'
@@ -106,7 +107,7 @@ export const buildStepNode = (
           (ref) => `${label} uses the output of an unknown step "${ref}"`, problems)
           .map((stepId) => ({ stepId })),
       },
-      actionDescription: step.actionDescription ?? '',
+      actionDescription: resolveGeneratedAnnotations(step.actionDescription ?? '', preparedByRef, stepIdToNodeId),
       expectedOutput: step.expectedOutput ?? '',
       flameLevelId: step.flameLevel ?? '',
       customFlameLevel: '',
@@ -136,7 +137,8 @@ export const buildStepNode = (
 }
 
 export const buildConditionNode = (step: GeneratedRecipeStep, nodeId: string, x: number, y: number): ProcessNode => {
-  const notes = [step.actionDescription, step.expectedOutput ? `Expected: ${step.expectedOutput}` : '']
+  // A check's text is read, not linked: annotations become plain words.
+  const notes = [toPlainText(step.actionDescription), step.expectedOutput ? `Expected: ${step.expectedOutput}` : '']
     .filter(Boolean)
     .join(' ')
   const expectedResult = step.expectedResult === 'failure' ? 'failure' : 'success'

@@ -5,6 +5,8 @@ import {
   Background,
   Controls,
   MiniMap,
+  NodeToolbar,
+  Position,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -42,7 +44,8 @@ import {
 import { normalizeConditionNodeData } from '../../model/recipeConditionData'
 import { type FlowViewport } from '../model/canvasGraph'
 import { ROW_LAYOUT, arrangeFlowGrid, arrangeRows, findLoopEdges, getHandleSides, planFlowColumns, planRows, type RowPlan } from '../model/processLayout'
-import { getPreparationFlows } from '../../model/preparationFlows'
+import { describePreparedReference, getPreparationFlows } from '../../model/preparationFlows'
+import { useRecipeReadiness } from '../../session/useRecipeReadiness'
 import { findPreparedOutputUses, withoutSubprocessReferences } from '../../model/subprocessReferences'
 import { findFreePosition } from '../adapters/recipeProcessEditGraph'
 import { getProcessReadingOrder } from '../../model/processReadingOrder'
@@ -58,6 +61,8 @@ import {
   withRecipeStepActionOnIngredients,
   withRecipeStepActionOnProcesses,
   withRecipeStepActionOnSteps,
+  withoutAnnotationsOfRemovedTargets,
+  type RecipeStepNodeData,
   withRecipeStepVisualization,
   type ActionOnIngredient,
   type RecipeStepActionOnProcess,
@@ -119,6 +124,10 @@ type RecipeProcessCanvasProps = {
 
 // Default sizes of a new node (see createRecipeStepNode/createConditionNode).
 const NEW_STEP_SIZE = DEFAULT_NODE_SIZE.step
+/** Size of the step popup (see .flow-step-popup) and its gap to the node — for placing it where it fits. */
+const STEP_POPUP_WIDTH = 420
+const STEP_POPUP_HEIGHT = 540
+const STEP_POPUP_GAP = 14
 const NEW_CONDITION_SIZE = DEFAULT_NODE_SIZE.condition
 /** Free space kept around a newly added node, so it never lands touching another one. */
 const NEW_NODE_CLEARANCE = 24
@@ -371,9 +380,11 @@ function RecipeProcessCanvasContent({
 
   // Auto-collapse the properties panel when nothing is selected, expand it when a node is selected,
   // so the rail only takes up space while it has something to show.
+  // A STEP opens its own editor on the node (the step popup), so only checks open the panel by themselves.
+  const selectedIsStep = nodes.some((node) => node.id === selectedNodeId && isRecipeStepNode(node))
   useEffect(() => {
-    setPropsCollapsed(selectedNodeId == null)
-  }, [selectedNodeId, setPropsCollapsed])
+    setPropsCollapsed(selectedNodeId == null || selectedIsStep)
+  }, [selectedNodeId, selectedIsStep, setPropsCollapsed])
 
   // Publishes this process's nodes/edges into the shared recipe session on every *real* change —
   // not just on Save — so switching to a different process (or the Recipe Process view) always sees
@@ -724,20 +735,27 @@ function RecipeProcessCanvasContent({
     setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: applyRecipeStepFieldUpdate(node.data, field, value) } : node)))
   }, [setNodes, recordFieldEdit])
 
-  const updateActionOnIngredients = useCallback((nodeId: string, ingredients: ActionOnIngredient[]) => {
-    recordFieldEdit(nodeId, 'actionOn.ingredients')
-    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnIngredients(node.data, ingredients) } : node)))
+  /** One undoable change of a step's data (e.g. its description together with the target an annotation adds). */
+  const updateStepData = useCallback((nodeId: string, coalesceField: string, update: (data: unknown) => RecipeStepNodeData) => {
+    recordFieldEdit(nodeId, coalesceField)
+    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: update(node.data) } : node)))
   }, [setNodes, recordFieldEdit])
+
+  // Removing a target in the editor turns the description's annotations of it back into plain words.
+  const updateActionOnIngredients = useCallback((nodeId: string, ingredients: ActionOnIngredient[]) => {
+    updateStepData(nodeId, 'actionOn.ingredients', (data) =>
+      withoutAnnotationsOfRemovedTargets(normalizeRecipeStepNodeData(data).step, withRecipeStepActionOnIngredients(data, ingredients)))
+  }, [updateStepData])
 
   const updateActionOnProcesses = useCallback((nodeId: string, references: RecipeStepActionOnProcess[]) => {
-    recordFieldEdit(nodeId, 'actionOn.processes')
-    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnProcesses(node.data, references) } : node)))
-  }, [setNodes, recordFieldEdit])
+    updateStepData(nodeId, 'actionOn.processes', (data) =>
+      withoutAnnotationsOfRemovedTargets(normalizeRecipeStepNodeData(data).step, withRecipeStepActionOnProcesses(data, references)))
+  }, [updateStepData])
 
   const updateActionOnSteps = useCallback((nodeId: string, stepIds: string[]) => {
-    recordFieldEdit(nodeId, 'actionOn.steps')
-    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnSteps(node.data, stepIds) } : node)))
-  }, [setNodes, recordFieldEdit])
+    updateStepData(nodeId, 'actionOn.steps', (data) =>
+      withoutAnnotationsOfRemovedTargets(normalizeRecipeStepNodeData(data).step, withRecipeStepActionOnSteps(data, stepIds)))
+  }, [updateStepData])
 
   // Which earlier steps' Expected Outputs each step may reference, and their live labels — derived
   // from the current nodes/edges (see recipeStepOutputs.ts), never stored.
@@ -932,12 +950,101 @@ function RecipeProcessCanvasContent({
   // A node asked for from outside the canvas (a readiness issue): selected once it exists here — adjusted while
   // rendering, like the editor's other requests, so it applies on this process's first render.
   const [handledFocusToken, setHandledFocusToken] = useState<number | null>(null)
+  // The node just navigated to: centred (keeping the zoom) and briefly highlighted.
+  const [focusTarget, setFocusTarget] = useState<{ nodeId: string; token: number } | null>(null)
   if (focusNodeRequest && focusNodeRequest.token !== handledFocusToken && nodes.some((node) => node.id === focusNodeRequest.nodeId)) {
     setHandledFocusToken(focusNodeRequest.token)
+    setFocusTarget(focusNodeRequest)
     setSelectedNodeId(focusNodeRequest.nodeId)
     setSelectedEdgeId(null)
     setNodes((nds) => nds.map((node) => (node.selected === (node.id === focusNodeRequest.nodeId) ? node : { ...node, selected: node.id === focusNodeRequest.nodeId })))
   }
+
+  useEffect(() => {
+    if (!focusTarget || !flowReady) return
+    // After this render's own viewport work (the initial view), so the centring wins.
+    const frame = requestAnimationFrame(() => {
+      const instance = reactFlowInstance.current
+      const node = nodesRef.current.find((candidate) => candidate.id === focusTarget.nodeId)
+      if (!instance || !node) return
+      const width = node.measured?.width ?? node.width ?? DEFAULT_NODE_SIZE.step.width
+      const height = node.measured?.height ?? node.height ?? DEFAULT_NODE_SIZE.step.height
+      void instance.setCenter(node.position.x + width / 2, node.position.y + height / 2, { zoom: instance.getZoom(), duration: 300 })
+    })
+    const clear = setTimeout(() => setFocusTarget((current) => (current?.token === focusTarget.token ? null : current)), 1800)
+    return () => {
+      cancelAnimationFrame(frame)
+      clearTimeout(clear)
+    }
+  }, [focusTarget, flowReady])
+
+  // --- The step popup: the step editor opened on the node itself by a click ---
+  const readiness = useRecipeReadiness()
+  const [stepPopup, setStepPopup] = useState<{ nodeId: string; side: Position } | null>(null)
+  const popupNode = stepPopup ? nodes.find((node) => node.id === stepPopup.nodeId && isRecipeStepNode(node)) ?? null : null
+  const popupRef = useRef<HTMLDivElement | null>(null)
+  const closeStepPopup = useCallback(() => setStepPopup(null), [])
+
+  /**
+   * Opens beside the node — on the right, or on the left when only that side has room — and pans the canvas
+   * just enough for the popup to be fully visible when neither side fits (the node stays on screen).
+   */
+  const openStepPopup = useCallback((node: Node) => {
+    const instance = reactFlowInstance.current
+    const wrapper = reactFlowWrapperRef.current
+    if (!instance || !wrapper) {
+      setStepPopup({ nodeId: node.id, side: Position.Right })
+      return
+    }
+    const box = wrapper.getBoundingClientRect()
+    const width = node.measured?.width ?? node.width ?? DEFAULT_NODE_SIZE.step.width
+    const topLeft = instance.flowToScreenPosition({ x: node.position.x, y: node.position.y })
+    const bottomRight = instance.flowToScreenPosition({ x: node.position.x + width, y: node.position.y })
+    const needed = STEP_POPUP_WIDTH + STEP_POPUP_GAP + 12
+    const roomRight = box.right - bottomRight.x
+    const roomLeft = topLeft.x - box.left
+    const side = roomRight >= needed || roomRight >= roomLeft ? Position.Right : Position.Left
+    let dx = 0
+    if (side === Position.Right && roomRight < needed) dx = -Math.min(needed - roomRight, Math.max(0, roomLeft - 12))
+    if (side === Position.Left && roomLeft < needed) dx = Math.min(needed - roomLeft, Math.max(0, roomRight - 12))
+    const popupHeight = Math.min(STEP_POPUP_HEIGHT, window.innerHeight - 140)
+    const overflowBottom = topLeft.y + popupHeight + 12 - box.bottom
+    const dy = overflowBottom > 0 ? -Math.min(overflowBottom, Math.max(0, topLeft.y - box.top - 12)) : 0
+    if (dx !== 0 || dy !== 0) {
+      const viewport = instance.getViewport()
+      void instance.setViewport({ ...viewport, x: viewport.x + dx, y: viewport.y + dy }, { duration: 200 })
+    }
+    setStepPopup({ nodeId: node.id, side })
+  }, [])
+
+  // Clicking anywhere outside it hides the popup (every edit is already applied); its own pickers, the amount
+  // popover and confirmation dialogs count as inside, and so does its node (a click there keeps it open).
+  useEffect(() => {
+    if (!stepPopup) return
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null
+      if (!target || popupRef.current?.contains(target)) return
+      if (target.closest('.annotation-suggestions, .annotation-amount-popover, [role="alertdialog"], [role="dialog"]')) return
+      if (target.closest(`.react-flow__node[data-id="${CSS.escape(stepPopup.nodeId)}"]`)) return
+      setStepPopup(null)
+    }
+    document.addEventListener('pointerdown', onPointerDown, true)
+    return () => document.removeEventListener('pointerdown', onPointerDown, true)
+  }, [stepPopup])
+
+  const handleSaveAndClose = useCallback(async () => {
+    setStepPopup(null)
+    await handleSave()
+  }, [handleSave])
+
+  /** A prepared chip or "Used in this step" row: follows the reference by ids, or says it no longer resolves. */
+  const handleOpenPrepared = useCallback((reference: { processId: number; stepId?: string }) => {
+    if (describePreparedReference(recipeProcesses, reference).problem) {
+      notifyError('This prepared component no longer exists.')
+      return
+    }
+    handleOpenSubprocess(reference.processId, reference.stepId)
+  }, [recipeProcesses, notifyError, handleOpenSubprocess])
 
   return (
     <div className="flow-canvas-container flex h-full w-full flex-col">
@@ -1033,7 +1140,18 @@ function RecipeProcessCanvasContent({
                   the brief) — provided via context rather than extra node props, since React Flow's
                   custom node components only receive their own node's data. Ingredient names come
                   from the static catalog module directly, no context needed for those. */}
-              <RecipeProcessGraphProvider value={{ recipeProcesses, stepOrder, stepOutputGraph, onNodeResizeStart: handleNodeResizeStart, onNodeResizeEnd: handleNodeResizeEnd, handleSides }}>
+              <RecipeProcessGraphProvider
+                value={{
+                  recipeProcesses,
+                  stepOrder,
+                  stepOutputGraph,
+                  onNodeResizeStart: handleNodeResizeStart,
+                  onNodeResizeEnd: handleNodeResizeEnd,
+                  handleSides,
+                  onOpenPrepared: handleOpenPrepared,
+                  highlightedNodeId: focusTarget?.nodeId ?? null,
+                }}
+              >
                 <ReactFlow
                   nodes={displayedNodes}
                   edges={displayedEdges}
@@ -1043,6 +1161,12 @@ function RecipeProcessCanvasContent({
                   isValidConnection={isValidConnection}
                   onNodeDragStart={handleNodeDragStart}
                   onNodeDragStop={handleNodeDragStop}
+                  // A plain click on a step opens its editor on the node; a modifier click only (multi-)selects.
+                  onNodeClick={(event, node) => {
+                    if (event.shiftKey || event.ctrlKey || event.metaKey) return
+                    if (isRecipeStepNode(node)) openStepPopup(node)
+                    else setStepPopup(null)
+                  }}
                   onSelectionChange={({ nodes: selectedNodes, edges: selectedEdges }) => {
                     if (selectedNodes.length > 0) {
                       setSelectedNodeId(selectedNodes[0].id)
@@ -1084,7 +1208,51 @@ function RecipeProcessCanvasContent({
                 >
                   <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
                   <Controls style={{ borderRadius: 10, border: '1px solid var(--flow-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
-                  <MiniMap pannable zoomable style={{ borderRadius: 12, border: '1px solid var(--flow-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
+                  {/* The minimap would sit on top of the step popup, so it steps aside while one is open. */}
+                  {!popupNode && (
+                    <MiniMap pannable zoomable style={{ borderRadius: 12, border: '1px solid var(--flow-border)', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
+                  )}
+                  {stepPopup && popupNode && (
+                    <NodeToolbar nodeId={popupNode.id} isVisible position={stepPopup.side} align="start" offset={STEP_POPUP_GAP}>
+                      <div
+                        ref={popupRef}
+                        className="flow-step-popup nodrag nowheel nopan"
+                        data-canvas-shortcuts="off"
+                        role="dialog"
+                        aria-label="Edit step"
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            event.stopPropagation()
+                            setStepPopup(null)
+                          }
+                        }}
+                      >
+                        <RecipeStepPanel
+                          key={popupNode.id}
+                          variant="popup"
+                          node={{ id: popupNode.id, data: popupNode.data }}
+                          recipeProcesses={recipeProcesses}
+                          isPreparation={process.type === 'SUBPROCESS'}
+                          updateStepField={updateRecipeStepField}
+                          updateActionOnIngredients={updateActionOnIngredients}
+                          updateActionOnProcesses={updateActionOnProcesses}
+                          updateActionOnSteps={updateActionOnSteps}
+                          updateStepData={updateStepData}
+                          stepOutputGraph={stepOutputGraph}
+                          onDeleteNode={(id) => void requestDeleteNode(id)}
+                          onDuplicateNode={duplicateNode}
+                          onOpenSubprocess={handleOpenSubprocess}
+                          onGenerateVisuals={() => void visuals.generate()}
+                          isGeneratingVisuals={visuals.generating}
+                          visualsProgressLabel={visuals.progressLabel}
+                          issues={readiness?.issues.filter((issue) => issue.nodeId === popupNode.id && issue.processId === processId) ?? []}
+                          autoFocusDescription={Boolean(normalizeRecipeStepNodeData(popupNode.data).step.action)}
+                          onClose={closeStepPopup}
+                          onSaveAndClose={() => void handleSaveAndClose()}
+                        />
+                      </div>
+                    </NodeToolbar>
+                  )}
                 </ReactFlow>
               </RecipeProcessGraphProvider>
             </div>
@@ -1127,6 +1295,7 @@ function RecipeProcessCanvasContent({
                   updateActionOnIngredients={updateActionOnIngredients}
                   updateActionOnProcesses={updateActionOnProcesses}
                   updateActionOnSteps={updateActionOnSteps}
+                  updateStepData={updateStepData}
                   stepOutputGraph={stepOutputGraph}
                   onDeleteNode={(id) => void requestDeleteNode(id)}
                   onDuplicateNode={duplicateNode}

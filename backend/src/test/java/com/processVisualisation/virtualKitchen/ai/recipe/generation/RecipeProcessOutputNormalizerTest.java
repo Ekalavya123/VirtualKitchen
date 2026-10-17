@@ -248,6 +248,42 @@ class RecipeProcessOutputNormalizerTest {
         assertTrue(errors.stream().anyMatch(e -> e.startsWith("main.steps[1].fromSteps[0]")), errors::toString);
     }
 
+    @Test
+    void annotationsAreFittedToTheStepsOwnTargets() throws Exception {
+        RecipeProcessOutputNormalizer.Normalized normalized = normalize("""
+                {"preparations":[{"ref":"onions","output":"Chopped Onions","steps":[{"action":"chop","ingredients":[{"ingredientId":"onion","name":"onions","quantity":2,"unit":"piece"}],"actionDescription":"Chop the @[onions](ingredient:onions)"}]}],
+                 "main":{"name":"R","steps":[
+                  {"stepId":"b1","action":"sear","ingredients":[{"ingredientId":"chicken","name":"chicken","quantity":500,"unit":"g"},{"ingredientId":"custom","name":"Kashmiri chilli paste","quantity":1,"unit":"tbsp"}],
+                   "actionDescription":"Sear the @[chicken](ingredient:chicken) with @[chilli paste](ingredient:Kashmiri chilli paste) and @[salt](ingredient:salt)","expectedOutput":"browned chicken"},
+                  {"action":"saute","uses":["onions"],"actionDescription":"Fry the @[onions](prepared:onions) and @[sauce](prepared:sauce)"},
+                  {"action":"add","fromSteps":["b1"],"actionDescription":"Return the @[browned chicken](step:browned chicken) and @[it](step:zz)"},
+                  {"nodeType":"CONDITION","title":"Is it done?","actionDescription":"Check the @[chicken](ingredient:chicken)"}]}}""");
+
+        List<GeneratedRecipeStepDTO> steps = normalized.main().getSteps();
+        assertEquals("Chop the @[onions](ingredient:onion)", normalized.preparations().get(0).getSteps().get(0).getActionDescription(),
+                "an ingredient written by its name points at the entry's catalog id");
+        assertEquals("Sear the @[chicken](ingredient:chicken) with @[chilli paste](ingredient:custom:Kashmiri chilli paste) and salt",
+                steps.get(0).getActionDescription(), "a custom ingredient keeps its name; one the step doesn't list is plain text");
+        assertEquals("Fry the @[onions](prepared:onions) and sauce", steps.get(1).getActionDescription());
+        assertEquals("Return the @[browned chicken](step:b1) and it", steps.get(2).getActionDescription(),
+                "a step written as its expected output points at that step");
+        assertEquals("Check the chicken", steps.get(3).getActionDescription(), "a check is never annotated");
+        assertTrue(normalized.repairs().stream().anyMatch(repair -> repair.contains("\"salt\"")), normalized.repairs()::toString);
+        assertValid(normalized);
+    }
+
+    @Test
+    void anAnnotatedDescriptionStillCountsAsADescription() throws Exception {
+        RecipeProcessOutputNormalizer.Normalized normalized = normalize("""
+                {"main":{"name":"R","steps":[
+                  {"stepId":"a","action":"heat","ingredients":[{"ingredientId":"oil","name":"oil","quantity":1,"unit":"tbsp"}],"actionDescription":"@[oil](ingredient:oil)"},
+                  {"action":"fry","fromSteps":["a"],"actionDescription":"Fry in the hot oil"}]}}""");
+
+        assertEquals("oil", normalized.main().getSteps().get(0).getExpectedOutput(),
+                "a used step's description becomes its expected output as plain words");
+        assertValid(normalized);
+    }
+
     private RecipeProcessOutputNormalizer.Normalized normalize(String json) throws Exception {
         return normalizer.normalize(objectMapper.readValue(json, RecipeProcessOutput.class));
     }

@@ -40,6 +40,13 @@ export type RecipeProcessGraphContextValue = {
    * DEFAULT_HANDLE_SIDES (see useNodeHandleSides).
    */
   handleSides?: ReadonlyMap<string, HandleSides>
+  /**
+   * Opens the Preparation on the step that makes a used prepared component (from a prepared chip or a "Used in
+   * this step" row). Resolves by ids only; a reference that no longer resolves is reported, never followed.
+   */
+  onOpenPrepared?: (reference: { processId: number; stepId?: string }) => void
+  /** A node just navigated to (briefly highlighted so it's easy to spot). */
+  highlightedNodeId?: string | null
 }
 
 const RecipeProcessGraphContext = createContext<RecipeProcessGraphContextValue>({

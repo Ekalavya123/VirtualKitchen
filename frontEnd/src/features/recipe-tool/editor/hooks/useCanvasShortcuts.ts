@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 /**
  * Keyboard shortcuts (Delete/Backspace, Ctrl/Cmd+Z, Ctrl/Cmd+Y) — a global listener so shortcuts work
  * regardless of which element inside the canvas currently has focus, not only while the React Flow pane
- * itself is focused. Skips typing in an input/textarea, and is scoped to specific key combos only, so it
+ * itself is focused. Skips typing in an input/textarea/select or an editable text (the @ description editor), and is scoped to specific key combos only, so it
  * never interferes with browser/app navigation shortcuts.
  *
  * This is the *only* keyboard-delete path — React Flow's own built-in one is disabled (`deleteKeyCode={null}`
@@ -17,8 +17,11 @@ export function useCanvasShortcuts({ onDelete, onUndo, onRedo }: {
 }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const tag = (event.target as HTMLElement)?.tagName
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return
+      // Inside an editor that sits over the canvas (the step popup), keys belong to that editor.
+      if (target?.closest?.('[data-canvas-shortcuts="off"]')) return
       if (event.key === 'Delete' || event.key === 'Backspace') onDelete()
       if ((event.ctrlKey || event.metaKey) && event.key === 'z') { event.preventDefault(); onUndo() }
       if ((event.ctrlKey || event.metaKey) && event.key === 'y') { event.preventDefault(); onRedo() }

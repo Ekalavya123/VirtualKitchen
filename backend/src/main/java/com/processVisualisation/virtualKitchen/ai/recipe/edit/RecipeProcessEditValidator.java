@@ -8,6 +8,7 @@ import com.processVisualisation.virtualKitchen.ai.recipe.generation.dto.Generate
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.dto.GeneratedActionOnIngredientDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.dto.GeneratedRecipeStepDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVocabularyProvider;
+import com.processVisualisation.virtualKitchen.recipe.model.StepAnnotations;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -189,7 +190,6 @@ public class RecipeProcessEditValidator {
             if (set != null) {
                 if (set.action() != null) { step.setAction(set.action()); patch.setAction(set.action()); }
                 if (set.customActionName() != null) { step.setCustomActionName(set.customActionName()); patch.setCustomActionName(set.customActionName()); }
-                if (set.actionDescription() != null) { step.setActionDescription(set.actionDescription()); patch.setActionDescription(set.actionDescription()); }
                 if (set.expectedOutput() != null) { step.setExpectedOutput(set.expectedOutput()); patch.setExpectedOutput(set.expectedOutput()); }
                 if (set.temperatureValue() != null) { step.setTemperatureValue(set.temperatureValue()); patch.setTemperatureValue(set.temperatureValue()); }
                 if (set.temperatureUnit() != null) { step.setTemperatureUnit(set.temperatureUnit()); patch.setTemperatureUnit(set.temperatureUnit()); }
@@ -206,6 +206,12 @@ public class RecipeProcessEditValidator {
                 if (set.uses() != null) {
                     step.getActionOn().setProcesses(new ArrayList<>(set.uses()));
                     patch.getActionOn().setProcesses(processRefs(set.uses()));
+                }
+                // After the targets above, so the description's annotations are fitted to the step as it now is.
+                if (set.actionDescription() != null) {
+                    String description = normalizer.normalizeAnnotations(set.actionDescription(), step);
+                    step.setActionDescription(description);
+                    patch.setActionDescription(frontendDescription(description));
                 }
             }
             for (String field : clear) {
@@ -235,7 +241,12 @@ public class RecipeProcessEditValidator {
             }
             GeneratedRecipeStepDTO patch = new GeneratedRecipeStepDTO();
             if (operation.title() != null) { condition.setTitle(operation.title()); patch.setTitle(operation.title()); }
-            if (operation.actionDescription() != null) { condition.setActionDescription(operation.actionDescription()); patch.setActionDescription(operation.actionDescription()); }
+            if (operation.actionDescription() != null) {
+                // A check's text is read, not linked.
+                String description = StepAnnotations.toPlainText(operation.actionDescription());
+                condition.setActionDescription(description);
+                patch.setActionDescription(description);
+            }
             if (operation.expectedResult() != null) { condition.setExpectedResult(operation.expectedResult()); patch.setExpectedResult(operation.expectedResult()); }
             translated.add(ProcessEditOperationDTO.builder().op("UPDATE_CONDITION").target(ref(operation.target())).step(patch).build());
         }
@@ -474,7 +485,20 @@ public class RecipeProcessEditValidator {
             copy.setStepId(ref(node.getStepId()));
             copy.getActionOn().setSteps(nodeRefs(copy.getActionOn().getSteps()));
             copy.getActionOn().setProcesses(processRefs(copy.getActionOn().getProcesses()));
+            copy.setActionDescription(frontendDescription(copy.getActionDescription()));
             return copy;
+        }
+
+        /**
+         * A description's annotations in the editor's terms: "s*"/"n*" aliases become node refs, "p*" aliases the
+         * stored "processId:stepId". One naming an alias this edit doesn't know reads as plain words.
+         */
+        private String frontendDescription(String description) {
+            return StepAnnotations.remapIds(description, annotation -> switch (annotation.kind()) {
+                case StepAnnotations.STEP -> refByAlias.containsKey(annotation.id()) ? ref(annotation.id()) : null;
+                case StepAnnotations.PREPARED -> context.processId(annotation.id());
+                default -> annotation.id();
+            });
         }
     }
 

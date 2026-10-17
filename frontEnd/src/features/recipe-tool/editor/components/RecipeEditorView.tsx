@@ -57,6 +57,8 @@ type RecipeEditorViewProps = {
   onSavePreparationNotes?: (notes: string | null) => Promise<void>
   /** An issue to show, asked for from outside the editor (a blocked order's "Show me"); a new token repeats it. */
   issueFocusRequest?: { issue: ReadinessIssue; token: number } | null
+  /** A step to open (from the Recipe Process page): its process is shown with the step selected and centred. */
+  stepFocusRequest?: { processId: number; nodeId: string; token: number } | null
 }
 
 /**
@@ -72,7 +74,7 @@ type RecipeEditorViewProps = {
  * navigation within one recipe editing session, not opening a new flow.
  */
 export default function RecipeEditorView({
-  recipeId, recipeName, isOwner, onMainProcessChanged, preparationNotes = null, onSavePreparationNotes, issueFocusRequest = null,
+  recipeId, recipeName, isOwner, onMainProcessChanged, preparationNotes = null, onSavePreparationNotes, issueFocusRequest = null, stepFocusRequest = null,
 }: RecipeEditorViewProps) {
   const { notifyError, notifySuccess } = useNotifications()
   const session = useRecipeSession()
@@ -257,17 +259,22 @@ export default function RecipeEditorView({
   }, [session])
 
   /** Opens the process an issue is about and selects its step (when it names one). */
-  const handleNavigateToIssue = useCallback((issue: ReadinessIssue) => {
-    if (issue.processId == null || !session) return
-    const processId = session.getProcess(issue.processId) ? issue.processId : session.resolveProcessId(issue.processId)
+  /** Shows a process with one of its nodes selected and centred (a readiness issue, a step picked elsewhere). */
+  const focusNode = useCallback((requestedProcessId: number, nodeId: string | null) => {
+    if (!session) return
+    const processId = session.getProcess(requestedProcessId) ? requestedProcessId : session.resolveProcessId(requestedProcessId)
     if (!session.getProcess(processId)) return
     setAncestorTrail([])
     setSelectedProcessId(processId)
-    if (issue.nodeId) {
-      setFocusNodeRequest({ nodeId: issue.nodeId, token: Date.now() })
-      setHighlightedNodeIds(new Set([issue.nodeId]))
+    if (nodeId) {
+      setFocusNodeRequest({ nodeId, token: Date.now() })
+      setHighlightedNodeIds(new Set([nodeId]))
     }
   }, [session])
+
+  const handleNavigateToIssue = useCallback((issue: ReadinessIssue) => {
+    if (issue.processId != null) focusNode(issue.processId, issue.nodeId)
+  }, [focusNode])
 
   const existingMain = processes.find((process) => process.type === 'MAIN') ?? null
 
@@ -487,6 +494,11 @@ export default function RecipeEditorView({
     setHandledIssueToken(issueFocusRequest.token)
     setReadinessOpenToken(issueFocusRequest.token)
     handleNavigateToIssue(issueFocusRequest.issue)
+  }
+  const [handledStepToken, setHandledStepToken] = useState<number | null>(null)
+  if (stepFocusRequest && stepFocusRequest.token !== handledStepToken && session && !session.loading) {
+    setHandledStepToken(stepFocusRequest.token)
+    focusNode(stepFocusRequest.processId, stepFocusRequest.nodeId)
   }
   // The canvas has selected the requested node: nothing left to ask for (and switching back later won't reselect it).
   if (focusNodeRequest && canvasSelectedNodeId === focusNodeRequest.nodeId) setFocusNodeRequest(null)

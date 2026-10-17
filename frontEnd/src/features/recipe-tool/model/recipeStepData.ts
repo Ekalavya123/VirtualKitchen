@@ -17,6 +17,7 @@ import { CUSTOM_ACTION_ID, getActionDisplayName, resolveStepActionId, type StepA
 import { STEP_LEVEL_FIELD_KEYS, isStepFieldEnabled, type StepSchemaFieldKey } from '../../../shared/catalog/actionSchemaCatalog'
 import {
   CUSTOM_INGREDIENT_ID,
+  getIngredientDefaultUnit,
   getIngredientDisplayName,
   isIngredientCatalogLoaded,
   isIngredientId,
@@ -28,6 +29,19 @@ import {
   type PreparationStyleId,
 } from '../../../shared/catalog/preparationStyleCatalog'
 import { resolveFlameLevelId, type FlameLevelId } from '../../../shared/catalog/flameLevelCatalog'
+import {
+  CUSTOM_INGREDIENT_PREFIX,
+  ingredientAnnotationId,
+  parsePreparedAnnotationId,
+  preparedAnnotationId,
+  type Annotation,
+  type AnnotationLabelResolver,
+  type StepAnnotationTargets,
+  annotationsOf,
+  sameAnnotationTarget,
+  unwrapAnnotations,
+} from './stepAnnotations'
+import { deriveStepTitle } from './stepTitle'
 import { CUSTOM_UNIT_ID, resolveUnitId, type UnitId } from '../../../shared/catalog/unitCatalog'
 import {
   buildDurationLabel,
@@ -306,8 +320,51 @@ export const createDefaultRecipeStepNodeData = (): RecipeStepNodeData => ({
   sectionId: null,
 })
 
-export function getRecipeStepTitle(step: RecipeStepFields): string {
-  return getActionDisplayName(step.action, step.customActionName)
+/** The action's display name ("Mix / Combine", a custom action's name, or "Select Action" when none is chosen). */
+export const getRecipeStepActionName = (step: Pick<RecipeStepFields, 'action' | 'customActionName'>) =>
+  getActionDisplayName(step.action, step.customActionName)
+
+/** Names that live outside the step: prepared outputs (other processes) and earlier steps' results. */
+export type RecipeStepNameResolver = {
+  preparedName: (reference: RecipeStepActionOnProcess) => string
+  stepOutputLabel: (stepId: string) => string
+}
+
+/** Catalog ingredient names read in lower case inside a heading or sentence; custom names are kept as typed. */
+const ingredientSubject = (entry: ActionOnIngredient) =>
+  (entry.ingredientId === CUSTOM_INGREDIENT_ID ? getActionOnIngredientDisplayName(entry) : getActionOnIngredientDisplayName(entry).toLowerCase())
+
+/**
+ * Live names for a description's @ annotations — prepared outputs and earlier results, which can be renamed, when
+ * `resolve` is given. An ingredient reads as the words it was written with ("onions"): its id is stable, and the
+ * instruction's own wording reads better in a sentence than the catalog's name. Anything unresolved falls back to
+ * the annotation's label.
+ */
+export const stepAnnotationLabelResolver = (resolve?: Partial<RecipeStepNameResolver>): AnnotationLabelResolver => (annotation) => {
+  if (annotation.kind === 'ingredient') return null
+  if (annotation.kind === 'prepared') {
+    const reference = parsePreparedAnnotationId(annotation.id)
+    return reference && resolve?.preparedName ? resolve.preparedName(reference) : null
+  }
+  return resolve?.stepOutputLabel ? resolve.stepOutputLabel(annotation.id) : null
+}
+
+/**
+ * The step's derived title — "Chop onions", "Heat Marinated Chicken" (see stepTitle.ts). Without `resolve`,
+ * prepared outputs and earlier results are named only by their annotations' snapshot labels.
+ */
+export function getRecipeStepTitle(step: RecipeStepFields, resolve?: Partial<RecipeStepNameResolver>): string {
+  const subjects = [
+    ...(resolve?.stepOutputLabel ? step.actionOn.steps.map((entry) => resolve.stepOutputLabel!(entry.stepId)) : []),
+    ...step.actionOn.ingredients.map(ingredientSubject),
+    ...(resolve?.preparedName ? step.actionOn.processes.map((entry) => resolve.preparedName!(entry)) : []),
+  ]
+  return deriveStepTitle({
+    actionName: step.action ? getRecipeStepActionName(step) : '',
+    description: step.actionDescription,
+    subjects,
+    resolveLabel: stepAnnotationLabelResolver(resolve),
+  })
 }
 
 /** Effective duration label ("5 minutes"), derived rather than stored redundantly. */
@@ -349,31 +406,29 @@ export const applyRecipeStepFieldUpdate = (data: unknown, field: string, value: 
   return { ...normalized, step: reNormalized, title: getRecipeStepTitle(reNormalized) }
 }
 
+/** The node data with a new step — and the title that follows from it (the stored title is always derived). */
+const withStep = (normalized: RecipeStepNodeData, step: RecipeStepFields): RecipeStepNodeData =>
+  ({ ...normalized, step, title: getRecipeStepTitle(step) })
+
 export const withRecipeStepActionOnIngredients = (data: unknown, ingredients: ActionOnIngredient[]): RecipeStepNodeData => {
   const normalized = normalizeRecipeStepNodeData(data)
-  return { ...normalized, step: { ...normalized.step, actionOn: { ...normalized.step.actionOn, ingredients } } }
+  return withStep(normalized, { ...normalized.step, actionOn: { ...normalized.step.actionOn, ingredients } })
 }
 
 export const withRecipeStepActionOnProcesses = (data: unknown, references: RecipeStepActionOnProcess[]): RecipeStepNodeData => {
   const normalized = normalizeRecipeStepNodeData(data)
-  return {
-    ...normalized,
-    step: {
-      ...normalized.step,
-      actionOn: {
-        ...normalized.step.actionOn,
-        processes: references.map(({ processId, stepId }) => (stepId ? { processId, stepId } : { processId })),
-      },
+  return withStep(normalized, {
+    ...normalized.step,
+    actionOn: {
+      ...normalized.step.actionOn,
+      processes: references.map(({ processId, stepId }) => (stepId ? { processId, stepId } : { processId })),
     },
-  }
+  })
 }
 
 export const withRecipeStepActionOnSteps = (data: unknown, stepIds: string[]): RecipeStepNodeData => {
   const normalized = normalizeRecipeStepNodeData(data)
-  return {
-    ...normalized,
-    step: { ...normalized.step, actionOn: { ...normalized.step.actionOn, steps: stepIds.map((stepId) => ({ stepId })) } },
-  }
+  return withStep(normalized, { ...normalized.step, actionOn: { ...normalized.step.actionOn, steps: stepIds.map((stepId) => ({ stepId })) } })
 }
 
 /**
@@ -381,17 +436,88 @@ export const withRecipeStepActionOnSteps = (data: unknown, stepIds: string[]): R
  * target names the rest of the UI shows — e.g. "Fry marinated chicken + fried onions". Subprocess
  * and step-output names come from the caller (they live in other documents / other nodes).
  */
-export const getRecipeStepActionSummary = (
-  step: RecipeStepFields,
-  resolve: { preparedName: (reference: RecipeStepActionOnProcess) => string; stepOutputLabel: (stepId: string) => string },
-) => {
+export const getRecipeStepActionSummary = (step: RecipeStepFields, resolve: RecipeStepNameResolver) => {
   const targets = [
     ...step.actionOn.steps.map((entry) => resolve.stepOutputLabel(entry.stepId)),
     ...step.actionOn.ingredients.map(getActionOnIngredientDisplayName),
     ...step.actionOn.processes.map((entry) => resolve.preparedName(entry)),
   ].filter(Boolean)
-  const action = getRecipeStepTitle(step)
+  const action = getRecipeStepActionName(step)
   return targets.length > 0 ? `${action} ${targets.join(' + ')}` : action
+}
+
+/** The annotation ids of a step's own targets — what its description's @ annotations may point at. */
+export const getStepAnnotationTargets = (step: RecipeStepFields): StepAnnotationTargets => ({
+  ingredient: step.actionOn.ingredients.map(ingredientAnnotationId).filter(Boolean),
+  prepared: step.actionOn.processes.map(preparedAnnotationId),
+  step: step.actionOn.steps.map((entry) => entry.stepId),
+})
+
+/** The index of the Action On ingredient an ingredient annotation points at (-1 when none). */
+export const findAnnotatedIngredientIndex = (step: RecipeStepFields, annotationId: string) =>
+  step.actionOn.ingredients.findIndex((entry) => ingredientAnnotationId(entry).toLowerCase() === annotationId.toLowerCase())
+
+/**
+ * The step with an annotation's target in its Action On — added (without an amount, in the ingredient's default
+ * unit) when it isn't there yet. The Action On entry stays the one place amounts live; an annotation only points at it.
+ */
+export const withAnnotationTarget = (data: unknown, annotation: Annotation): RecipeStepNodeData => {
+  const normalized = normalizeRecipeStepNodeData(data)
+  const { actionOn } = normalized.step
+  if (annotation.kind === 'ingredient') {
+    if (findAnnotatedIngredientIndex(normalized.step, annotation.id) >= 0) return normalized
+    const custom = annotation.id.startsWith(CUSTOM_INGREDIENT_PREFIX)
+    const ingredientId = custom ? CUSTOM_INGREDIENT_ID : resolveIngredientId(annotation.id)
+    if (!ingredientId) return normalized
+    const entry: ActionOnIngredient = custom
+      ? { ingredientId: CUSTOM_INGREDIENT_ID, customIngredientName: annotation.id.slice(CUSTOM_INGREDIENT_PREFIX.length).trim() || annotation.label, quantity: null, unit: '' }
+      : { ingredientId, quantity: null, unit: getIngredientDefaultUnit(ingredientId) }
+    return withRecipeStepActionOnIngredients(normalized, [...actionOn.ingredients, entry])
+  }
+  if (annotation.kind === 'prepared') {
+    const reference = parsePreparedAnnotationId(annotation.id)
+    if (!reference || actionOn.processes.some((entry) => preparedAnnotationId(entry) === annotation.id)) return normalized
+    return withRecipeStepActionOnProcesses(normalized, [...actionOn.processes, reference])
+  }
+  if (actionOn.steps.some((entry) => entry.stepId === annotation.id)) return normalized
+  return withRecipeStepActionOnSteps(normalized, [...actionOn.steps.map((entry) => entry.stepId), annotation.id])
+}
+
+/**
+ * After annotations were deleted from a step's description (e.g. a chip removed with Backspace), the targets only
+ * they named leave the step's Action On too — so "Used in this step" follows the text. A target the description
+ * never annotated (added from the panel) is left alone, and so is one still annotated elsewhere in the text.
+ */
+export const withoutTargetsOfRemovedAnnotations = (previous: RecipeStepFields, next: RecipeStepNodeData): RecipeStepNodeData => {
+  const remaining = annotationsOf(next.step.actionDescription)
+  const removed = annotationsOf(previous.actionDescription).filter((annotation) =>
+    !remaining.some((other) => sameAnnotationTarget(other, annotation.kind, annotation.id)))
+  if (removed.length === 0) return next
+  const isRemoved = (kind: Annotation['kind'], id: string) => removed.some((annotation) => sameAnnotationTarget(annotation, kind, id))
+  const { actionOn } = next.step
+  return withStep(next, {
+    ...next.step,
+    actionOn: {
+      ingredients: actionOn.ingredients.filter((entry) => !isRemoved('ingredient', ingredientAnnotationId(entry))),
+      processes: actionOn.processes.filter((entry) => !isRemoved('prepared', preparedAnnotationId(entry))),
+      steps: actionOn.steps.filter((entry) => !isRemoved('step', entry.stepId)),
+    },
+  })
+}
+
+/**
+ * After targets were removed from a step's Action On (in the editor), its annotations of them read as plain words
+ * again — the prose stays, only the link goes.
+ */
+export const withoutAnnotationsOfRemovedTargets = (previous: RecipeStepFields, next: RecipeStepNodeData): RecipeStepNodeData => {
+  const before = getStepAnnotationTargets(previous)
+  const after = getStepAnnotationTargets(next.step)
+  const removed = (Object.keys(before) as Array<keyof StepAnnotationTargets>).flatMap((kind) =>
+    before[kind].filter((id) => !after[kind].includes(id)).map((id) => ({ kind, id })))
+  if (removed.length === 0) return next
+  const actionDescription = unwrapAnnotations(next.step.actionDescription, (annotation) =>
+    removed.some((target) => sameAnnotationTarget(annotation, target.kind, target.id)))
+  return actionDescription === next.step.actionDescription ? next : withStep(next, { ...next.step, actionDescription })
 }
 
 /** Applies a freshly generated visualization result (from a visualization job's step result) onto a STEP's data. */

@@ -24,6 +24,7 @@ import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVo
 import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
+import com.processVisualisation.virtualKitchen.recipe.model.StepAnnotations;
 import com.processVisualisation.virtualKitchen.recipe.repository.ProcessRepository;
 import com.processVisualisation.virtualKitchen.recipe.service.ProcessStepOrder;
 import org.slf4j.Logger;
@@ -393,7 +394,9 @@ public class RecipeProcessVisualizationService {
                 action,
                 ingredients,
                 subprocessNames,
-                asString(step.get("actionDescription")),
+                // Annotations read as names; a prepared component's name is its live Expected Output.
+                StepAnnotations.toPlainText(asString(step.get("actionDescription")), annotation ->
+                        StepAnnotations.PREPARED.equals(annotation.kind()) ? preparedNameByKey.get(annotation.id()) : null),
                 asString(step.get("expectedOutput")),
                 temperatureLabel(step),
                 flameLevel,

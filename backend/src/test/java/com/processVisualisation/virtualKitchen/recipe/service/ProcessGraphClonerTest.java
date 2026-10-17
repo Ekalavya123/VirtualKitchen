@@ -68,6 +68,29 @@ class ProcessGraphClonerTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void recipeCopyMovesDescriptionAnnotationsWithTheReferencesTheyMirror() {
+        Process preparation = new Process();
+        preparation.setId(2L);
+        preparation.setNodes(List.of(node("onions", null, Map.of())));
+        Process main = new Process();
+        main.setId(1L);
+        Map<String, Object> data = stepData("heat", 2L);
+        ((Map<String, Object>) data.get("step")).put("actionDescription",
+                "Add @[Chopped Onions](prepared:2:onions) to @[the oil](step:heat) with @[salt](ingredient:33) and @[sauce](prepared:99:z)");
+        main.setNodes(List.of(node("heat", null, Map.of()), node("fry", null, data)));
+        Map<Long, Map<String, String>> nodeIdMaps = Map.of(1L, ProcessGraphCloner.newNodeIds(main), 2L, ProcessGraphCloner.newNodeIds(preparation));
+
+        Process mainCopy = ProcessGraphCloner.cloneGraph(main, Map.of(1L, 10L, 2L, 20L), nodeIdMaps);
+
+        String onionsCopy = nodeIdMaps.get(2L).get("onions");
+        String heatCopy = mainCopy.getNodes().get(0).getId();
+        Map<String, Object> step = (Map<String, Object>) mainCopy.getNodes().get(1).getData().get("step");
+        assertThat(step.get("actionDescription")).isEqualTo(
+                "Add @[Chopped Onions](prepared:20:" + onionsCopy + ") to @[the oil](step:" + heatCopy + ") with @[salt](ingredient:33) and sauce");
+    }
+
+    @Test
     void copiedDataSharesNothingWithTheSource() {
         Process source = new Process();
         Map<String, Object> data = stepData("x", 7L);

@@ -17,6 +17,7 @@ import {
   stepFieldsOf,
   type PreparedReference,
 } from './preparationFlows.ts'
+import { parsePreparedAnnotationId, remapAnnotationIds } from './stepAnnotations.ts'
 
 export type PreparationMerge = {
   /** The one Preparation, keeping the id of the subprocess it was built on. */
@@ -112,6 +113,18 @@ export const mergePreparations = (processes: readonly Process[]): PreparationMer
           remaining.push({ processId: kept.id, stepId })
         })
         next = withProcessRefs(next, remaining)
+      }
+      // Prepared @ annotations in the description follow the same rule (an unkept one reads as plain text).
+      const description = stepFieldsOf(next).actionDescription
+      if (typeof description === 'string') {
+        const remapped = remapAnnotationIds(description, (annotation) => {
+          if (annotation.kind !== 'prepared') return undefined
+          const reference = parsePreparedAnnotationId(annotation.id)
+          if (!reference || !preparationIds.has(reference.processId)) return undefined
+          const stepId = reference.stepId ?? outputStepOf.get(reference.processId)
+          return insidePreparation || !stepId ? null : `${kept.id}:${stepId}`
+        })
+        if (remapped !== description) next = withStepFields(next, (fields) => ({ ...fields, actionDescription: remapped }))
       }
     }
     const name = namesToFill.get(node.id)
