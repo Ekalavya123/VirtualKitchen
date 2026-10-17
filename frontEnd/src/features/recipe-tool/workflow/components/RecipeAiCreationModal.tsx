@@ -233,7 +233,7 @@ function TaskSelectionStep({ recipeId, willReplaceMain, initialTasks, busy, erro
         <>
           {willReplaceMain && (
             <div style={{ fontSize: 11.5, color: 'var(--flow-warning)', background: 'var(--flow-warning-soft)', border: '1px solid var(--flow-warning-border)', borderRadius: 8, padding: '8px 10px' }}>
-              ⚠ This recipe already has a MAIN process. Creating a new one will replace its content (existing subprocesses are kept). You can Undo it afterwards.
+              ⚠ This recipe already has a main process. Creating a new one will replace it, and the Preparation too when the new recipe has preparation steps. You can Undo it afterwards.
             </div>
           )}
           {draft.restored && recipeText.trim() && <DraftRestoredNote onDiscard={() => void confirmDiscard('recipe text and task selection', draft.clear)} />}

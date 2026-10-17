@@ -18,10 +18,17 @@ import {
 } from '../../../../shared/catalog/actionCatalog'
 import { getStepActionSchema, isStepFieldEnabled, type StepSchemaFieldConfig } from '../../../../shared/catalog/actionSchemaCatalog'
 import { getIngredientById } from '../../../../shared/catalog/ingredientCatalog'
-import { isQuantifiableUnit } from '../../../../shared/catalog/unitCatalog'
+import { CUSTOM_UNIT_ID, isQuantifiableUnit } from '../../../../shared/catalog/unitCatalog'
 import { DURATION_UNIT_OPTIONS, TEMPERATURE_UNIT_OPTIONS } from '../../../../shared/catalog/stepFieldCatalog'
 import { CUSTOM_FLAME_LEVEL_ID, FLAME_LEVEL_CATALOG } from '../../../../shared/catalog/flameLevelCatalog'
-import { getActionOnIngredientDisplayName, normalizeRecipeStepNodeData, type ActionOnIngredient } from '../../model/recipeStepData'
+import { getActionOnIngredientDisplayName, normalizeRecipeStepNodeData, type ActionOnIngredient, type RecipeStepActionOnProcess } from '../../model/recipeStepData'
+import {
+  PREPARED_REFERENCE_PROBLEM_LABELS,
+  describePreparedReference,
+  getPreparedOutputs,
+  preparedReferenceKey,
+  type PreparedOutput,
+} from '../../model/preparationFlows'
 import {
   STEP_OUTPUT_PROBLEM_LABELS,
   getAvailableStepOutputs,
@@ -33,18 +40,20 @@ import {
 
 type RecipeStepPanelProps = {
   node: { id: string; data: unknown }
-  /** Already filtered to: same recipe, type === 'SUBPROCESS', excluding the process currently open — a MAIN process or a process from another recipe can never be an Action On target. */
-  availableSubprocesses: Process[]
+  /** Every process of the recipe — the Preparation's step outputs are what a main step can use (see preparationFlows.ts). */
+  recipeProcesses: Process[]
+  /** The step belongs to a preparation flow: preparations are independent, so only main steps use prepared outputs. */
+  isPreparation?: boolean
   updateStepField: (nodeId: string, field: string, value: string) => void
   updateActionOnIngredients: (nodeId: string, ingredients: ActionOnIngredient[]) => void
-  updateActionOnProcesses: (nodeId: string, processIds: number[]) => void
+  updateActionOnProcesses: (nodeId: string, references: RecipeStepActionOnProcess[]) => void
   updateActionOnSteps: (nodeId: string, stepIds: string[]) => void
   /** The open process's step-output sources/reachability — decides which earlier steps' outputs this step may use. */
   stepOutputGraph: StepOutputGraph
   onDeleteNode?: (nodeId: string) => void
   onDuplicateNode?: (nodeId: string) => void
-  /** Navigates into the referenced subprocess's own canvas — the other way (besides the process list) to open a subprocess. */
-  onOpenSubprocess?: (processId: number) => void
+  /** Opens the Preparation on the step that makes a used component (`stepId` absent for a legacy whole-process use). */
+  onOpenSubprocess?: (processId: number, stepId?: string) => void
   /**
    * Triggers the whole-process visualization job (see RecipeProcessCanvas's generateVisuals) — V1 has no
    * single-step generation endpoint, so "Regenerate" here re-runs the same process-wide job rather
@@ -62,7 +71,7 @@ type ActionOnTab = 'INGREDIENTS' | 'PROCESSES' | 'STEPS'
 /** The one Action On entry being edited: an ingredient by its row index, a subprocess by id, a step output by step id. */
 type ActionOnEdit =
   | { nodeId: string; kind: 'INGREDIENT'; index: number }
-  | { nodeId: string; kind: 'PROCESS'; processId: number }
+  | { nodeId: string; kind: 'PROCESS'; key: string }
   | { nodeId: string; kind: 'STEP'; stepId: string }
 
 const actionOptions: SearchableSelectOption[] = ACTION_CATEGORY_ORDER.flatMap((category) =>
@@ -86,7 +95,8 @@ const requirementHint = (field: StepSchemaFieldConfig) =>
 
 export default function RecipeStepPanel({
   node,
-  availableSubprocesses,
+  recipeProcesses,
+  isPreparation = false,
   updateStepField,
   updateActionOnIngredients,
   updateActionOnProcesses,
@@ -118,7 +128,9 @@ export default function RecipeStepPanel({
   // Only the Action On target kinds the action accepts are offered (catalog `actionOn`); an existing
   // value of a now-disallowed kind stays visible under its tab so it can still be removed.
   const ingredientsAllowed = actionAllowsIngredients(step.action) || step.actionOn.ingredients.length > 0
-  const processesAllowed = actionAllowsProcesses(step.action) || step.actionOn.processes.length > 0
+  // Prepared outputs are used by main steps; a preparation step only shows ones it already has (to remove them).
+  const canUsePrepared = actionAllowsProcesses(step.action) && !isPreparation
+  const processesAllowed = canUsePrepared || step.actionOn.processes.length > 0
   // A step output is a prepared intermediate, like a subprocess output, so it's offered wherever the
   // catalog lets the action act on subprocess outputs.
   const stepOutputsAllowed = actionAllowsProcesses(step.action) || step.actionOn.steps.length > 0
@@ -128,7 +140,19 @@ export default function RecipeStepPanel({
     : (['INGREDIENTS', 'PROCESSES', 'STEPS'] as const).find((tab) => tabAllowed[tab]) ?? null
 
   const ingredientIds = step.actionOn.ingredients.map((entry) => entry.ingredientId)
-  const selectedProcessIds = step.actionOn.processes.map((entry) => entry.processId)
+  const selectedReferences = step.actionOn.processes
+  const selectedReferenceKeys = selectedReferences.map(preparedReferenceKey)
+  const preparedOutputs = getPreparedOutputs(recipeProcesses)
+  const outputOption = (output: PreparedOutput): SearchableSelectOption => ({
+    value: preparedReferenceKey(output),
+    label: output.label,
+    category: `Flow ${output.flowNumber}`,
+    description: output.isFlowOutput ? 'Flow output' : 'Intermediate result',
+  })
+  const referenceOfKey = (key: string): RecipeStepActionOnProcess | null => {
+    const output = preparedOutputs.find((candidate) => preparedReferenceKey(candidate) === key)
+    return output ? { processId: output.processId, stepId: output.stepId } : null
+  }
   const selectedStepIds = step.actionOn.steps.map((entry) => entry.stepId)
   const availableStepOutputs = getAvailableStepOutputs(stepOutputGraph, node.id)
   const unselectedStepOutputs = availableStepOutputs.filter((source) => !selectedStepIds.includes(source.stepId))
@@ -185,29 +209,33 @@ export default function RecipeStepPanel({
     updateActionOnIngredients(node.id, step.actionOn.ingredients.map((entry, i) => (i === index ? ingredient : entry)))
   }
 
-  const addActionOnProcess = (processId: number) => {
-    if (selectedProcessIds.includes(processId)) return
-    updateActionOnProcesses(node.id, [...selectedProcessIds, processId])
+  const addActionOnProcess = (key: string) => {
+    const reference = referenceOfKey(key)
+    if (!reference || selectedReferenceKeys.includes(key)) return
+    updateActionOnProcesses(node.id, [...selectedReferences, reference])
   }
 
-  const removeActionOnProcess = async (processId: number) => {
-    const process = availableSubprocesses.find((candidate) => candidate.id === processId)
+  const removeActionOnProcess = async (key: string) => {
+    const reference = selectedReferences.find((entry) => preparedReferenceKey(entry) === key)
+    if (!reference) return
+    const { label } = describePreparedReference(recipeProcesses, reference)
     if (!(await confirmRemoval(
-      `Remove “${process ? process.name : `Process #${processId}`}” from this step?`,
-      'This step will no longer use that subprocess\'s output. The subprocess itself is kept.',
+      `Remove “${label || 'this prepared component'}” from this step?`,
+      'This step will no longer use it. The preparation itself is kept.',
     ))) return
     if (currentEdit?.kind === 'PROCESS') closeEdit()
-    updateActionOnProcesses(node.id, selectedProcessIds.filter((id) => id !== processId))
+    updateActionOnProcesses(node.id, selectedReferences.filter((entry) => preparedReferenceKey(entry) !== key))
   }
 
-  /** Swaps one subprocess reference for another in place, keeping the list's order. */
-  const replaceActionOnProcess = (processId: number, nextProcessId: number) => {
+  /** Swaps one prepared component for another in place, keeping the list's order. */
+  const replaceActionOnProcess = (key: string, nextKey: string) => {
     closeEdit()
-    if (processId === nextProcessId || selectedProcessIds.includes(nextProcessId)) return
-    updateActionOnProcesses(node.id, selectedProcessIds.map((id) => (id === processId ? nextProcessId : id)))
+    const next = referenceOfKey(nextKey)
+    if (!next || key === nextKey || selectedReferenceKeys.includes(nextKey)) return
+    updateActionOnProcesses(node.id, selectedReferences.map((entry) => (preparedReferenceKey(entry) === key ? next : entry)))
   }
 
-  const unselectedSubprocesses = availableSubprocesses.filter((process) => !selectedProcessIds.includes(process.id))
+  const unselectedOutputs = preparedOutputs.filter((output) => !selectedReferenceKeys.includes(preparedReferenceKey(output)))
 
   const editButton = (title: string, onClick: () => void) => (
     <button type="button" className="flow-action-on-entry-btn" onClick={onClick} title={title} aria-label={title}>
@@ -369,7 +397,7 @@ export default function RecipeStepPanel({
           <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
             {([
               ['INGREDIENTS', ingredientsAllowed, `🥕 Ingredients (${ingredientIds.length})`],
-              ['PROCESSES', processesAllowed, `🔗 Processes (${selectedProcessIds.length})`],
+              ['PROCESSES', processesAllowed, `🔪 Prepared (${selectedReferences.length})`],
               ['STEPS', stepOutputsAllowed, `↳ Step Outputs (${selectedStepIds.length})`],
             ] as const).filter(([, allowed]) => allowed).map(([tab, , label]) => (
               <button
@@ -444,6 +472,16 @@ export default function RecipeStepPanel({
                           style={{ width: 110 }}
                           onChange={(unit) => updateActionOnIngredientAt(index, isQuantifiableUnit(unit) ? { unit } : { unit, quantity: null })}
                         />
+                        {entry.unit === CUSTOM_UNIT_ID && (
+                          <input
+                            className="flow-properties-input"
+                            style={{ width: 96 }}
+                            value={entry.customUnit ?? ''}
+                            placeholder="unit name"
+                            aria-label="Custom unit name"
+                            onChange={(e) => updateActionOnIngredientAt(index, { customUnit: e.target.value })}
+                          />
+                        )}
                       </>
                     )}
                     <PreparationStyleSelect
@@ -474,26 +512,27 @@ export default function RecipeStepPanel({
         {effectiveTab === 'PROCESSES' && (
           <div className="flex flex-col gap-2">
             {step.actionOn.processes.length === 0 ? (
-              <div style={{ fontSize: 12, color: 'var(--flow-text-subtle)' }}>No subprocesses referenced by this step yet.</div>
+              <div style={{ fontSize: 12, color: 'var(--flow-text-subtle)' }}>This step uses no prepared components yet.</div>
             ) : (
-              step.actionOn.processes.map((entry) => {
-                const process = availableSubprocesses.find((candidate) => candidate.id === entry.processId)
-                if (currentEdit?.kind === 'PROCESS' && currentEdit.processId === entry.processId) {
-                  // Same choices as adding (this recipe's other SUBPROCESSes not already used), plus this entry's own.
-                  const choices = availableSubprocesses.filter((candidate) => candidate.id === entry.processId || !selectedProcessIds.includes(candidate.id))
+              selectedReferences.map((entry) => {
+                const key = preparedReferenceKey(entry)
+                const { label, problem } = describePreparedReference(recipeProcesses, entry)
+                if (currentEdit?.kind === 'PROCESS' && currentEdit.key === key) {
+                  // Same choices as adding (outputs not already used), plus this entry's own.
+                  const choices = preparedOutputs.filter((output) => preparedReferenceKey(output) === key || !selectedReferenceKeys.includes(preparedReferenceKey(output)))
                   return (
                     <div
-                      key={entry.processId}
+                      key={key}
                       className="flex items-center gap-2 rounded-lg border p-2"
                       style={{ border: '1px solid var(--flow-accent)', background: 'var(--flow-surface)' }}
                     >
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <SearchableSelect
-                          value={process ? String(entry.processId) : ''}
-                          onChange={(value) => value && replaceActionOnProcess(entry.processId, Number(value))}
-                          options={choices.map((candidate) => ({ value: String(candidate.id), label: candidate.name }))}
-                          placeholder="Switch to another subprocess"
-                          emptyLabel="No matching subprocesses"
+                          value={problem ? '' : key}
+                          onChange={(value) => value && replaceActionOnProcess(key, value)}
+                          options={choices.map(outputOption)}
+                          placeholder="Switch to another prepared component"
+                          emptyLabel="No matching prepared components"
                         />
                       </div>
                       {cancelEditButton}
@@ -502,51 +541,55 @@ export default function RecipeStepPanel({
                 }
                 return (
                   <div
-                    key={entry.processId}
+                    key={key}
                     className="flex items-center justify-between gap-2 rounded-lg border p-2"
-                    style={{ border: '1px solid #c7d2fe', background: '#eef2ff' }}
+                    style={problem
+                      ? { border: '1px solid var(--flow-danger-border)', background: 'var(--flow-danger-soft)' }
+                      : { border: '1px solid #c7d2fe', background: '#eef2ff' }}
                   >
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#312e81', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        🔗 {process ? process.name : `Process #${entry.processId}`}
+                      <div style={{ fontSize: 12, fontWeight: 700, color: problem ? 'var(--flow-danger)' : '#312e81', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        🔪 {problem ? PREPARED_REFERENCE_PROBLEM_LABELS[problem] : label}
                       </div>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-                      {process && onOpenSubprocess && (
+                      {!problem && onOpenSubprocess && (
                         <button
                           type="button"
-                          onClick={() => onOpenSubprocess(process.id)}
-                          title="Open this subprocess"
+                          onClick={() => onOpenSubprocess(entry.processId, entry.stepId)}
+                          title="Open the step in Preparation that makes this"
                           style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#4338ca', marginRight: 4 }}
                         >
                           Open →
                         </button>
                       )}
-                      {actionAllowsProcesses(step.action) && editButton('Switch to another subprocess', () => setActionOnEdit({ nodeId: node.id, kind: 'PROCESS', processId: entry.processId }))}
-                      {removeButton(() => void removeActionOnProcess(entry.processId))}
+                      {canUsePrepared && editButton('Switch to another prepared component', () => setActionOnEdit({ nodeId: node.id, kind: 'PROCESS', key }))}
+                      {removeButton(() => void removeActionOnProcess(key))}
                     </div>
                   </div>
                 )
               })
             )}
 
-            {!actionAllowsProcesses(step.action) && (
+            {isPreparation && step.actionOn.processes.length > 0 && (
               <div style={{ fontSize: 11, color: 'var(--flow-text-muted)', background: 'var(--flow-warning-soft)', border: '1px solid var(--flow-warning-border)', borderRadius: 8, padding: '6px 8px' }}>
-                {actionDefinition?.displayName ?? 'This action'} doesn't act on subprocess outputs — remove these, or choose another action.
+                Preparation flows are independent: only main steps use prepared components. Connect these steps into one flow instead, or remove these.
               </div>
             )}
-            {actionAllowsProcesses(step.action) && (
+            {!isPreparation && !actionAllowsProcesses(step.action) && (
+              <div style={{ fontSize: 11, color: 'var(--flow-text-muted)', background: 'var(--flow-warning-soft)', border: '1px solid var(--flow-warning-border)', borderRadius: 8, padding: '6px 8px' }}>
+                {actionDefinition?.displayName ?? 'This action'} doesn't act on prepared components — remove these, or choose another action.
+              </div>
+            )}
+            {canUsePrepared && (
               <div className="flex items-end gap-2">
                 <div style={{ flex: 1 }}>
                   <SearchableSelect
                     value=""
-                    onChange={(value) => value && addActionOnProcess(Number(value))}
-                    options={unselectedSubprocesses.map((process) => ({
-                      value: String(process.id),
-                      label: process.name,
-                    }))}
-                    placeholder={unselectedSubprocesses.length ? 'Add a subprocess' : 'No more subprocesses available'}
-                    emptyLabel="No matching subprocesses"
+                    onChange={(value) => value && addActionOnProcess(value)}
+                    options={unselectedOutputs.map(outputOption)}
+                    placeholder={unselectedOutputs.length ? 'Use a prepared component' : 'Nothing more prepared yet'}
+                    emptyLabel="No matching prepared components"
                   />
                 </div>
               </div>
@@ -554,7 +597,7 @@ export default function RecipeStepPanel({
             <div
               style={{ fontSize: 10.5, color: 'var(--flow-text-muted)', background: 'var(--flow-warning-soft)', border: '1px solid var(--flow-warning-border)', borderRadius: 8, padding: '6px 8px' }}
             >
-              Only SUBPROCESS documents belonging to this recipe can be chosen — never the MAIN process, and never a process from another recipe.
+              Prepared components are what the Preparation's steps make — each flow's last step names its output (its Expected Output). Rename one there.
             </div>
           </div>
         )}

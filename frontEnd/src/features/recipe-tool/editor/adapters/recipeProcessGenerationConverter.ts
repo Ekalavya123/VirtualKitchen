@@ -2,18 +2,23 @@
  * Converts an AI-generated recipe process structure (recipe/dto/Generated*.java via
  * RecipeProcessGenerationApi) into the same `Process[]` shape RecipeSessionContext already works
  * with — generating every React Flow presentation detail (node/edge ids, positions, dimensions)
- * the AI was deliberately never asked for. Subprocess `ref` strings are resolved
- * to the client-temporary process ids this conversion assigns — real ids only start existing once
- * RecipeSessionContext.saveAll() creates them.
+ * the AI was deliberately never asked for. The recipe gets two processes: the MAIN process, and one
+ * Preparation (a SUBPROCESS) holding every generated preparation as its own flow, whose final step's
+ * Expected Output is the preparation's named output. The `ref` strings MAIN steps use resolve to that
+ * step — `{ processId, stepId }` with the client-temporary ids this conversion assigns (real process ids
+ * only start existing once RecipeSessionContext.saveAll() creates them). A reference that resolves to
+ * nothing is reported in `problems`, never silently dropped: the backend validator should make that
+ * impossible, so a problem means the result must not be applied.
  */
 
 import { CONDITION_HANDLES, DEFAULT_NODE_SIZE, RECIPE_NODE_TYPES } from '../../model/recipeNodeTypes'
 import { normalizeConditionNodeData, type ConditionNodeData } from '../../model/recipeConditionData'
-import { normalizeRecipeStepNodeData, type RecipeStepNodeData } from '../../model/recipeStepData'
-import { ROW_LAYOUT, arrangeRows, planRows } from '../model/processLayout'
+import { normalizeRecipeStepNodeData, type RecipeStepActionOnProcess, type RecipeStepNodeData } from '../../model/recipeStepData'
+import { PREPARATION_NAME } from '../../model/mergePreparations'
+import { ROW_LAYOUT, arrangeFlowGrid, arrangeRows, planFlowColumns, planRows } from '../model/processLayout'
 import { parseDurationLabel } from '../../../../shared/catalog/stepFieldCatalog'
 import type { Process, ProcessEdge, ProcessNode } from '../../../../types/process'
-import type { GeneratedRecipeProcess, GeneratedRecipeStep, RecipeProcessGenerationResult } from '../../../../types/recipe'
+import type { GeneratedRecipeStep, RecipeProcessGenerationResult } from '../../../../types/recipe'
 
 const STEP_SIZE = DEFAULT_NODE_SIZE.step
 const CONDITION_SIZE = DEFAULT_NODE_SIZE.condition
@@ -55,13 +60,27 @@ const allocateTempIds = (count: number, existingIds: number[]): number[] => {
   return Array.from({ length: count }, (_, index) => start - index)
 }
 
+/** Collects a problem for every reference that resolves to nothing, keeping the ones that do resolve. */
+const resolveRefs = <T>(refs: string[], lookup: Map<string, T>, describe: (ref: string) => string, problems: string[]): T[] =>
+  refs.flatMap((ref) => {
+    const resolved = lookup.get(ref)
+    if (resolved == null) {
+      problems.push(describe(ref))
+      return []
+    }
+    return [resolved]
+  })
+
 export const buildStepNode = (
   step: GeneratedRecipeStep,
   nodeId: string,
-  refToProcessId: Map<string, number>,
+  /** What each `uses` ref stands for: a Preparation step's output (or, from an AI edit, a process). */
+  preparedByRef: Map<string, RecipeStepActionOnProcess>,
   stepIdToNodeId: Map<string, string>,
   x: number,
   y: number,
+  problems: string[] = [],
+  label = 'A step',
 ): ProcessNode => {
   const repeatInterval = parseDurationLabel(step.repeatInterval ?? '')
   const data: RecipeStepNodeData = normalizeRecipeStepNodeData({
@@ -74,18 +93,17 @@ export const buildStepNode = (
           customIngredientName: ingredient.customIngredientName ?? '',
           quantity: ingredient.quantity,
           unit: ingredient.unit ?? '',
+          customUnit: ingredient.customUnit ?? '',
+          notes: ingredient.notes ?? undefined,
           preparationStyleId: ingredient.preparationStyle ?? '',
-          customPreparationStyle: '',
+          customPreparationStyle: ingredient.customPreparationStyle ?? '',
         })),
-        processes: (step.actionOn?.processes ?? [])
-          .map((ref) => refToProcessId.get(ref))
-          .filter((processId): processId is number => processId != null)
-          .map((processId) => ({ processId })),
+        processes: resolveRefs(step.actionOn?.processes ?? [], preparedByRef,
+          (ref) => `${label} uses an unknown preparation "${ref}"`, problems),
         // Generated `stepId` slugs resolve to this process's freshly assigned node ids; the backend
         // validator already guaranteed each points at an earlier STEP with an Expected Output.
-        steps: (step.actionOn?.steps ?? [])
-          .map((ref) => stepIdToNodeId.get(ref))
-          .filter((stepId): stepId is string => stepId != null)
+        steps: resolveRefs(step.actionOn?.steps ?? [], stepIdToNodeId,
+          (ref) => `${label} uses the output of an unknown step "${ref}"`, problems)
           .map((stepId) => ({ stepId })),
       },
       actionDescription: step.actionDescription ?? '',
@@ -152,30 +170,37 @@ export const buildConditionNode = (step: GeneratedRecipeStep, nodeId: string, x:
   }
 }
 
+type UnplacedFlow = { nodes: ProcessNode[]; edges: ProcessEdge[] }
+
 /**
- * Builds one process's nodes/edges from its ordered step list. Steps are already in execution
+ * Builds one flow's nodes and edges from its ordered step list. Steps are already in execution
  * order (the AI was asked for an ordered list, not a graph — see RecipeProcessGenerationPromptBuilder),
  * so consecutive steps are connected linearly. A CONDITION's YES branch goes to the next node and
  * its NO branch back to the step before it (a "repeat until" loop) — the AI doesn't generate branch
  * targets itself (asking for real graph topology is a substantially harder and more error-prone
  * generation task than an ordered step list), so the prompt fixes that convention instead.
- * Positions and sizes come from the row layout (model/processLayout.ts), in this same step order.
+ * Positions come later, from the layout of the whole process.
  */
-const buildNodesAndEdges = (steps: GeneratedRecipeStep[], refToProcessId: Map<string, number>): { nodes: ProcessNode[]; edges: ProcessEdge[] } => {
+const buildFlow = (
+  steps: GeneratedRecipeStep[],
+  preparedByRef: Map<string, RecipeStepActionOnProcess>,
+  flowLabel: string,
+  problems: string[],
+  nodeIds: string[] = steps.map(() => crypto.randomUUID()),
+): UnplacedFlow => {
   // Node ids are assigned up front so a step can reference an earlier step's output by id.
-  const nodeIds = steps.map(() => crypto.randomUUID())
   const stepIdToNodeId = new Map<string, string>()
   steps.forEach((step, index) => {
     if (step.stepId) stepIdToNodeId.set(step.stepId, nodeIds[index])
   })
 
-  const unplaced = steps.map((step, index) => (step.nodeType === 'CONDITION'
+  const nodes = steps.map((step, index) => (step.nodeType === 'CONDITION'
     ? buildConditionNode(step, nodeIds[index], 0, 0)
-    : buildStepNode(step, nodeIds[index], refToProcessId, stepIdToNodeId, 0, 0)))
+    : buildStepNode(step, nodeIds[index], preparedByRef, stepIdToNodeId, 0, 0, problems, `${flowLabel}, step ${index + 1}`)))
 
   const edges: ProcessEdge[] = []
-  unplaced.forEach((source, i) => {
-    const next = unplaced[i + 1]
+  nodes.forEach((source, i) => {
+    const next = nodes[i + 1]
     if (source.kind !== 'CONDITION') {
       if (next) edges.push({ id: crypto.randomUUID(), source: source.id, target: next.id })
       return
@@ -183,36 +208,53 @@ const buildNodesAndEdges = (steps: GeneratedRecipeStep[], refToProcessId: Map<st
     // YES continues to the next node; NO loops back to the step being checked (the nearest STEP
     // before the condition) so it's repeated until the check passes. The prompt asks for every
     // condition to be phrased that way and placed right after the step it checks.
-    const checkedStep = unplaced.slice(0, i).reverse().find((node) => node.kind === 'STEP')
+    const checkedStep = nodes.slice(0, i).reverse().find((node) => node.kind === 'STEP')
     if (next) edges.push({ id: crypto.randomUUID(), source: source.id, target: next.id, sourceHandle: CONDITION_HANDLES.yes, label: 'Yes' })
     const noTarget = checkedStep ?? next
     if (noTarget) edges.push({ id: crypto.randomUUID(), source: source.id, target: noTarget.id, sourceHandle: CONDITION_HANDLES.no, label: 'No' })
   })
+  return { nodes, edges }
+}
 
-  const layout = arrangeRows(
-    unplaced.map((node) => ({
-      id: node.id,
-      kind: node.kind,
-      height: node.kind === 'STEP' ? estimateStepHeight(node.data as unknown as RecipeStepNodeData) : node.height ?? CONDITION_SIZE.height,
-    })),
-    planRows(DEFAULT_CANVAS_WIDTH - 2 * ROW_LAYOUT.padding),
-    ORIGIN,
-  )
-  const nodes = unplaced.map((node) => {
+const layoutEntry = (node: ProcessNode) => ({
+  id: node.id,
+  kind: node.kind,
+  height: node.kind === 'STEP' ? estimateStepHeight(node.data as unknown as RecipeStepNodeData) : node.height ?? CONDITION_SIZE.height,
+})
+
+/** Applies computed positions and sizes. */
+const place = (nodes: ProcessNode[], layout: Map<string, { x: number; y: number; width: number; height: number }>) =>
+  nodes.map((node) => {
     const placed = layout.get(node.id)
     if (!placed) return node
     const { x, y, width, height } = placed
     return { ...node, position: { x, y }, width, height, measured: { width, height } }
   })
 
-  return { nodes, edges }
+/** Index of a flow's final STEP (-1 when it has none). */
+const lastStepIndex = (steps: GeneratedRecipeStep[]) => {
+  let last = -1
+  steps.forEach((step, index) => {
+    if (step.nodeType !== 'CONDITION') last = index
+  })
+  return last
+}
+
+/** Gives a flow's final step the preparation's output name as its Expected Output — the flow's named output. */
+const withOutputName = (steps: GeneratedRecipeStep[], output: string): GeneratedRecipeStep[] => {
+  const name = output.trim()
+  const last = lastStepIndex(steps)
+  if (!name || last < 0 || steps[last].expectedOutput?.trim() === name) return steps
+  return steps.map((step, index) => (index === last ? { ...step, expectedOutput: name } : step))
 }
 
 export type ConvertedGeneration = {
-  /** Every generated process (MAIN first, then subprocesses), ready to load into RecipeSessionContext via addProcess/updateProcess. */
+  /** The generated MAIN process and (when there are preparations) the one Preparation, ready to load into RecipeSessionContext. */
   processes: Process[]
   /** The id (temporary, or the existing MAIN's real id when replacing it) to select/display after loading. */
   mainProcessId: number
+  /** References that resolved to nothing. Non-empty means the result is inconsistent and must not be applied. */
+  problems: string[]
 }
 
 /**
@@ -221,44 +263,61 @@ export type ConvertedGeneration = {
  *   appropriate (with the user's confirmation) before calling this.
  * @param existingSessionIds every process id already in the current session, so temporary ids
  *   never collide with an unsaved process from an earlier generation run.
+ * @param existingPreparation the recipe's current Preparation, likewise replaced in place when the
+ *   result has preparations (and left alone when it has none).
  */
 export const convertGeneratedResultToProcesses = (
   recipeId: number,
   result: RecipeProcessGenerationResult,
   existingMain: Process | null,
   existingSessionIds: number[],
+  existingPreparation: Process | null = null,
 ): ConvertedGeneration => {
-  const subprocesses = result.subprocesses ?? []
-  const tempIds = allocateTempIds(subprocesses.length + (existingMain ? 0 : 1), existingSessionIds)
+  const preparations = result.subprocesses ?? []
+  const tempIds = allocateTempIds(2, existingSessionIds)
+  const mainProcessId = existingMain ? existingMain.id : tempIds[0]
+  const preparationId = existingPreparation ? existingPreparation.id : tempIds[1]
+  const problems: string[] = []
 
-  let tempIdCursor = 0
-  const mainProcessId = existingMain ? existingMain.id : tempIds[tempIdCursor++]
-
-  // 1:1 with `subprocesses` by position — every generated subprocess gets its own temp id
-  // regardless of whether it declared a (valid, non-blank, unique) ref; only ones that did are
-  // addressable from a step's actionOn.processes.
-  const subprocessIds: number[] = subprocesses.map(() => tempIds[tempIdCursor++])
-  const refToProcessId = new Map<string, number>()
-  subprocesses.forEach((subprocess, index) => {
-    if (subprocess.ref) refToProcessId.set(subprocess.ref, subprocessIds[index])
+  // Each preparation becomes one flow of the Preparation; its ref stands for its final step's output.
+  const preparedByRef = new Map<string, RecipeStepActionOnProcess>()
+  const flows = preparations.map((preparation) => {
+    const steps = withOutputName(preparation.steps ?? [], preparation.name ?? '')
+    const nodeIds = steps.map(() => crypto.randomUUID())
+    const output = lastStepIndex(steps)
+    if (preparation.ref && output >= 0) preparedByRef.set(preparation.ref, { processId: preparationId, stepId: nodeIds[output] })
+    return { steps, nodeIds, name: preparation.name || 'Preparation' }
   })
+  // Preparation steps never use another preparation (flows are independent): there's nothing for them to resolve.
+  const builtFlows = flows.map(({ steps, nodeIds, name }) => buildFlow(steps, new Map(), `Preparation "${name}"`, problems, nodeIds))
 
-  const buildProcess = (generated: GeneratedRecipeProcess, id: number, type: Process['type']): Process => {
-    const { nodes, edges } = buildNodesAndEdges(generated.steps ?? [], refToProcessId)
-    return {
-      id,
-      type,
+  const main = buildFlow(result.mainProcess.steps ?? [], preparedByRef, 'Main process', problems)
+  const mainLayout = arrangeRows(main.nodes.map(layoutEntry), planRows(DEFAULT_CANVAS_WIDTH - 2 * ROW_LAYOUT.padding), ORIGIN)
+  const processes: Process[] = [{
+    id: mainProcessId,
+    type: 'MAIN',
+    recipeId,
+    name: result.mainProcess.name || 'Main Process',
+    nodes: place(main.nodes, mainLayout),
+    edges: main.edges,
+  }]
+
+  if (builtFlows.length > 0) {
+    const gridLayout = arrangeFlowGrid(
+      builtFlows.map((flow) => flow.nodes.map(layoutEntry)),
+      planFlowColumns(DEFAULT_CANVAS_WIDTH - 2 * ROW_LAYOUT.padding),
+      ORIGIN,
+    )
+    processes.push({
+      ...(existingPreparation ?? {}),
+      id: preparationId,
+      type: 'SUBPROCESS',
       recipeId,
-      name: generated.name || (type === 'MAIN' ? 'Main Process' : 'Subprocess'),
-      nodes,
-      edges,
-    }
+      name: PREPARATION_NAME,
+      nodes: place(builtFlows.flatMap((flow) => flow.nodes), gridLayout),
+      edges: builtFlows.flatMap((flow) => flow.edges),
+    })
   }
 
-  const processes: Process[] = [
-    buildProcess(result.mainProcess, mainProcessId, 'MAIN'),
-    ...subprocesses.map((subprocess, index) => buildProcess(subprocess, subprocessIds[index], 'SUBPROCESS')),
-  ]
-
-  return { processes, mainProcessId }
+  return { processes, mainProcessId, problems }
 }

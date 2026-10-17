@@ -6,9 +6,10 @@ import { normalizeRecipeStepNodeData } from '../../model/recipeStepData'
 
 /**
  * The confirmation shown before deleting a node, saying what goes with it: its connections and, for a
- * step, the references other steps make to its output. Null when the node isn't on the canvas.
+ * step, the references other steps make to its output — including main steps using a Preparation step's
+ * output (`usedByMainSteps`). Null when the node isn't on the canvas.
  */
-export const describeNodeDeletion = (nodes: Node[], edges: Edge[], id: string): ConfirmOptions | null => {
+export const describeNodeDeletion = (nodes: Node[], edges: Edge[], id: string, usedByMainSteps = 0): ConfirmOptions | null => {
   const node = nodes.find((candidate) => candidate.id === id)
   if (!node) return null
   const connections = edges.filter((edge) => edge.source === id || edge.target === id).length
@@ -25,6 +26,9 @@ export const describeNodeDeletion = (nodes: Node[], edges: Edge[], id: string): 
       title: `Delete step ${stepNumber} · ${title}?`,
       message: `This step${connectionsText} will be removed from the process, with its Action On, settings and visualization.`
         + (usedBy > 0 ? ` ${usedBy} other step${usedBy === 1 ? ' uses' : 's use'} its output — that reference will be removed too.` : '')
+        + (usedByMainSteps > 0
+          ? ` ${usedByMainSteps} main step${usedByMainSteps === 1 ? ' uses' : 's use'} what it makes — ${usedByMainSteps === 1 ? 'it' : 'they'} will lose it, and the recipe will need fixing before cooking or ordering.`
+          : '')
         + ' You can Undo this.',
       confirmLabel: 'Delete step',
     }

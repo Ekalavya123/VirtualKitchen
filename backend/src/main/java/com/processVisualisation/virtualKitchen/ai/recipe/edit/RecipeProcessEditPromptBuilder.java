@@ -70,7 +70,11 @@ public class RecipeProcessEditPromptBuilder {
                   CONDITION nodes are checks and have no step number.
                 - "next" lists the node(s) a node leads to. A CONDITION has "yes" (continue) and "no" (usually back to
                   the step it checks) instead.
-                - SUBPROCESSES lists the recipe's other processes as p1, p2, ...; a step's "processes" uses these ids.
+                - PREPARED COMPONENTS lists what the recipe's Preparation makes (each flow's named output, and
+                  intermediate results) as p1, p2, ...; a main step's "uses" lists these ids.
+                - A Preparation holds independent flows (separate connected groups of steps). Its steps never "use"
+                  anything. A flow's last step names its output in "expectedOutput". To start a new flow, ADD_STEP
+                  with "after":"NEW_FLOW" (then add its next steps after that one).
 
                 MINIMAL CHANGES
                 - Change only what the instruction asks for. Never restate, re-create, reorder or reword a node the
@@ -78,14 +82,14 @@ public class RecipeProcessEditPromptBuilder {
                 - Prefer the narrowest operation: UPDATE_STEP or an ingredient operation over DELETE_NODE + ADD_STEP,
                   UPDATE_INGREDIENT over REMOVE_INGREDIENT + ADD_INGREDIENT, MOVE_NODE over DELETE_NODE + ADD_STEP.
                 - UPDATE_STEP "set" holds only the fields that change; every field you leave out stays as it is.
-                  "fromSteps" and "processes" in "set" replace the whole list. Use "clear" to remove a value.
+                  "fromSteps" and "uses" in "set" replace the whole list. Use "clear" to remove a value.
                 - When the change makes another field of the SAME node wrong (e.g. a new duration contradicts its
                   actionDescription), fix that field in the same UPDATE_STEP. Leave other nodes alone unless the
                   instruction says otherwise.
 
                 REFERRING TO NODES
                 - "target" and "after" are ids from CURRENT PROCESS, or the stepId you gave a node added by an
-                  EARLIER operation in this same list (e.g. "n1"). "after":"START" inserts before the first node.
+                  EARLIER operation in this same list (e.g. "n1"). "after":"START" inserts before the first node; "after":"NEW_FLOW" (ADD_STEP only) starts a new, unconnected flow.
                 - Operations are applied in order: refer to nodes as they exist at that point, and never refer to a
                   node after deleting it.
                 - "after X" / "once X is done" -> after X. "before X" -> after the node that comes right before X
@@ -174,7 +178,7 @@ public class RecipeProcessEditPromptBuilder {
         }
 
         if (!context.processNameByAlias().isEmpty()) {
-            out.append("\nSUBPROCESSES:\n");
+            out.append("\nPREPARED COMPONENTS:\n");
             context.processNameByAlias().forEach((alias, name) ->
                     out.append("- ").append(alias).append(": ").append(name == null || name.isBlank() ? "(unnamed)" : name).append('\n'));
         }
@@ -212,7 +216,7 @@ public class RecipeProcessEditPromptBuilder {
             ingredients.add(withoutEmpty(entry));
         }
         node.put("ingredients", ingredients);
-        node.put("processes", step.getActionOn().getProcesses());
+        node.put("uses", step.getActionOn().getProcesses());
         node.put("fromSteps", step.getActionOn().getSteps());
         node.put("actionDescription", step.getActionDescription());
         node.put("expectedOutput", step.getExpectedOutput());

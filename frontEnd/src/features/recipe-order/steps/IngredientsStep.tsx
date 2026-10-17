@@ -184,7 +184,7 @@ export default function IngredientsStep({ order, userId, onOrderChange, onNaviga
 
             {report.issues.length > 0 && (
               <div className="ro-alert ro-alert-danger" role="alert">
-                <strong>Some recipe ingredients can't be checked, so this order can't be reserved:</strong>
+                <strong>Unresolved ingredients: these can't be checked against your kitchen, so this order can't be reserved yet:</strong>
                 <ul className="ro-issue-list">
                   {report.issues.map((issue) => (
                     <li key={`${issue.nodeId}-${issue.ingredientRef}`}>

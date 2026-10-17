@@ -25,6 +25,7 @@ import com.processVisualisation.virtualKitchen.ai.recipe.workflow.model.RecipeAi
 import com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.recipe.exception.RecipeRevisionConflictException;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
+import com.processVisualisation.virtualKitchen.recipe.model.ProcessNodeKind;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
 import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
 import com.processVisualisation.virtualKitchen.recipe.repository.ProcessRepository;
@@ -38,12 +39,14 @@ import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.http.HttpStatus;
 
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -119,7 +122,7 @@ class RecipeAiWorkflowServiceTest {
 
         savedStepIds.put(MAIN, List.of("s1", "s2"));
         savedStepIds.put(SUB, List.of("s3"));
-        when(processRepository.findByRecipeId(RECIPE)).thenAnswer(inv -> List.of(process(MAIN, ProcessType.MAIN), process(SUB, ProcessType.SUBPROCESS)));
+        when(processRepository.findByRecipeId(RECIPE)).thenAnswer(inv -> List.of(readyMain(), readyPreparation()));
         when(stepSource.prepareStepContexts(anyLong())).thenAnswer(inv -> preparation(inv.getArgument(0)));
 
         when(workflowRepository.insert(any(RecipeAiWorkflow.class))).thenAnswer(inv -> {
@@ -312,6 +315,19 @@ class RecipeAiWorkflowServiceTest {
     }
 
     @Test
+    void approvalForVisualsOrNarrationIsRefusedWhileTheRecipeIsNotReady() {
+        // The main process has nothing in it: there is no recipe to visualize or narrate yet.
+        when(processRepository.findByRecipeId(RECIPE)).thenAnswer(inv -> List.of(process(MAIN, ProcessType.MAIN), readyPreparation()));
+        service.create(USER, RECIPE, new RecipeAiWorkflowCreateRequestDTO(new RecipeAiTaskSelectionDTO(List.of(PROCESS, NARRATION), false), "Boil 2 eggs"));
+        completeGeneration(true);
+
+        RecipeAiWorkflowException error = assertThrows(RecipeAiWorkflowException.class, () -> service.approve(USER, RECIPE, stored.getId(), 3L));
+
+        assertEquals(HttpStatus.UNPROCESSABLE_ENTITY, error.getStatus());
+        verifyNoInteractions(narrationService);
+    }
+
+    @Test
     void processOnlyApprovalCompletesWithoutDownstreamWork() {
         service.create(USER, RECIPE, new RecipeAiWorkflowCreateRequestDTO(new RecipeAiTaskSelectionDTO(List.of(PROCESS), false), "Boil 2 eggs"));
         completeGeneration(true);
@@ -433,6 +449,28 @@ class RecipeAiWorkflowServiceTest {
 
     private static RecipeAiWorkflowResponseDTO.TaskDTO task(RecipeAiWorkflowResponseDTO dto, RecipeAiTaskType type) {
         return dto.getTasks().stream().filter(task -> task.getType() == type).findFirst().orElseThrow();
+    }
+
+    /** MAIN: one step that uses the Preparation's one flow output. */
+    private static Process readyMain() {
+        Process main = process(MAIN, ProcessType.MAIN);
+        main.getNodes().add(stepNode("m1", Map.of("action", "add", "actionDescription", "Add the eggs",
+                "actionOn", Map.of("processes", List.of(Map.of("processId", SUB, "stepId", "p1"))))));
+        return main;
+    }
+
+    private static Process readyPreparation() {
+        Process preparation = process(SUB, ProcessType.SUBPROCESS);
+        preparation.getNodes().add(stepNode("p1", Map.of("action", "boil", "actionDescription", "Boil the eggs", "expectedOutput", "Boiled Eggs")));
+        return preparation;
+    }
+
+    private static Process.ProcessNode stepNode(String id, Map<String, Object> step) {
+        Process.ProcessNode node = new Process.ProcessNode();
+        node.setId(id);
+        node.setKind(ProcessNodeKind.STEP);
+        node.setData(new LinkedHashMap<>(Map.of("step", step)));
+        return node;
     }
 
     private static Process process(Long id, ProcessType type) {

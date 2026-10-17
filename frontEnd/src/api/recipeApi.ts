@@ -71,6 +71,13 @@ export const RecipeApi = {
   },
 
   /**
+   * Set the recipe's default preparation guidance; null or blank goes back to the app's default. Only the owner may change it.
+   */
+  async updatePreparationNotes(recipeId: number, userId: number, preparationNotes: string | null): Promise<RecipeDetail> {
+    return apiPut<RecipeDetail>(API.recipes.preparationNotes(recipeId), { preparationNotes }, { params: { userId } })
+  },
+
+  /**
    * Copy a public recipe into the current user's My Recipes as an independent recipe.
    */
   async copyRecipe(recipeId: number, userId: number): Promise<Recipe> {

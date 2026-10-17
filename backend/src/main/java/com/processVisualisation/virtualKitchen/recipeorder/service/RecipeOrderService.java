@@ -15,6 +15,7 @@ import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
 import com.processVisualisation.virtualKitchen.recipe.repository.ProcessRepository;
 import com.processVisualisation.virtualKitchen.recipe.repository.RecipeTemplateRepository;
 import com.processVisualisation.virtualKitchen.recipe.service.RecipeThumbnailService;
+import com.processVisualisation.virtualKitchen.recipe.validation.RecipeReadinessEvaluator;
 import com.processVisualisation.virtualKitchen.recipeorder.config.RecipeOrderProperties;
 import com.processVisualisation.virtualKitchen.recipeorder.dto.RecipeOrderRequests;
 import com.processVisualisation.virtualKitchen.recipeorder.exception.RecipeOrderException;
@@ -89,6 +90,7 @@ public class RecipeOrderService {
     private final RecipeThumbnailService thumbnailService;
     private final SequenceGeneratorService sequenceGenerator;
     private final RecipeRequirementCalculator calculator;
+    private final RecipeReadinessEvaluator readinessEvaluator;
     private final RecipeOrderProperties properties;
     private final Clock clock;
 
@@ -137,6 +139,7 @@ public class RecipeOrderService {
         this.thumbnailService = thumbnailService;
         this.sequenceGenerator = sequenceGenerator;
         this.calculator = new RecipeRequirementCalculator(conversions);
+        this.readinessEvaluator = new RecipeReadinessEvaluator();
         this.properties = properties;
         this.clock = clock;
     }
@@ -179,6 +182,10 @@ public class RecipeOrderService {
         if (snapshot.getStepCount() == 0) {
             throw RecipeOrderException.unprocessable("This recipe has no steps yet, so there is nothing to prepare. Add steps in the recipe editor first.");
         }
+        // The kitchen cooks the recipe as structured: its preparations must feed one connected main process.
+        // (Uncatalogued ingredients are not blockers here: the order's ingredient check lists them to resolve.)
+        RecipeReadinessEvaluator.Readiness readiness = readinessEvaluator.evaluate(processes);
+        if (!readiness.ready()) throw RecipeOrderException.unprocessable(RecipeReadinessEvaluator.summarize(readiness));
 
         LocalDateTime now = now();
         RecipeOrder order = new RecipeOrder();

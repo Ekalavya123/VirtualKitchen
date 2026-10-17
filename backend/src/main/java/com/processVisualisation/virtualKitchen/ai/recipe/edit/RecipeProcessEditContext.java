@@ -69,8 +69,10 @@ final class RecipeProcessEditContext {
         List<EditSubprocessRefDTO> subprocesses = target.getSubprocesses() == null ? List.of() : target.getSubprocesses();
         for (EditSubprocessRefDTO subprocess : subprocesses) {
             if (subprocess == null || subprocess.getProcessId() == null) continue;
-            String id = String.valueOf(subprocess.getProcessId());
-            if (aliasByProcessId.containsKey(id) || Objects.equals(subprocess.getProcessId(), target.getProcessId())) continue;
+            // A step output is keyed "processId:stepId" — the form a step's actionOn.processes entries arrive in.
+            boolean wholeProcess = subprocess.getStepId() == null || subprocess.getStepId().isBlank();
+            String id = wholeProcess ? String.valueOf(subprocess.getProcessId()) : subprocess.getProcessId() + ":" + subprocess.getStepId().trim();
+            if (aliasByProcessId.containsKey(id) || (wholeProcess && Objects.equals(subprocess.getProcessId(), target.getProcessId()))) continue;
             String alias = "p" + (processIdByAlias.size() + 1);
             processIdByAlias.put(alias, id);
             aliasByProcessId.put(id, alias);
@@ -170,7 +172,8 @@ final class RecipeProcessEditContext {
     static GeneratedActionOnIngredientDTO copy(GeneratedActionOnIngredientDTO source) {
         if (source == null) return null;
         return new GeneratedActionOnIngredientDTO(source.getIngredientId(), source.getQuantity(), source.getUnit(),
-                source.getPreparationStyle(), source.getCustomIngredientName());
+                source.getPreparationStyle(), source.getCustomIngredientName(), source.getCustomUnit(),
+                source.getCustomPreparationStyle(), source.getNotes());
     }
 
     /** Maps each id through {@code mapping}, dropping ids it does not know (dangling references). */

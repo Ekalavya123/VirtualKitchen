@@ -119,6 +119,24 @@ public class RecipeTemplateService {
     }
 
     /**
+     * Sets a recipe's default preparation guidance, after verifying the requesting user owns it. Blank text
+     * goes back to the application's default.
+     *
+     * @param id     the id of the recipe
+     * @param userId the id of the user requesting the change, used for ownership verification
+     * @param notes  the new guidance; null or blank for the default
+     * @return the updated recipe detail
+     * @throws java.util.NoSuchElementException if no template exists with the given id
+     * @throws RecipeAccessDeniedException if userId does not own the template
+     */
+    public RecipeDetailResponseDTO updatePreparationNotes(Long id, Long userId, String notes) {
+        RecipeTemplate pt = repo.findById(id).orElseThrow();
+        requireOwner(pt, userId);
+        pt.setPreparationNotes(notes == null || notes.isBlank() ? null : notes.strip());
+        return mapper.toDetailDTO(repo.save(pt));
+    }
+
+    /**
      * Deletes a recipe template, after verifying the requesting user owns it.
      *
      * @param id     the id of the template to delete
@@ -178,6 +196,7 @@ public class RecipeTemplateService {
         copy.setVisibility(Visibility.PRIVATE);
         copy.setIngredients(cloneIngredients(original.getIngredients()));
         copy.setNutrition(cloneNutrition(original.getNutrition()));
+        copy.setPreparationNotes(original.getPreparationNotes());
 
         // Saved before its processes are copied: ProcessValidator requires each process's recipe to exist.
         RecipeTemplate saved = repo.save(copy);

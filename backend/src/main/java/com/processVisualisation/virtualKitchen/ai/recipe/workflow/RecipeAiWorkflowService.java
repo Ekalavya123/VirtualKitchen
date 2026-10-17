@@ -31,6 +31,7 @@ import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
 import com.processVisualisation.virtualKitchen.recipe.repository.ProcessRepository;
 import com.processVisualisation.virtualKitchen.recipe.repository.RecipeTemplateRepository;
+import com.processVisualisation.virtualKitchen.recipe.validation.RecipeReadinessEvaluator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -100,6 +101,7 @@ public class RecipeAiWorkflowService {
     private final StepNarrationService narrationService;
     private final RecipeAiWorkflowEstimator estimator;
     private final RecipeAiWorkflowStatusResolver resolver;
+    private final RecipeReadinessEvaluator readinessEvaluator = new RecipeReadinessEvaluator();
     private final Clock clock;
 
     @Autowired
@@ -284,6 +286,12 @@ public class RecipeAiWorkflowService {
         boolean hasDownstream = workflow.getSelectedTasks().stream().anyMatch(RecipeAiTaskType::isDownstream);
         if (hasDownstream && approvedProcesses.isEmpty()) {
             throw RecipeAiWorkflowException.conflict("The recipe process has no steps to create visuals or narration for");
+        }
+        // Visuals and narration for the whole recipe need its whole structure (preparations used by one connected
+        // main process); the editor shows the same blockers before the user can approve.
+        if (hasDownstream) {
+            RecipeReadinessEvaluator.Readiness readiness = readinessEvaluator.evaluate(processRepository.findByRecipeId(recipeId));
+            if (!readiness.ready()) throw RecipeAiWorkflowException.unprocessable(RecipeReadinessEvaluator.summarize(readiness));
         }
         ApprovedSnapshot snapshot = new ApprovedSnapshot(savedRevision, now(), approvedProcesses);
 

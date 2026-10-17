@@ -574,15 +574,22 @@
   outline-offset: 1px;
 }
 
-/* A process card in the sidebar, with a delete button over its right edge (subprocesses only). */
+/* A process card in the sidebar, with its rename/delete buttons over its right edge. */
 .recipe-sidebar-process {
   position: relative;
 }
 
-.recipe-sidebar-process-delete {
+.recipe-sidebar-process-actions {
   position: absolute;
   top: 50%;
   right: 8px;
+  display: flex;
+  gap: 2px;
+  transform: translateY(-50%);
+}
+
+.recipe-sidebar-process-delete,
+.recipe-sidebar-process-rename {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -596,16 +603,32 @@
   line-height: 1;
   cursor: pointer;
   opacity: 0.55;
-  transform: translateY(-50%);
 }
 
-.recipe-sidebar-process:hover .recipe-sidebar-process-delete {
+.recipe-sidebar-process-rename {
+  color: var(--flow-text-muted);
+}
+
+.recipe-sidebar-process:hover .recipe-sidebar-process-delete,
+.recipe-sidebar-process:hover .recipe-sidebar-process-rename {
   opacity: 1;
 }
 
 .recipe-sidebar-process-delete:hover {
   border-color: var(--flow-danger-border);
   background: var(--flow-danger-soft);
+  opacity: 1;
+}
+
+.recipe-sidebar-process-rename:hover {
+  border-color: var(--flow-border);
+  background: var(--flow-surface-muted);
+  opacity: 1;
+}
+
+.recipe-sidebar-process-rename:focus-visible {
+  outline: 2px solid var(--flow-accent);
+  outline-offset: 1px;
   opacity: 1;
 }
 

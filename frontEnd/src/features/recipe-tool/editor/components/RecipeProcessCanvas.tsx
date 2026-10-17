@@ -41,7 +41,9 @@ import {
 } from '../adapters/canvasFlow'
 import { normalizeConditionNodeData } from '../../model/recipeConditionData'
 import { type FlowViewport } from '../model/canvasGraph'
-import { ROW_LAYOUT, arrangeRows, findLoopEdges, getHandleSides, planRows, type RowPlan } from '../model/processLayout'
+import { ROW_LAYOUT, arrangeFlowGrid, arrangeRows, findLoopEdges, getHandleSides, planFlowColumns, planRows, type RowPlan } from '../model/processLayout'
+import { getPreparationFlows } from '../../model/preparationFlows'
+import { findPreparedOutputUses, withoutSubprocessReferences } from '../../model/subprocessReferences'
 import { findFreePosition } from '../adapters/recipeProcessEditGraph'
 import { getProcessReadingOrder } from '../../model/processReadingOrder'
 import { buildStepOutputGraph } from '../../model/recipeStepOutputs'
@@ -58,6 +60,7 @@ import {
   withRecipeStepActionOnSteps,
   withRecipeStepVisualization,
   type ActionOnIngredient,
+  type RecipeStepActionOnProcess,
 } from '../../model/recipeStepData'
 import { RecipeProcessGraphProvider } from '../context/RecipeProcessGraphContext'
 import { useRecipeSession, type RecipeSessionContextValue } from '../../session/sessionContext'
@@ -92,7 +95,7 @@ type RecipeProcessCanvasProps = {
   onNavigateToList: () => void
   onNavigateToAncestor: (index: number) => void
   /** Called when the user chooses to open a subprocess referenced from a STEP's Action On (see RecipeStepPanel's "Open" button) — a Process graph never contains a node for this, so there's no double-click-to-open path anymore. */
-  onOpenSubprocess: (subprocessId: number, currentProcessName: string) => void
+  onOpenSubprocess: (subprocessId: number, currentProcessName: string, stepId?: string) => void
   onBack?: () => void
   /** The recipe's name for the top bar's breadcrumb — omitted where it isn't known (standalone route). */
   recipeName?: string
@@ -110,6 +113,8 @@ type RecipeProcessCanvasProps = {
   onSelectedNodeChange?: (nodeId: string | null) => void
   /** Nodes to briefly highlight (e.g. the ones an AI edit just changed); display only, never saved. */
   highlightedNodeIds?: ReadonlySet<string>
+  /** Selects this node once it's on the canvas (e.g. a readiness issue the user clicked); a new token repeats it. */
+  focusNodeRequest?: { nodeId: string; token: number } | null
 }
 
 // Default sizes of a new node (see createRecipeStepNode/createConditionNode).
@@ -124,6 +129,9 @@ const READABLE_MIN_ZOOM = 0.6
 const LOOP_EDGE_OFFSET = 32
 /** Frames Auto Arrange waits at most for resized cards to be re-measured before placing them anyway. */
 const ARRANGE_MAX_WAIT_FRAMES = 20
+
+/** An Auto Arrange waiting for re-measured cards: rows for MAIN, or (Preparation) each flow's node ids. */
+type PendingArrange = { plan: RowPlan; order: string[]; flows?: string[][] }
 
 /** A node's rendered size: what React Flow measured, falling back to its stored size. */
 const nodeSize = (node: Node) => ({
@@ -193,7 +201,7 @@ export default function RecipeProcessCanvas(props: RecipeProcessCanvasProps) {
     )
   }
 
-  const availableSubprocesses = session.getProcesses().filter((candidate) => candidate.type === 'SUBPROCESS' && candidate.id !== processId)
+  const recipeProcesses = session.getProcesses()
 
   return (
     <RecipeProcessCanvasContent
@@ -201,7 +209,7 @@ export default function RecipeProcessCanvas(props: RecipeProcessCanvasProps) {
       {...props}
       processId={processId}
       process={process}
-      availableSubprocesses={availableSubprocesses}
+      recipeProcesses={recipeProcesses}
       session={session}
       sidebarCollapsed={sidebarCollapsed}
       setSidebarCollapsed={setSidebarCollapsed}
@@ -217,7 +225,7 @@ export default function RecipeProcessCanvas(props: RecipeProcessCanvasProps) {
 
 type RecipeProcessCanvasContentProps = RecipeProcessCanvasProps & {
   process: Process
-  availableSubprocesses: Process[]
+  recipeProcesses: Process[]
   session: RecipeSessionContextValue
   sidebarCollapsed: boolean
   setSidebarCollapsed: Dispatch<SetStateAction<boolean>>
@@ -233,7 +241,7 @@ function RecipeProcessCanvasContent({
   recipeId,
   processId,
   process,
-  availableSubprocesses,
+  recipeProcesses,
   session,
   breadcrumbAncestors,
   onNavigateToList,
@@ -245,6 +253,7 @@ function RecipeProcessCanvasContent({
   sidebarHeader,
   onSelectedNodeChange,
   highlightedNodeIds,
+  focusNodeRequest,
   sidebarCollapsed,
   setSidebarCollapsed,
   sidebarWidth,
@@ -530,10 +539,10 @@ function RecipeProcessCanvasContent({
    * touched. Recorded as one undo step (`recordUndo`), so Undo restores the previous layout and sizes;
    * an AI generation's own arrange is left out of history, folded into the generation's step.
    */
-  const pendingArrangeRef = useRef<{ plan: RowPlan; order: string[] } | null>(null)
+  const pendingArrangeRef = useRef<PendingArrange | null>(null)
 
   /** Phase 2 — checked once per frame until the resized cards have been re-measured (or it's waited long enough). */
-  const finishArrange = useCallback((pending: { plan: RowPlan; order: string[] }) => {
+  const finishArrange = useCallback((pending: PendingArrange) => {
     const attempt = (frame: number) => {
       const instance = reactFlowInstance.current
       if (pendingArrangeRef.current !== pending || !instance) return
@@ -549,7 +558,7 @@ function RecipeProcessCanvasContent({
       const measuredOf = (node: Node) => instance.getInternalNode(node.id)?.measured
 
       const byId = new Map(current.map((node) => [node.id, node]))
-      const ordered = [...pending.order, ...current.map((node) => node.id).filter((id) => !pending.order.includes(id))]
+      const entries = (ids: string[]) => ids
         .map((id) => byId.get(id))
         .filter((node): node is Node => node != null)
         .map((node) => ({
@@ -557,7 +566,11 @@ function RecipeProcessCanvasContent({
           kind: isRecipeConditionNode(node) ? 'CONDITION' : 'STEP',
           height: measuredOf(node)?.height ?? nodeSize(node).height,
         }))
-      const layout = arrangeRows(ordered, pending.plan)
+      const unordered = current.map((node) => node.id).filter((id) => !pending.order.includes(id))
+      // The Preparation: each flow in its own column, flows side by side and wrapping (processLayout.ts).
+      const layout = pending.flows
+        ? arrangeFlowGrid([...pending.flows.map(entries), ...unordered.map((id) => entries([id]))], pending.plan)
+        : arrangeRows(entries([...pending.order, ...unordered]), pending.plan)
       pendingInitialViewRef.current = { duration: 300 }
       setNodes((nds) => nds.map((node) => {
         const placed = layout.get(node.id)
@@ -572,10 +585,19 @@ function RecipeProcessCanvasContent({
     const wrapper = reactFlowWrapperRef.current
     const current = nodesRef.current
     if (!wrapper || current.length === 0) return
-    const plan = planRows(wrapper.clientWidth - 2 * ROW_LAYOUT.padding)
-    const order = getProcessReadingOrder(flowToProcess(process, current, edgesRef.current)).map((node) => node.id)
+    const isPreparation = process.type === 'SUBPROCESS'
+    const availableWidth = wrapper.clientWidth - 2 * ROW_LAYOUT.padding
+    const plan = isPreparation ? planFlowColumns(availableWidth) : planRows(availableWidth)
+    const asProcess = flowToProcess(process, current, edgesRef.current)
+    const order = getProcessReadingOrder(asProcess).map((node) => node.id)
+    // Each flow in reading order, the flows ordered by where their first node reads.
+    const flows = isPreparation
+      ? getPreparationFlows(asProcess)
+        .map((flow) => order.filter((id) => flow.nodes.some((node) => node.id === id)))
+        .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+      : undefined
     if (recordUndo) pushHistorySnapshot()
-    const pending = { plan, order }
+    const pending: PendingArrange = { plan, order, flows }
     pendingArrangeRef.current = pending
     // Phase 1: the cell width, and no fixed height (nor a leftover fixed `style` size) so each card
     // takes its natural content height at that width.
@@ -617,7 +639,16 @@ function RecipeProcessCanvasContent({
       }))
     setEdges((eds) => eds.filter((edge) => edge.source !== id && edge.target !== id))
     setSelectedNodeId((current) => (current === id ? null : current))
-  }, [setNodes, setEdges, pushHistorySnapshot])
+    // A Preparation step's output may be used by main steps: those uses go too (same undo step — the
+    // snapshot above is of the whole recipe).
+    if (process.type === 'SUBPROCESS') {
+      session.getProcesses().forEach((other) => {
+        if (other.id === processId) return
+        const stripped = withoutSubprocessReferences(other, processId, id)
+        if (stripped !== other) session.addProcess(stripped)
+      })
+    }
+  }, [setNodes, setEdges, pushHistorySnapshot, process.type, processId, session])
 
   /**
    * Every way of deleting a node (the panels' Delete, the top bar's 🗑, the Delete/Backspace keys)
@@ -628,7 +659,10 @@ function RecipeProcessCanvasContent({
   const confirmingDeleteRef = useRef(false)
   const requestDeleteNode = useCallback(async (id: string) => {
     if (confirmingDeleteRef.current) return
-    const options = describeNodeDeletion(nodesRef.current, edgesRef.current, id)
+    const usedByMainSteps = process.type === 'SUBPROCESS'
+      ? findPreparedOutputUses(session.getProcesses().filter((other) => other.id !== processId), processId, id).length
+      : 0
+    const options = describeNodeDeletion(nodesRef.current, edgesRef.current, id, usedByMainSteps)
     if (!options) return
 
     confirmingDeleteRef.current = true
@@ -637,7 +671,7 @@ function RecipeProcessCanvasContent({
     } finally {
       confirmingDeleteRef.current = false
     }
-  }, [confirm, deleteNode])
+  }, [confirm, deleteNode, process.type, processId, session])
 
   const deleteEdge = useCallback((id: string) => {
     pushHistorySnapshot()
@@ -695,9 +729,9 @@ function RecipeProcessCanvasContent({
     setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnIngredients(node.data, ingredients) } : node)))
   }, [setNodes, recordFieldEdit])
 
-  const updateActionOnProcesses = useCallback((nodeId: string, processIds: number[]) => {
+  const updateActionOnProcesses = useCallback((nodeId: string, references: RecipeStepActionOnProcess[]) => {
     recordFieldEdit(nodeId, 'actionOn.processes')
-    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnProcesses(node.data, processIds) } : node)))
+    setNodes((nds) => nds.map((node) => (node.id === nodeId ? { ...node, data: withRecipeStepActionOnProcesses(node.data, references) } : node)))
   }, [setNodes, recordFieldEdit])
 
   const updateActionOnSteps = useCallback((nodeId: string, stepIds: string[]) => {
@@ -779,7 +813,7 @@ function RecipeProcessCanvasContent({
     setExportJson(JSON.stringify({ recipeId, processId, type: process.type, ...payload }, null, 2))
   }, [nodes, edges, process, recipeId, processId])
 
-  const buildSlideshowSteps = () => buildCanvasSlideshowSteps(process, nodes, edges, availableSubprocesses, stepOutputGraph)
+  const buildSlideshowSteps = () => buildCanvasSlideshowSteps(process, nodes, edges, recipeProcesses, stepOutputGraph)
 
   const applyStepVisualization = useCallback((stepResult: RecipeProcessVisualizationStepResult) => {
     if (!stepResult.success || stepResult.visualizationAssetId == null) return
@@ -815,8 +849,8 @@ function RecipeProcessCanvasContent({
   }, [session])
 
   /** Called from RecipeStepPanel's "Open" button on a referenced subprocess — the only way to open a subprocess from inside a process's own canvas, now that there's no PROCESS node to double-click. */
-  const handleOpenSubprocess = useCallback((subprocessId: number) => {
-    onOpenSubprocess(subprocessId, process.name)
+  const handleOpenSubprocess = useCallback((subprocessId: number, stepId?: string) => {
+    onOpenSubprocess(subprocessId, process.name, stepId)
   }, [process, onOpenSubprocess])
 
   /** Explicit Save: flushes the pending autosave right away. Autosave itself never toasts. */
@@ -894,6 +928,16 @@ function RecipeProcessCanvasContent({
     setSelectedEdgeId(null)
     setNodes((nds) => nds.map((node) => (node.selected === (node.id === nodeId) ? node : { ...node, selected: node.id === nodeId })))
   }, [setNodes])
+
+  // A node asked for from outside the canvas (a readiness issue): selected once it exists here — adjusted while
+  // rendering, like the editor's other requests, so it applies on this process's first render.
+  const [handledFocusToken, setHandledFocusToken] = useState<number | null>(null)
+  if (focusNodeRequest && focusNodeRequest.token !== handledFocusToken && nodes.some((node) => node.id === focusNodeRequest.nodeId)) {
+    setHandledFocusToken(focusNodeRequest.token)
+    setSelectedNodeId(focusNodeRequest.nodeId)
+    setSelectedEdgeId(null)
+    setNodes((nds) => nds.map((node) => (node.selected === (node.id === focusNodeRequest.nodeId) ? node : { ...node, selected: node.id === focusNodeRequest.nodeId })))
+  }
 
   return (
     <div className="flow-canvas-container flex h-full w-full flex-col">
@@ -989,7 +1033,7 @@ function RecipeProcessCanvasContent({
                   the brief) — provided via context rather than extra node props, since React Flow's
                   custom node components only receive their own node's data. Ingredient names come
                   from the static catalog module directly, no context needed for those. */}
-              <RecipeProcessGraphProvider value={{ availableSubprocesses, stepOrder, stepOutputGraph, onNodeResizeStart: handleNodeResizeStart, onNodeResizeEnd: handleNodeResizeEnd, handleSides }}>
+              <RecipeProcessGraphProvider value={{ recipeProcesses, stepOrder, stepOutputGraph, onNodeResizeStart: handleNodeResizeStart, onNodeResizeEnd: handleNodeResizeEnd, handleSides }}>
                 <ReactFlow
                   nodes={displayedNodes}
                   edges={displayedEdges}
@@ -1077,7 +1121,8 @@ function RecipeProcessCanvasContent({
               {selectedNode && isRecipeStepNode(selectedNode) ? (
                 <RecipeStepPanel
                   node={{ id: selectedNode.id, data: selectedNode.data }}
-                  availableSubprocesses={availableSubprocesses}
+                  recipeProcesses={recipeProcesses}
+                  isPreparation={process.type === 'SUBPROCESS'}
                   updateStepField={updateRecipeStepField}
                   updateActionOnIngredients={updateActionOnIngredients}
                   updateActionOnProcesses={updateActionOnProcesses}

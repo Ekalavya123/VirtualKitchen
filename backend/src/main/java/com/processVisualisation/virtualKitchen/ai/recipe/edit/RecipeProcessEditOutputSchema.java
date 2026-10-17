@@ -32,7 +32,7 @@ public class RecipeProcessEditOutputSchema {
 
     /** Step fields an UPDATE_STEP may reset via "clear" ("temperature" resets value and unit together). */
     public static final List<String> CLEARABLE_FIELDS = List.of(
-            "customActionName", "expectedOutput", "temperature", "flameLevel", "duration", "repeatInterval", "fromSteps", "processes");
+            "customActionName", "expectedOutput", "temperature", "flameLevel", "duration", "repeatInterval", "fromSteps", "uses");
 
     private final Map<String, Object> jsonSchema;
     private final String promptBlock;
@@ -50,7 +50,7 @@ public class RecipeProcessEditOutputSchema {
                 new Field("duration", string(), false),
                 new Field("repeatInterval", string(), false),
                 new Field("fromSteps", arrayOf(string()), false),
-                new Field("processes", arrayOf(string()), false)
+                new Field("uses", arrayOf(string()), false)
         );
         Map<String, Object> expectedResult = enumOf(List.of("success", "failure"));
 

@@ -308,14 +308,17 @@ public class ProcessService {
         // Every id is allocated up front so a STEP's Action On reference can be rewritten to its
         // copy regardless of which order the processes are copied in.
         Map<Long, Long> processIdMap = new LinkedHashMap<>();
+        // Node ids too: a main step's use of a Preparation step ({processId, stepId}) must follow that step's copy.
+        Map<Long, Map<String, String>> nodeIdMaps = new LinkedHashMap<>();
         for (Process source : sources) {
             processIdMap.put(source.getId(), sequenceGeneratorService.generateSequence(Process.SEQUENCE_NAME));
+            nodeIdMaps.put(source.getId(), ProcessGraphCloner.newNodeIds(source));
         }
 
         List<Process> copies = new ArrayList<>();
         Long copiedMainId = null;
         for (Process source : sources) {
-            Process copy = cloneIntoRecipe(source, processIdMap.get(source.getId()), targetRecipeId, processIdMap);
+            Process copy = cloneIntoRecipe(source, processIdMap.get(source.getId()), targetRecipeId, processIdMap, nodeIdMaps);
             // Validates every copy before any of them are saved below, so an invalid source
             // process aborts the whole copy without leaving a partial set of processes behind.
             processValidator.validateOrThrow(copy);
@@ -333,8 +336,10 @@ public class ProcessService {
      * Clones {@code original} into {@code targetRecipeId} under {@code newProcessId}, keeping its
      * type/name/description; see {@link ProcessGraphCloner#cloneGraph} for how the graph is copied.
      */
-    private Process cloneIntoRecipe(Process original, Long newProcessId, Long targetRecipeId, Map<Long, Long> processIdMap) {
-        Process copy = ProcessGraphCloner.cloneGraph(original, processIdMap);
+    private Process cloneIntoRecipe(
+            Process original, Long newProcessId, Long targetRecipeId, Map<Long, Long> processIdMap, Map<Long, Map<String, String>> nodeIdMaps
+    ) {
+        Process copy = ProcessGraphCloner.cloneGraph(original, processIdMap, nodeIdMaps);
         copy.setId(newProcessId);
         copy.setType(original.getType());
         copy.setRecipeId(targetRecipeId);

@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.recipe.edit;
 
+import com.processVisualisation.virtualKitchen.ai.recipe.edit.dto.EditSubprocessRefDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.edit.dto.EditTargetProcessDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.edit.dto.ProcessEditOperationDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.generation.RecipeProcessGenerationValidator;
@@ -15,6 +16,7 @@ import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFix
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFixtures.BOIL_ID;
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFixtures.COOK_ID;
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFixtures.DRAIN_ID;
+import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFixtures.SAUCE_PROCESS_ID;
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFixtures.newStep;
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFixtures.op;
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFixtures.outIngredient;
@@ -22,6 +24,7 @@ import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFix
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFixtures.pastaContext;
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFixtures.patchDuration;
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFixtures.patchFlame;
+import static com.processVisualisation.virtualKitchen.ai.recipe.edit.EditTestFixtures.patchUses;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -59,6 +62,32 @@ class RecipeProcessEditValidatorTest {
 
         assertThat(result.errors()).isEmpty();
         assertThat(result.operations().get(0).getAfter()).isEqualTo(ProcessEditOperationDTO.START);
+    }
+
+    @Test
+    void addStepStartingANewFlow_keepsTheNewFlowMarker_butAChecksCannotStartOne() {
+        RecipeProcessEditValidator.Result added = validator.validate(output(
+                op("ADD_STEP").after("NEW_FLOW").step(newStep("chop", List.of(outIngredient("onion", 2.0, "piece")), "Chop the onions")).build()
+        ), pastaContext());
+        assertThat(added.errors()).isEmpty();
+        assertThat(added.operations().get(0).getAfter()).isEqualTo(ProcessEditOperationDTO.NEW_FLOW);
+
+        RecipeProcessEditValidator.Result check = validator.validate(output(
+                op("ADD_CONDITION").after("NEW_FLOW").title("Is it soft?").actionDescription("Check").build()
+        ), pastaContext());
+        assertThat(check.errors()).anyMatch(error -> error.contains("NEW_FLOW"));
+    }
+
+    @Test
+    void aPreparationStepOutputIsOfferedAsAnAliasAndTranslatedBackWithItsStep() {
+        EditTargetProcessDTO target = EditTestFixtures.pastaProcess();
+        target.setSubprocesses(List.of(new EditSubprocessRefDTO(SAUCE_PROCESS_ID, "sauce-step", "Tomato Sauce")));
+        RecipeProcessEditValidator.Result result = validator.validate(output(
+                op("UPDATE_STEP").target("s3").set(patchUses(List.of("p1"))).build()
+        ), RecipeProcessEditContext.of(target, null));
+
+        assertThat(result.errors()).isEmpty();
+        assertThat(result.operations().get(0).getStep().getActionOn().getProcesses()).containsExactly(SAUCE_PROCESS_ID + ":sauce-step");
     }
 
     @Test

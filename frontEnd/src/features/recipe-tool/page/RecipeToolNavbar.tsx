@@ -5,6 +5,8 @@ import type { RecipeDetail } from '../../../types/recipe'
 import { recipeToolPath, type RecipeToolView } from '../recipeToolRoutes'
 import RecipeSummarySection from './RecipeSummarySection'
 import ActionMenu, { type ActionMenuItem } from '../../../shared/components/ActionMenu'
+import { useReadinessGate } from '../session/useRecipeReadiness'
+import type { ReadinessIssue } from '../model/recipeReadiness'
 
 const TABS: { id: RecipeToolView; label: string; icon: string }[] = [
   { id: 'editor', label: 'Recipe Editor', icon: '🧩' },
@@ -14,8 +16,10 @@ const TABS: { id: RecipeToolView; label: string; icon: string }[] = [
 type RecipeToolNavbarProps = {
   recipe: RecipeDetail
   onBack: () => void
-  /** Owners only: "Order Recipe" starts a recipe order (of the last saved version) and opens it. */
+  /** Owners only: "Order Recipe" starts a recipe order (of the last saved version) and opens it — once the recipe is saved and ready. */
   onOrderRecipe?: () => void
+  /** Opens an issue that blocks ordering in the editor (from the blocked-order dialog). */
+  onShowIssue?: (issue: ReadinessIssue) => void
   /** The order is being created. */
   ordering?: boolean
   /** Owners only: the ⋯ menu's recipe actions. */
@@ -35,9 +39,21 @@ type RecipeToolNavbarProps = {
  * than fabricating a thumbnail.
  */
 export default function RecipeToolNavbar({
-  recipe, onBack, onOrderRecipe, ordering = false, onEditDetails, onToggleVisibility, onDeleteRecipe,
+  recipe, onBack, onOrderRecipe, ordering = false, onShowIssue, onEditDetails, onToggleVisibility, onDeleteRecipe,
 }: RecipeToolNavbarProps) {
   const [showDetails, setShowDetails] = useState(false)
+  const [checking, setChecking] = useState(false)
+  // Ordering reads the saved recipe and cooks it as structured: save first, and only order a ready recipe.
+  const readinessGate = useReadinessGate(onShowIssue)
+  const startOrder = async () => {
+    if (!onOrderRecipe || checking) return
+    setChecking(true)
+    try {
+      if (await readinessGate('ordering')) onOrderRecipe()
+    } finally {
+      setChecking(false)
+    }
+  }
   const menuItems: ActionMenuItem[] = [
     ...(onEditDetails ? [{ label: '✏️ Edit name & description', onSelect: onEditDetails }] : []),
     ...(onToggleVisibility
@@ -131,8 +147,8 @@ export default function RecipeToolNavbar({
         {onOrderRecipe && (
           <button
             type="button"
-            onClick={onOrderRecipe}
-            disabled={ordering}
+            onClick={() => void startOrder()}
+            disabled={ordering || checking}
             aria-label={ordering ? 'Starting recipe order' : 'Order Recipe'}
             title="Order this recipe from your kitchen — uses the last saved version (simulated preparation and delivery)"
             style={{

@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
 
 /**
  * The output contract of recipe text -> Process generation: what the model must return (see
- * {@link RecipeProcessOutput}). One field list per object drives both {@link #jsonSchema()} — sent to providers
+ * {@link RecipeProcessOutput}) — named preparation flows plus the one main cooking sequence. One field list per object drives both {@link #jsonSchema()} — sent to providers
  * that support constrained/structured output — and {@link #promptBlock()}, the OUTPUT section of the system
  * prompt, so the two can never drift apart.
  * <p>
@@ -40,9 +40,12 @@ public class RecipeProcessOutputSchema {
 
         List<Field> ingredientFields = List.of(
                 new Field("ingredientId", string(), true),
+                new Field("name", string(), true),
                 new Field("quantity", number(), false),
                 new Field("unit", enumOf(unitIds), false),
+                new Field("customUnit", string(), false),
                 new Field("preparationStyle", string(), false),
+                new Field("customPreparationStyle", string(), false),
                 new Field("customIngredientName", string(), false)
         );
         List<Field> stepFields = List.of(
@@ -51,7 +54,7 @@ public class RecipeProcessOutputSchema {
                 new Field("action", string(), true),
                 new Field("customActionName", string(), false),
                 new Field("ingredients", arrayOf(object(ingredientFields)), false),
-                new Field("processes", arrayOf(string()), false),
+                new Field("uses", arrayOf(string()), false),
                 new Field("fromSteps", arrayOf(string()), false),
                 new Field("actionDescription", string(), true),
                 new Field("expectedOutput", string(), false),
@@ -71,19 +74,20 @@ public class RecipeProcessOutputSchema {
         this.stepSchema = object(stepFields);
         this.ingredientSchema = object(ingredientFields);
         Map<String, Object> node = Map.of("anyOf", List.of(stepSchema, object(conditionFields)));
-        List<Field> mainProcessFields = List.of(
-                new Field("name", string(), true),
+        List<Field> preparationFields = List.of(
+                new Field("ref", string(), true),
+                new Field("output", string(), true),
                 new Field("steps", arrayOf(node), true)
         );
-        List<Field> subprocessFields = List.of(
-                new Field("ref", string(), true),
+        List<Field> mainFields = List.of(
                 new Field("name", string(), true),
                 new Field("steps", arrayOf(node), true)
         );
 
+        // "preparations" comes first so the model writes the prepared components before the main sequence that uses them.
         this.jsonSchema = object(List.of(
-                new Field("mainProcess", object(mainProcessFields), true),
-                new Field("subprocesses", arrayOf(object(subprocessFields)), false)
+                new Field("preparations", arrayOf(object(preparationFields)), false),
+                new Field("main", object(mainFields), true)
         ));
         this.promptBlock = """
                 OUTPUT
@@ -91,18 +95,18 @@ public class RecipeProcessOutputSchema {
                 OMIT every optional field that is empty, null, an empty list, or its default — never write "", null or [].
                 "!" marks a required field; everything else is optional.
                 ROOT {%s}
-                MAIN PROCESS {%s}
-                SUBPROCESS {%s}
+                PREPARATION {%s}
+                MAIN {%s}
                 STEP {%s}   (nodeType defaults to STEP — omit it)
                 CONDITION {%s}   (expectedResult defaults to success)
                 INGREDIENT {%s}
 
-                Example STEP:      {"action":"saute","ingredients":[{"ingredientId":"onion","quantity":2,"unit":"piece","preparationStyle":"thin-slice"}],"actionDescription":"Saute the onions","expectedOutput":"golden onions","flameLevel":"medium","duration":"5 minutes"}
+                Example STEP:      {"action":"saute","uses":["chopped_onions"],"ingredients":[{"ingredientId":"garlic","name":"garlic","quantity":2,"unit":"clove","preparationStyle":"minced"}],"actionDescription":"Saute the onions and garlic","expectedOutput":"golden onions","flameLevel":"medium","duration":"5 minutes"}
                 Example CONDITION: {"nodeType":"CONDITION","title":"Is the oil hot?","actionDescription":"Drop in a pinch of batter; it should rise at once"}
                 """.formatted(
-                describe(List.of(new Field("mainProcess", Map.of(), true), new Field("subprocesses", Map.of(), false))),
-                describe(mainProcessFields),
-                describe(subprocessFields),
+                describe(List.of(new Field("preparations", Map.of(), false), new Field("main", Map.of(), true))),
+                describe(preparationFields),
+                describe(mainFields),
                 describe(stepFields.stream().filter(field -> !field.name().equals("nodeType")).toList()),
                 describe(conditionFields),
                 describe(ingredientFields)

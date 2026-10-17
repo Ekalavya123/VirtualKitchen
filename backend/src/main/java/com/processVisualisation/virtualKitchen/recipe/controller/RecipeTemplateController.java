@@ -1,6 +1,8 @@
 package com.processVisualisation.virtualKitchen.recipe.controller;
 
 import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipeDetailResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.dto.RecipePreparationNotesUpdateDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateUpdateDTO;
@@ -9,6 +11,7 @@ import com.processVisualisation.virtualKitchen.recipe.model.Visibility;
 import com.processVisualisation.virtualKitchen.recipe.service.RecipeTemplateService;
 import com.processVisualisation.virtualKitchen.recipe.service.RecipeThumbnailService;
 
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -127,6 +130,22 @@ public class RecipeTemplateController {
                                                                    @RequestParam Long userId,
                                                                    @RequestParam Visibility visibility){
         return build(service.updateVisibility(id, userId, visibility), "updated");
+    }
+
+    /**
+     * Sets the recipe's default preparation guidance (blank resets it to the application's default). The caller
+     * must own the template; ownership is verified in the service layer using the supplied userId.
+     *
+     * @param id     the id of the template to update
+     * @param userId the id of the user requesting the update, used for ownership verification
+     * @param dto    the new guidance
+     * @return an ApiResponse wrapping the updated recipe detail
+     */
+    @PutMapping("/{id}/preparation-notes")
+    public ApiResponse<RecipeDetailResponseDTO> updatePreparationNotes(@PathVariable Long id,
+                                                                       @RequestParam Long userId,
+                                                                       @Valid @RequestBody RecipePreparationNotesUpdateDTO dto){
+        return build(service.updatePreparationNotes(id, userId, dto.getPreparationNotes()), "updated");
     }
 
     /**

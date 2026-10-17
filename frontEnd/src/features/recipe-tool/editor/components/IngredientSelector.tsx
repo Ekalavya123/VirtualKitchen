@@ -14,7 +14,7 @@ import {
 } from '../../../../shared/catalog/ingredientCatalog'
 import { CUSTOM_PREPARATION_STYLE_ID, DEFAULT_PREPARATION_STYLE_ID } from '../../../../shared/catalog/preparationStyleCatalog'
 import { getAllowedPreparationStyles, isStepFieldEnabled } from '../../../../shared/catalog/actionSchemaCatalog'
-import { isQuantifiableUnit, type UnitId } from '../../../../shared/catalog/unitCatalog'
+import { CUSTOM_UNIT_ID, isQuantifiableUnit, type UnitId } from '../../../../shared/catalog/unitCatalog'
 import type { StepActionId } from '../../../../shared/catalog/actionCatalog'
 import type { ActionOnIngredient } from '../../model/recipeStepData'
 import { PreparationStyleSelect, UnitSelect } from './StepFieldInputs'
@@ -63,6 +63,8 @@ type IngredientDraft = {
   customIngredientName: string
   quantity: string
   unit: UnitId | ''
+  /** The unit's own name when `unit` is "custom" (absent in drafts saved before custom units). */
+  customUnit?: string
   notes: string
   preparationStyleId: string
   customPreparationStyle: string
@@ -84,6 +86,7 @@ const draftFromEntry = (entry: ActionOnIngredient): IngredientDraft => ({
   customIngredientName: entry.customIngredientName ?? '',
   quantity: entry.quantity != null ? String(entry.quantity) : '',
   unit: entry.unit,
+  customUnit: entry.customUnit ?? '',
   notes: entry.notes ?? '',
   preparationStyleId: entry.preparationStyleId ?? '',
   customPreparationStyle: entry.customPreparationStyle ?? '',
@@ -102,6 +105,7 @@ export default function IngredientSelector({ excludeIngredientIds, action, onAdd
   // or leaving the recipe and coming back doesn't lose it. Editing an entry keeps no draft.
   const draft = useDraft<IngredientDraft>(editing ? null : draftKey, editing ? draftFromEntry(editing) : EMPTY_INGREDIENT_DRAFT)
   const { ingredientIdValue, customIngredientName, quantity, unit, notes, preparationStyleId, customPreparationStyle } = draft.value
+  const customUnit = draft.value.customUnit ?? ''
   const field = <K extends keyof IngredientDraft>(key: K) => (value: IngredientDraft[K]) =>
     draft.setValue((current) => ({ ...current, [key]: value }))
   const setCustomIngredientName = field('customIngredientName')
@@ -110,6 +114,7 @@ export default function IngredientSelector({ excludeIngredientIds, action, onAdd
   const setNotes = field('notes')
   const setPreparationStyleId = field('preparationStyleId')
   const setCustomPreparationStyle = field('customPreparationStyle')
+  const setCustomUnit = field('customUnit')
   const [error, setError] = useState<string | null>(null)
 
   const options = getIngredientOptions(useIngredientCatalog()).filter((option) => option.value === CUSTOM_INGREDIENT_ID || !excludeIngredientIds.includes(option.value))
@@ -145,6 +150,10 @@ export default function IngredientSelector({ excludeIngredientIds, action, onAdd
       setError('Enter a name for the custom ingredient')
       return
     }
+    if (quantityRelevant && unit === CUSTOM_UNIT_ID && !customUnit.trim()) {
+      setError('Enter a name for the custom unit (e.g. knob)')
+      return
+    }
 
     let quantityNumber: number | null = null
     if (quantityRelevant && unitQuantifiable && quantity.trim()) {
@@ -161,6 +170,7 @@ export default function IngredientSelector({ excludeIngredientIds, action, onAdd
       customIngredientName: selectedIngredientId === CUSTOM_INGREDIENT_ID ? customIngredientName.trim() : undefined,
       quantity: quantityNumber,
       unit: quantityRelevant ? unit : '',
+      customUnit: quantityRelevant && unit === CUSTOM_UNIT_ID ? customUnit.trim() : undefined,
       notes: notes.trim() || undefined,
       preparationStyleId: preparationRelevant ? preparationStyleId : '',
       customPreparationStyle: preparationRelevant && preparationStyleId === CUSTOM_PREPARATION_STYLE_ID ? customPreparationStyle.trim() : undefined,
@@ -203,6 +213,16 @@ export default function IngredientSelector({ excludeIngredientIds, action, onAdd
           </>
         )}
       </div>
+
+      {quantityRelevant && unit === CUSTOM_UNIT_ID && (
+        <input
+          className="flow-properties-input"
+          value={customUnit}
+          onChange={(e) => setCustomUnit(e.target.value)}
+          placeholder="Custom unit, e.g. knob or thumb-sized piece"
+          aria-label="Custom unit name"
+        />
+      )}
 
       {selectedIngredientId === CUSTOM_INGREDIENT_ID && (
         <input

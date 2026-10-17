@@ -70,6 +70,7 @@ export const API = {
     byUserId: (userId: number) => `/api/v1/process-templates/user/${userId}`,
     global: (userId: number) => `/api/v1/process-templates/global/${userId}`,
     visibility: (id: number) => `/api/v1/process-templates/${id}/visibility`,
+    preparationNotes: (id: number) => `/api/v1/process-templates/${id}/preparation-notes`,
     copy: (id: number) => `/api/v1/process-templates/${id}/copy`,
   },
 

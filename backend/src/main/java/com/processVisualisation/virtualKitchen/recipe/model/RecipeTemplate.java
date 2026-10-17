@@ -48,6 +48,13 @@ public class RecipeTemplate {
 
     private NutritionInfo nutrition;
 
+    /**
+     * The recipe's own default preparation guidance (routine washing, peeling, patting dry...) shown in the
+     * editor's Preparation section, so generated and written steps needn't repeat it. Null means the
+     * application's default text.
+     */
+    private String preparationNotes;
+
     /** The id of this recipe's top-level (type MAIN) {@link Process}. Null until migrated/created. */
     private Long mainProcessId;
 

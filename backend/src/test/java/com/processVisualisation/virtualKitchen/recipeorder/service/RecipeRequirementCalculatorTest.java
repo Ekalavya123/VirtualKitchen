@@ -79,6 +79,24 @@ class RecipeRequirementCalculatorTest {
         assertEquals("DEFAULT_FACTOR", garlic.getBasis());
     }
 
+    @Test
+    void listsEachUncataloguedIngredientOnceAndNamesACustomUnit() {
+        Map<String, Object> saffron = line("custom", 1, "pinch");
+        saffron.put("customIngredientName", "Saffron threads");
+        Map<String, Object> saffronAgain = line("custom", 2, "pinch");
+        saffronAgain.put("customIngredientName", " saffron THREADS ");
+        Map<String, Object> knob = line(SALT, 1, "custom");
+        knob.put("customUnit", "knob");
+        Process main = process(31, 3, ProcessType.MAIN, "Main",
+                step("s1", List.of(saffron)), step("s2", List.of(saffronAgain)), step("s3", List.of(knob)));
+
+        RecipeRequirementCalculator.Result result = calculator.calculate(List.of(main), 1, catalog());
+
+        assertEquals(2, result.issues().size(), () -> result.issues().toString());
+        assertTrue(result.issues().get(0).getMessage().contains("(used in 2 steps)"), result.issues().get(0).getMessage());
+        assertTrue(result.issues().get(1).getMessage().contains("\"knob\""), result.issues().get(1).getMessage());
+    }
+
     private static void assertRequirement(RecipeRequirementCalculator.Result result, long ingredientId, double quantity, UnitType unit) {
         IngredientRequirement requirement = result.requirements().stream()
                 .filter(candidate -> candidate.getIngredientId() == ingredientId)

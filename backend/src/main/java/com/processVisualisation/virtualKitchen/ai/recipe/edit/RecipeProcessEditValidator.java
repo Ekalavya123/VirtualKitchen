@@ -22,6 +22,7 @@ import java.util.Set;
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.RecipeProcessEditOutputSchema.CLEARABLE_FIELDS;
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.RecipeProcessEditOutputSchema.MAX_OPERATIONS;
 import static com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVocabularyProvider.CUSTOM_ID;
+import static com.processVisualisation.virtualKitchen.ai.recipe.edit.dto.ProcessEditOperationDTO.NEW_FLOW;
 import static com.processVisualisation.virtualKitchen.ai.recipe.edit.dto.ProcessEditOperationDTO.START;
 
 /**
@@ -155,6 +156,10 @@ public class RecipeProcessEditValidator {
         }
 
         private void addCondition(RecipeProcessEditOutput.Operation operation, String label, List<String> errors) {
+            if (NEW_FLOW.equals(operation.after())) {
+                errors.add(label + ".after NEW_FLOW starts a flow with a STEP: use ADD_STEP, then add the check after it");
+                return;
+            }
             Integer insertAt = insertionIndex(operation.after(), label + ".after", errors);
             String alias = newAlias(operation.stepId(), label + ".stepId", errors);
             if (insertAt == null || alias == null) return;
@@ -191,16 +196,16 @@ public class RecipeProcessEditValidator {
                 if (set.flameLevel() != null) { step.setFlameLevel(set.flameLevel()); patch.setFlameLevel(set.flameLevel()); }
                 if (set.duration() != null) { step.setDuration(set.duration()); patch.setDuration(set.duration()); }
                 if (set.repeatInterval() != null) { step.setRepeatInterval(set.repeatInterval()); patch.setRepeatInterval(set.repeatInterval()); }
-                if (set.fromSteps() != null || set.processes() != null) {
+                if (set.fromSteps() != null || set.uses() != null) {
                     patch.setActionOn(new GeneratedActionOnDTO(null, null, null));
                 }
                 if (set.fromSteps() != null) {
                     step.getActionOn().setSteps(new ArrayList<>(set.fromSteps()));
                     patch.getActionOn().setSteps(nodeRefs(set.fromSteps()));
                 }
-                if (set.processes() != null) {
-                    step.getActionOn().setProcesses(new ArrayList<>(set.processes()));
-                    patch.getActionOn().setProcesses(processRefs(set.processes()));
+                if (set.uses() != null) {
+                    step.getActionOn().setProcesses(new ArrayList<>(set.uses()));
+                    patch.getActionOn().setProcesses(processRefs(set.uses()));
                 }
             }
             for (String field : clear) {
@@ -212,13 +217,13 @@ public class RecipeProcessEditValidator {
                     case "duration" -> step.setDuration(null);
                     case "repeatInterval" -> step.setRepeatInterval(null);
                     case "fromSteps" -> step.getActionOn().setSteps(new ArrayList<>());
-                    case "processes" -> step.getActionOn().setProcesses(new ArrayList<>());
+                    case "uses", "processes" -> step.getActionOn().setProcesses(new ArrayList<>());
                     default -> { }
                 }
             }
             translated.add(ProcessEditOperationDTO.builder()
                     .op("UPDATE_STEP").target(ref(operation.target())).step(patch)
-                    .clear(clear.isEmpty() ? null : List.copyOf(new LinkedHashSet<>(clear))).build());
+                    .clear(clear.isEmpty() ? null : List.copyOf(new LinkedHashSet<>(clear.stream().map(RecipeProcessEditValidator::frontendFieldName).toList()))).build());
         }
 
         private void updateCondition(RecipeProcessEditOutput.Operation operation, String label, List<String> errors) {
@@ -313,7 +318,10 @@ public class RecipeProcessEditValidator {
                         keepAmount ? current.getQuantity() : replacement.getQuantity(),
                         keepAmount ? current.getUnit() : replacement.getUnit(),
                         replacement.getPreparationStyle() != null ? replacement.getPreparationStyle() : current.getPreparationStyle(),
-                        replacement.getCustomIngredientName());
+                        replacement.getCustomIngredientName(),
+                        keepAmount ? current.getCustomUnit() : replacement.getCustomUnit(),
+                        replacement.getPreparationStyle() != null ? replacement.getCustomPreparationStyle() : current.getCustomPreparationStyle(),
+                        current.getNotes());
                 ingredients.set(ingredients.indexOf(current), resolved);
                 translated.add(ProcessEditOperationDTO.builder()
                         .op("REPLACE_INGREDIENT").target(ref(alias)).ingredientId(from)
@@ -337,6 +345,10 @@ public class RecipeProcessEditValidator {
             if (node == null) return;
             if (Objects.equals(operation.target(), operation.after())) {
                 errors.add(label + ".after cannot be the node being moved");
+                return;
+            }
+            if (NEW_FLOW.equals(operation.after())) {
+                errors.add(label + ".after NEW_FLOW is only for ADD_STEP");
                 return;
             }
             int originalIndex = indexOf(operation.target());
@@ -392,13 +404,15 @@ public class RecipeProcessEditValidator {
         /** Where a node inserted "after" {@code after} goes; null (with an error) for an unusable anchor. */
         private Integer insertionIndex(String after, String label, List<String> errors) {
             if (START.equals(after)) return 0;
+            // A new, unconnected flow: listed last, so it reads after every existing flow.
+            if (NEW_FLOW.equals(after)) return steps.size();
             return existing(after, label, null, errors) == null ? null : indexOf(after) + 1;
         }
 
         private String newAlias(String requested, String label, List<String> errors) {
             String alias = requested;
             if (!isBlank(alias)) {
-                if (refByAlias.containsKey(alias) || START.equals(alias)) {
+                if (refByAlias.containsKey(alias) || START.equals(alias) || NEW_FLOW.equals(alias)) {
                     errors.add(label + " " + alias + " is already used; pick a new id such as n" + (added + 1));
                     return null;
                 }
@@ -417,8 +431,7 @@ public class RecipeProcessEditValidator {
                 errors.add(label + ".ingredientId is required");
                 return null;
             }
-            return new GeneratedActionOnIngredientDTO(normalizer.resolveIngredientId(ingredient.ingredientId()), ingredient.quantity(), ingredient.unit(),
-                    ingredient.preparationStyle(), ingredient.customIngredientName());
+            return normalizer.toIngredient(ingredient);
         }
 
         private GeneratedActionOnIngredientDTO presentIngredient(
@@ -441,7 +454,7 @@ public class RecipeProcessEditValidator {
         }
 
         private String ref(String alias) {
-            return START.equals(alias) ? START : refByAlias.getOrDefault(alias, alias);
+            return START.equals(alias) || NEW_FLOW.equals(alias) ? alias : refByAlias.getOrDefault(alias, alias);
         }
 
         private List<String> nodeRefs(List<String> aliases) {
@@ -463,6 +476,11 @@ public class RecipeProcessEditValidator {
             copy.getActionOn().setProcesses(processRefs(copy.getActionOn().getProcesses()));
             return copy;
         }
+    }
+
+    /** The frontend's name for a clearable step field: the model's "uses" is the editor's subprocess list ("processes"). */
+    private static String frontendFieldName(String field) {
+        return "uses".equals(field) ? "processes" : field;
     }
 
     private static boolean isBlank(String value) {

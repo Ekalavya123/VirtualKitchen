@@ -4,16 +4,19 @@ import { ProcessApi, RecipeProcessGenerationApi, RecipeDetailApi } from '../../.
 import type { RecipeProcessBreadcrumbEntry, RecipeProcessEditResult } from '../../../../types/recipe'
 import { useNotifications } from '../../../../shared/components/notifications/notificationContext'
 import RecipeProcessEditor from './RecipeProcessEditor'
-import RecipeProcessSidebar from './RecipeProcessSidebar'
+import RecipeProcessSidebar, { type ProcessIssueCounts } from './RecipeProcessSidebar'
+import RecipeReadinessPanel from './RecipeReadinessPanel'
 import RecipeProcessGenerationModal, { type PendingProcessEdit } from './RecipeProcessGenerationModal'
 import { useRecipeSession } from '../../session/sessionContext'
+import { useRecipeReadiness } from '../../session/useRecipeReadiness'
+import type { ReadinessIssue } from '../../model/recipeReadiness'
 import { convertGeneratedResultToProcesses } from '../adapters/recipeProcessGenerationConverter'
 import { applyProcessEdit, describeProcessEdit, ProcessEditConflictError } from '../adapters/recipeProcessEditApplier'
 import { serializeProcessForEdit } from '../adapters/recipeProcessEditSerializer'
 import { normalizeConditionNodeData } from '../../model/recipeConditionData'
 import { normalizeRecipeStepNodeData } from '../../model/recipeStepData'
-import { countSubprocessReferences, withoutSubprocessReferences } from '../../model/subprocessReferences'
-import { useConfirm } from '../../../../shared/components/confirm/confirmContext'
+import { mergePreparations, PREPARATION_NAME } from '../../model/mergePreparations'
+import { getPreparationFlows, getPreparationProcess } from '../../model/preparationFlows'
 import { generationJobKey, isTrackedJobActive, isWorkflowOpen, workflowJobKey } from '../../jobs/jobTracker'
 import { useJobTracker, useTrackedJob } from '../../jobs/useJobTracker'
 import RecipeAiCreationModal from '../../workflow/components/RecipeAiCreationModal'
@@ -49,6 +52,11 @@ type RecipeEditorViewProps = {
   isOwner: boolean
   /** Bumped whenever the MAIN process is created/changes here, so RecipeToolPage's own recipe state (mainProcessId) stays in sync without a second fetch. */
   onMainProcessChanged: (mainProcessId: number) => void
+  /** The recipe's default preparation guidance (null = the standard text), shown from the Preparation heading. */
+  preparationNotes?: string | null
+  onSavePreparationNotes?: (notes: string | null) => Promise<void>
+  /** An issue to show, asked for from outside the editor (a blocked order's "Show me"); a new token repeats it. */
+  issueFocusRequest?: { issue: ReadinessIssue; token: number } | null
 }
 
 /**
@@ -63,9 +71,10 @@ type RecipeEditorViewProps = {
  * remounted (no `key`) when the selection changes: switching processes is
  * navigation within one recipe editing session, not opening a new flow.
  */
-export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMainProcessChanged }: RecipeEditorViewProps) {
+export default function RecipeEditorView({
+  recipeId, recipeName, isOwner, onMainProcessChanged, preparationNotes = null, onSavePreparationNotes, issueFocusRequest = null,
+}: RecipeEditorViewProps) {
   const { notifyError, notifySuccess } = useNotifications()
-  const confirm = useConfirm()
   const session = useRecipeSession()
   const processes = useMemo(() => session?.getProcesses() ?? [], [session])
   const [selectedProcessId, setSelectedProcessId] = useState<number | null>(null)
@@ -100,6 +109,21 @@ export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMain
   // The canvas's selected node (so "this step" in an edit instruction can be resolved) and the nodes
   // a just-applied AI edit touched (highlighted briefly).
   const [canvasSelectedNodeId, setCanvasSelectedNodeId] = useState<string | null>(null)
+  // A node the canvas should select (a readiness issue the user opened), and when the readiness list should open by itself.
+  const [focusNodeRequest, setFocusNodeRequest] = useState<{ nodeId: string; token: number } | null>(null)
+  const [readinessOpenToken, setReadinessOpenToken] = useState<number | undefined>(undefined)
+  const readiness = useRecipeReadiness()
+  const issueCounts = useMemo(() => {
+    const counts = new Map<number, ProcessIssueCounts>()
+    readiness?.issues.forEach((issue) => {
+      if (issue.processId == null) return
+      const entry = counts.get(issue.processId) ?? { blockers: 0, warnings: 0 }
+      if (issue.severity === 'BLOCKER') entry.blockers += 1
+      else entry.warnings += 1
+      counts.set(issue.processId, entry)
+    })
+    return counts
+  }, [readiness])
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<ReadonlySet<string> | undefined>(undefined)
   useEffect(() => {
     if (!highlightedNodeIds) return undefined
@@ -179,62 +203,71 @@ export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMain
     }
   }, [recipeId, session, selectedProcessId, onMainProcessChanged, notifySuccess, notifyError])
 
-  const handleCreateSubprocess = useCallback(async (name: string, description: string) => {
+  /** Opens the recipe's one Preparation, creating it first when the recipe has none yet. */
+  const [creatingPreparation, setCreatingPreparation] = useState(false)
+  const handleOpenPreparation = useCallback(async () => {
     if (!session) return
-    const created = await ProcessApi.create(recipeId, { type: 'SUBPROCESS', name, description: description || undefined })
-    // Undoable like any edit: undo removes it from the session and autosave deletes it again.
-    session.recordHistory({ focusProcessId: selectedProcessId })
-    session.addProcess(created, { persisted: true })
-    setSelectedProcessId(created.id)
-    notifySuccess('Subprocess created')
-  }, [recipeId, session, selectedProcessId, notifySuccess])
+    const existing = getPreparationProcess(session.getProcesses())
+    if (existing) {
+      setAncestorTrail([])
+      setSelectedProcessId(existing.id)
+      return
+    }
+    setCreatingPreparation(true)
+    try {
+      const created = await ProcessApi.create(recipeId, { type: 'SUBPROCESS', name: PREPARATION_NAME })
+      // Undoable like any edit: undo removes it from the session and autosave deletes it again.
+      session.recordHistory({ focusProcessId: selectedProcessId })
+      session.addProcess(created, { persisted: true })
+      setAncestorTrail([])
+      setSelectedProcessId(created.id)
+      notifySuccess('Preparation added. Each flow you build there makes one named component for the main process.')
+    } catch (error) {
+      notifyError(errorMessage(error, 'Unable to add the Preparation'))
+    } finally {
+      setCreatingPreparation(false)
+    }
+  }, [recipeId, session, selectedProcessId, notifySuccess, notifyError])
 
   /**
-   * Deletes a SUBPROCESS from the session as one undoable edit, after confirming: every step's
-   * Action On reference to it is removed first (in whichever process it's in — an open canvas
-   * re-seeds from the session), then the process itself; the next autosave deletes it on the
-   * backend (persistence/snapshotPersistence.ts — after the references are saved away). Undo brings
-   * it back, references included; a save then re-creates it. The MAIN process is never deletable.
+   * Recipes saved before the single Preparation may have several preparation processes: the owner's editor folds
+   * them into one as soon as the recipe opens — one undoable edit, saved by autosave (mergePreparations.ts).
    */
-  const handleDeleteSubprocess = useCallback(async (processId: number) => {
-    if (!session) return
-    const target = session.getProcess(processId)
-    if (!target || target.type !== 'SUBPROCESS') return
-    const stepCount = target.nodes.filter((node) => node.kind === 'STEP').length
-    const references = countSubprocessReferences(session.getProcesses(), processId)
-    const confirmed = await confirm({
-      eyebrow: 'Delete subprocess',
-      title: `Delete “${target.name}”?`,
-      message: `The subprocess and its ${stepCount} step${stepCount === 1 ? '' : 's'} will be deleted. `
-        + (references > 0
-          ? `${references} step${references === 1 ? ' uses' : 's use'} its output — ${references === 1 ? 'that reference' : 'those references'} will be removed too. `
-          : 'No step uses its output. ')
-        + 'You can Undo this until you leave the recipe.',
-      confirmLabel: 'Delete subprocess',
-    })
-    if (!confirmed) return
-    // Re-read: the session may have changed while the dialog was open (e.g. a save gave a new
-    // subprocess its real id).
-    const id = session.getProcess(processId) ? processId : session.resolveProcessId(processId)
-    const latest = session.getProcess(id)
-    if (!latest || latest.type !== 'SUBPROCESS') return
+  const mergeCheckedRef = useRef(false)
+  const sessionLoading = session?.loading ?? true
+  useEffect(() => {
+    if (!session || sessionLoading || mergeCheckedRef.current) return
+    mergeCheckedRef.current = true
+    if (!isOwner || !session.canEdit) return
+    const merge = mergePreparations(session.getProcesses())
+    if (!merge) return
+    session.recordHistory({ focusProcessId: merge.preparation.id })
+    session.addProcess(merge.preparation)
+    merge.changed.forEach((process) => session.addProcess(process))
+    merge.removedIds.forEach((id) => session.removeProcess(id))
+    notifySuccess(`Combined ${merge.removedIds.length + 1} preparations into one Preparation, each kept as its own flow. Use Undo to restore them.`
+      + (merge.droppedReferences > 0 ? ` ${merge.droppedReferences} use${merge.droppedReferences === 1 ? '' : 's'} between preparations were removed.` : ''))
+  }, [session, sessionLoading, isOwner, notifySuccess])
 
-    session.recordHistory({ focusProcessId: id })
-    session.getProcesses().forEach((process) => {
-      if (process.id === id) return
-      const stripped = withoutSubprocessReferences(process, id)
-      if (stripped !== process) session.addProcess(stripped)
-    })
-    // Leave the deleted process (or a breadcrumb trail through it) before it's gone.
-    const isGone = (candidate: number | null) => candidate != null && (candidate === processId || session.resolveProcessId(candidate) === id)
-    if (isGone(selectedProcessId) || ancestorTrail.some((entry) => isGone(entry.processId))) {
-      const main = session.getProcesses().find((process) => process.type === 'MAIN')
-      setAncestorTrail([])
-      setSelectedProcessId(main ? main.id : null)
+  /** Renames the main process as one undoable edit (a Preparation flow is named by its last step instead). */
+  const handleRenameProcess = useCallback((processId: number, name: string) => {
+    if (!session) return
+    session.recordHistory({ focusProcessId: processId })
+    session.updateProcess(processId, { name })
+  }, [session])
+
+  /** Opens the process an issue is about and selects its step (when it names one). */
+  const handleNavigateToIssue = useCallback((issue: ReadinessIssue) => {
+    if (issue.processId == null || !session) return
+    const processId = session.getProcess(issue.processId) ? issue.processId : session.resolveProcessId(issue.processId)
+    if (!session.getProcess(processId)) return
+    setAncestorTrail([])
+    setSelectedProcessId(processId)
+    if (issue.nodeId) {
+      setFocusNodeRequest({ nodeId: issue.nodeId, token: Date.now() })
+      setHighlightedNodeIds(new Set([issue.nodeId]))
     }
-    session.removeProcess(id)
-    notifySuccess(`Subprocess “${latest.name}” deleted. Use Undo to bring it back.`)
-  }, [session, confirm, selectedProcessId, ancestorTrail, notifySuccess])
+  }, [session])
 
   const existingMain = processes.find((process) => process.type === 'MAIN') ?? null
 
@@ -298,8 +331,17 @@ export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMain
     if (generationJob.requestedMode === 'EDIT' || appliedGenerationJobIdsRef.current.has(job.jobId)) return
     appliedGenerationJobIdsRef.current.add(job.jobId)
 
-    const { processes: generated, mainProcessId } = convertGeneratedResultToProcesses(
-      recipeId, job.result, existingMain, session.getProcesses().map((process) => process.id))
+    const { processes: generated, mainProcessId, problems } = convertGeneratedResultToProcesses(
+      recipeId, job.result, existingMain, session.getProcesses().map((process) => process.id),
+      getPreparationProcess(session.getProcesses()))
+    // Never load a result whose references don't resolve: dropping them would look like a success
+    // while silently losing which prepared component a step uses.
+    if (problems.length > 0) {
+      console.error('Generated recipe has unresolved references:', problems)
+      jobTracker.dismiss(generationJobKey(recipeId))
+      notifyError(`The generated recipe is inconsistent (${problems[0]}${problems.length > 1 ? ` and ${problems.length - 1} more` : ''}), so nothing was changed. Please try again.`)
+      return
+    }
 
     session.recordHistory({ focusProcessId: mainProcessId })
     generated.forEach((process) => session.addProcess(process))
@@ -316,14 +358,21 @@ export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMain
     RecipeProcessGenerationApi.markApplied(recipeId, job.jobId)
       .then(() => { if (forWorkflow) jobTracker.refresh(workflowJobKey(recipeId)) })
       .catch((error) => console.error('Unable to mark the generated recipe as applied:', error))
+    const generatedPreparation = generated.find((process) => process.type === 'SUBPROCESS')
+    const flowCount = generatedPreparation ? getPreparationFlows(generatedPreparation).length : 0
+    const summary = flowCount > 0 ? ` Preparation with ${flowCount} flow${flowCount === 1 ? '' : 's'} + main process.` : ''
     if (forWorkflow) {
       // The recipe text did its job: the process exists now (in the editor, autosaved, undoable).
       clearDraft(draftKeys.aiRecipeCreation(recipeId))
-      notifySuccess('Recipe process ready. Review and edit it, then approve to continue. Use Undo to go back to your previous version.')
+      notifySuccess(`Recipe process ready.${summary} Review and edit it, then approve to continue. Use Undo to go back to your previous version.`)
     } else {
-      notifySuccess('AI recipe process ready — it\'s saved automatically. Use Undo to go back to your previous version.')
+      notifySuccess(`AI recipe process ready.${summary} It's saved automatically. Use Undo to go back to your previous version.`)
     }
-  }, [session, generationJob, recipeId, existingMain, onMainProcessChanged, jobTracker, notifySuccess, workflow?.generationJobId])
+    // Accepted, but worth a look: e.g. a prepared component the main process never uses. (Repairs are
+    // the backend's own corrections and are already reflected in the result.)
+    const warnings = job.result.warnings ?? []
+    if (warnings.length > 0) notifyError(warnings.join(' · '))
+  }, [session, generationJob, recipeId, existingMain, onMainProcessChanged, jobTracker, notifySuccess, notifyError, workflow?.generationJobId])
 
   // A backend without edit support ignores the mode and returns a whole new flow for an edit request:
   // that must never replace the user's process.
@@ -418,14 +467,29 @@ export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMain
     })
   }, [session])
 
-  const handleOpenSubprocess = useCallback((subprocessId: number, currentProcessName: string) => {
+  /** Opens a used prepared component: the Preparation, on the step that makes it when there is one. */
+  const handleOpenSubprocess = useCallback((subprocessId: number, currentProcessName: string, stepId?: string) => {
     setSelectedProcessId((current) => {
       if (current != null) {
         setAncestorTrail((trail) => [...trail, { processId: current, name: currentProcessName }])
       }
       return subprocessId
     })
+    if (stepId) {
+      setFocusNodeRequest({ nodeId: stepId, token: Date.now() })
+      setHighlightedNodeIds(new Set([stepId]))
+    }
   }, [])
+
+  // An issue asked for from outside (a blocked order's "Show me"): open it, and the readiness list with it.
+  const [handledIssueToken, setHandledIssueToken] = useState<number | null>(null)
+  if (issueFocusRequest && issueFocusRequest.token !== handledIssueToken && session && !session.loading) {
+    setHandledIssueToken(issueFocusRequest.token)
+    setReadinessOpenToken(issueFocusRequest.token)
+    handleNavigateToIssue(issueFocusRequest.issue)
+  }
+  // The canvas has selected the requested node: nothing left to ask for (and switching back later won't reselect it).
+  if (focusNodeRequest && canvasSelectedNodeId === focusNodeRequest.nodeId) setFocusNodeRequest(null)
 
   if (!session || session.loading) {
     return (
@@ -457,9 +521,13 @@ export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMain
       onSelect={handleSelectFromSidebar}
       onCreateMainProcess={() => void handleCreateMainProcess()}
       creatingMainProcess={creatingMainProcess}
-      onCreateSubprocess={handleCreateSubprocess}
-      onDeleteSubprocess={isOwner && session.canEdit ? (processId) => void handleDeleteSubprocess(processId) : undefined}
-      newSubprocessDraftKey={draftKeys.newSubprocess(recipeId)}
+      onOpenPreparation={isOwner && session.canEdit ? () => void handleOpenPreparation() : undefined}
+      creatingPreparation={creatingPreparation}
+      onRenameProcess={isOwner && session.canEdit ? handleRenameProcess : undefined}
+      issueCounts={issueCounts}
+      preparationNotes={preparationNotes}
+      onSavePreparationNotes={isOwner ? onSavePreparationNotes : undefined}
+      readinessPanel={readiness && <RecipeReadinessPanel readiness={readiness} onNavigate={handleNavigateToIssue} openToken={readinessOpenToken} />}
     />
   )
 
@@ -551,6 +619,7 @@ export default function RecipeEditorView({ recipeId, recipeName, isOwner, onMain
         sidebarHeader={processListSidebar}
         onSelectedNodeChange={setCanvasSelectedNodeId}
         highlightedNodeIds={highlightedNodeIds}
+        focusNodeRequest={focusNodeRequest}
       />
       {generationModal}
       {aiCreationModal}

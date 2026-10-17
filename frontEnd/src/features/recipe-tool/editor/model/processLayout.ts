@@ -139,6 +139,51 @@ export const arrangeRows = (
   return result
 }
 
+/** Spacing of the Preparation's flow grid: flows sit side by side in columns, wrapping into rows of flows. */
+export const FLOW_GRID = {
+  maxColumns: 3,
+  /** Between flow columns — wide enough to tell one flow from the next at a glance. */
+  columnGap: 120,
+  /** Between rows of flows. */
+  rowGap: 160,
+}
+
+/** How many flow columns fit (1–3, as for row layout) and how wide each flow's cards are. */
+export const planFlowColumns = (availableWidth: number): RowPlan => {
+  const { columnGap, maxColumns } = FLOW_GRID
+  const { minCellWidth, stepMinWidth } = ROW_LAYOUT
+  const perRow = clamp(Math.floor((availableWidth + columnGap) / (minCellWidth + columnGap)), 1, maxColumns)
+  const cellWidth = Math.max(stepMinWidth, Math.floor((availableWidth - (perRow - 1) * columnGap) / perRow))
+  return { perRow, cellWidth }
+}
+
+/**
+ * The Preparation's layout: each flow (its nodes in reading order) reads top to bottom in its own column, and the
+ * flows fill `plan.perRow` columns left to right, wrapping into a new row of flows below the tallest one.
+ */
+export const arrangeFlowGrid = (
+  flows: ReadonlyArray<ReadonlyArray<{ id: string; kind?: string; height: number }>>,
+  plan: RowPlan,
+  origin: { x: number; y: number } = { x: 0, y: 0 },
+): Map<string, LayoutRect> => {
+  const result = new Map<string, LayoutRect>()
+  const columnPlan: RowPlan = { perRow: 1, cellWidth: plan.cellWidth }
+  let rowTop = origin.y
+  for (let start = 0; start < flows.length; start += plan.perRow) {
+    let rowBottom = rowTop
+    flows.slice(start, start + plan.perRow).forEach((flow, column) => {
+      const left = origin.x + column * (plan.cellWidth + FLOW_GRID.columnGap)
+      // A check is centred under its step; in a one-column flow that's within the column.
+      arrangeRows(flow, columnPlan, { x: left, y: rowTop }).forEach((rect, id) => {
+        result.set(id, rect)
+        rowBottom = Math.max(rowBottom, rect.y + rect.height)
+      })
+    })
+    rowTop = rowBottom + FLOW_GRID.rowGap
+  }
+  return result
+}
+
 /** `b` sits in the same row as `a` (their boxes overlap vertically), entirely to its right. */
 const isRightOfInRow = (a: LayoutRect, b: LayoutRect) =>
   a.y < b.y + b.height && b.y < a.y + a.height && b.x >= a.x + a.width

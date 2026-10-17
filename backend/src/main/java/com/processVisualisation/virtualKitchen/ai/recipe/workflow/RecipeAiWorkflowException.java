@@ -25,4 +25,9 @@ public class RecipeAiWorkflowException extends ApiException {
     public static RecipeAiWorkflowException conflict(String message) {
         return new RecipeAiWorkflowException(HttpStatus.CONFLICT, message);
     }
+
+    /** 422: the request is understood but the recipe isn't in a state that allows it (e.g. not ready yet). */
+    public static RecipeAiWorkflowException unprocessable(String message) {
+        return new RecipeAiWorkflowException(HttpStatus.UNPROCESSABLE_ENTITY, message);
+    }
 }

@@ -48,8 +48,11 @@ recipe-tool/
 ├── recipeToolRoutes.ts
 ├── page/             RecipeToolPage (editor ⇄ view tabs), its navbar, summary and edit-details dialog
 ├── model/            the step/condition data model and graph logic, shared by every folder below
+│                     (incl. preparationFlows / mergePreparations: the one Preparation and its flows,
+│                     recipeReadiness: whole-recipe Preparation + Main checks)
 ├── session/          RecipeSessionProvider: the one in-memory editing session (autosave, undo/redo,
-│                     crash recovery in useRecoveryMirror, generated images in useVisualsApplier)
+│                     crash recovery in useRecoveryMirror, generated images in useVisualsApplier,
+│                     live readiness + the gate for ordering/cook mode in useRecipeReadiness)
 ├── jobs/             JobTracker: app-wide polling of AI generation, visuals and workflow jobs
 ├── editor/           the React Flow editor: components/, hooks/, adapters/ (process ⇄ canvas, AI edits),
 │                     model/ (layout, slides, deletion wording), nodes/, context/, styles/

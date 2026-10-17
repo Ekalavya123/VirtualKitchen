@@ -48,6 +48,26 @@ class ProcessGraphClonerTest {
     }
 
     @Test
+    void recipeCopyMovesAUseOfAPreparationStepToThatStepsCopy() {
+        Process preparation = new Process();
+        preparation.setId(2L);
+        preparation.setNodes(List.of(node("onions", null, Map.of())));
+        Process main = new Process();
+        main.setId(1L);
+        Map<String, Object> data = stepData("x", 2L);
+        actionOn(data).put("processes", new ArrayList<>(List.of(Map.of("processId", 2L, "stepId", "onions"))));
+        main.setNodes(List.of(node("fry", null, data)));
+        Map<Long, Map<String, String>> nodeIdMaps = Map.of(1L, ProcessGraphCloner.newNodeIds(main), 2L, ProcessGraphCloner.newNodeIds(preparation));
+
+        Process preparationCopy = ProcessGraphCloner.cloneGraph(preparation, Map.of(1L, 10L, 2L, 20L), nodeIdMaps);
+        Process mainCopy = ProcessGraphCloner.cloneGraph(main, Map.of(1L, 10L, 2L, 20L), nodeIdMaps);
+
+        String onionsCopy = preparationCopy.getNodes().get(0).getId();
+        assertThat(onionsCopy).isNotEqualTo("onions");
+        assertThat(actionOn(mainCopy.getNodes().get(0)).get("processes")).isEqualTo(List.of(Map.of("processId", 20L, "stepId", onionsCopy)));
+    }
+
+    @Test
     void copiedDataSharesNothingWithTheSource() {
         Process source = new Process();
         Map<String, Object> data = stepData("x", 7L);

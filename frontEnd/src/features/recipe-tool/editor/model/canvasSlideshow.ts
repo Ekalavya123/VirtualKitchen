@@ -9,6 +9,7 @@ import {
   normalizeRecipeStepNodeData,
 } from '../../model/recipeStepData'
 import { getStepOutputLabel, type StepOutputGraph } from '../../model/recipeStepOutputs'
+import { describePreparedReference } from '../../model/preparationFlows'
 import type { SlideshowStep } from '../../walkthrough/RecipeVisualizationSlideshow'
 import { flowToProcess } from '../adapters/canvasFlow'
 
@@ -20,7 +21,7 @@ export const buildCanvasSlideshowSteps = (
   process: Process,
   nodes: Node[],
   edges: Edge[],
-  availableSubprocesses: Process[],
+  recipeProcesses: Process[],
   stepOutputGraph: StepOutputGraph,
 ): SlideshowStep[] => {
   const readingOrder = new Map(getProcessReadingOrder(flowToProcess(process, nodes, edges)).map((node, index) => [node.id, index]))
@@ -34,8 +35,8 @@ export const buildCanvasSlideshowSteps = (
       ...step.actionOn.ingredients.map(getActionOnIngredientDisplayName),
     ]
     const subprocessNames = step.actionOn.processes
-      .map((entry) => availableSubprocesses.find((candidate) => candidate.id === entry.processId)?.name)
-      .filter((name): name is string => Boolean(name))
+      .map((entry) => describePreparedReference(recipeProcesses, entry).label)
+      .filter(Boolean)
     // The action description is the slide's instruction text; the rest are supporting details.
     const descriptionParts = [
       ingredientNames.length > 0 ? `On: ${ingredientNames.join(', ')}` : '',

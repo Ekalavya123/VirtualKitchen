@@ -28,7 +28,7 @@ import {
   type PreparationStyleId,
 } from '../../../shared/catalog/preparationStyleCatalog'
 import { resolveFlameLevelId, type FlameLevelId } from '../../../shared/catalog/flameLevelCatalog'
-import { resolveUnitId, type UnitId } from '../../../shared/catalog/unitCatalog'
+import { CUSTOM_UNIT_ID, resolveUnitId, type UnitId } from '../../../shared/catalog/unitCatalog'
 import {
   buildDurationLabel,
   buildTemperatureLabel,
@@ -58,13 +58,20 @@ export type ActionOnIngredient = {
   quantity: number | null
   /** A catalog unit id (unitCatalog.ts); '' when none. */
   unit: UnitId | ''
+  /** The unit's own name when `unit` is the catalog's "custom" entry (e.g. "knob"). */
+  customUnit?: string
   notes?: string
   preparationStyleId?: PreparationStyleId | ''
   customPreparationStyle?: string
 }
 
+/**
+ * A prepared component the step uses: one step's output in the recipe's Preparation process (`stepId` — a flow's
+ * final step names the flow's output), or, in data saved before the single Preparation, a whole subprocess.
+ */
 export type RecipeStepActionOnProcess = {
   processId: number
+  stepId?: string
 }
 
 /**
@@ -176,12 +183,14 @@ const normalizeActionOnIngredient = (value: unknown): ActionOnIngredient | null 
   const ingredientId = resolveStoredIngredientId(raw.ingredientId)
   if (ingredientId == null) return null
 
+  // resolveUnitId also maps legacy Process UnitType values (COUNT/GRAM/KG/ML/LITER) via unit aliases.
+  const unit = resolveUnitId(raw.unit)
   return {
     ingredientId,
     customIngredientName: ingredientId === CUSTOM_INGREDIENT_ID ? asString(raw.customIngredientName) : undefined,
     quantity: asNumber(raw.quantity),
-    // resolveUnitId also maps legacy Process UnitType values (COUNT/GRAM/KG/ML/LITER) via unit aliases.
-    unit: resolveUnitId(raw.unit),
+    unit,
+    customUnit: unit === CUSTOM_UNIT_ID ? asString(raw.customUnit) : undefined,
     notes: typeof raw.notes === 'string' && raw.notes.trim() ? raw.notes : undefined,
     preparationStyleId: resolvePreparationStyleId(raw.preparationStyleId),
     customPreparationStyle: asString(raw.customPreparationStyle),
@@ -195,7 +204,8 @@ const normalizeActionOnProcess = (value: unknown): RecipeStepActionOnProcess | n
   const raw = asRecord(value)
   const processId = asNumber(raw.processId)
   if (processId == null) return null
-  return { processId }
+  const stepId = asString(raw.stepId).trim()
+  return stepId ? { processId, stepId } : { processId }
 }
 
 const normalizeActionOn = (value: unknown): RecipeStepActionOn => {
@@ -344,11 +354,17 @@ export const withRecipeStepActionOnIngredients = (data: unknown, ingredients: Ac
   return { ...normalized, step: { ...normalized.step, actionOn: { ...normalized.step.actionOn, ingredients } } }
 }
 
-export const withRecipeStepActionOnProcesses = (data: unknown, processIds: number[]): RecipeStepNodeData => {
+export const withRecipeStepActionOnProcesses = (data: unknown, references: RecipeStepActionOnProcess[]): RecipeStepNodeData => {
   const normalized = normalizeRecipeStepNodeData(data)
   return {
     ...normalized,
-    step: { ...normalized.step, actionOn: { ...normalized.step.actionOn, processes: processIds.map((processId) => ({ processId })) } },
+    step: {
+      ...normalized.step,
+      actionOn: {
+        ...normalized.step.actionOn,
+        processes: references.map(({ processId, stepId }) => (stepId ? { processId, stepId } : { processId })),
+      },
+    },
   }
 }
 
@@ -367,12 +383,12 @@ export const withRecipeStepActionOnSteps = (data: unknown, stepIds: string[]): R
  */
 export const getRecipeStepActionSummary = (
   step: RecipeStepFields,
-  resolve: { subprocessName: (processId: number) => string; stepOutputLabel: (stepId: string) => string },
+  resolve: { preparedName: (reference: RecipeStepActionOnProcess) => string; stepOutputLabel: (stepId: string) => string },
 ) => {
   const targets = [
     ...step.actionOn.steps.map((entry) => resolve.stepOutputLabel(entry.stepId)),
     ...step.actionOn.ingredients.map(getActionOnIngredientDisplayName),
-    ...step.actionOn.processes.map((entry) => resolve.subprocessName(entry.processId)),
+    ...step.actionOn.processes.map((entry) => resolve.preparedName(entry)),
   ].filter(Boolean)
   const action = getRecipeStepTitle(step)
   return targets.length > 0 ? `${action} ${targets.join(' + ')}` : action
