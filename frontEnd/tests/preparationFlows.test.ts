@@ -99,4 +99,22 @@ describe('mergePreparations', () => {
     const xs = merged.preparation.nodes.map((node) => node.position?.x ?? 0)
     assert.notEqual(Math.min(...xs), Math.max(...xs))
   })
+
+  it('moves prepared annotations in descriptions along with the uses they mirror', () => {
+    const onions = process(5, 'SUBPROCESS', 'Chopped Onions', [step('o1')])
+    const chicken = process(3, 'SUBPROCESS', 'Marinated Chicken', [step('c1', 'Marinated Chicken')])
+    const fry = step('m1', '', [{ processId: 5 }, { processId: 3, stepId: 'c1' }])
+    ;(fry.data as { step: { actionDescription: string } }).step.actionDescription =
+      'Fry @[onions](prepared:5) with @[chicken](prepared:3:c1) and @[salt](ingredient:33)'
+    const inside = step('c2', 'x', [{ processId: 5 }])
+    ;(inside.data as { step: { actionDescription: string } }).step.actionDescription = 'Mix in @[onions](prepared:5)'
+    chicken.nodes.push(inside)
+
+    const merged = mergePreparations([process(1, 'MAIN', 'Curry', [fry]), onions, chicken])
+    assert.ok(merged)
+
+    const description = (node: ProcessNode) => (node.data as { step: { actionDescription: string } }).step.actionDescription
+    assert.equal(description(merged.changed[0].nodes[0]), 'Fry @[onions](prepared:3:o1) with @[chicken](prepared:3:c1) and @[salt](ingredient:33)')
+    assert.equal(description(merged.preparation.nodes.find((node) => node.id === 'c2')!), 'Mix in onions')
+  })
 })

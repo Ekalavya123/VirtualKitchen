@@ -3,6 +3,7 @@ package com.processVisualisation.virtualKitchen.recipe.validation;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessNodeKind;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
+import com.processVisualisation.virtualKitchen.recipe.model.StepAnnotations;
 import com.processVisualisation.virtualKitchen.store.catalog.StepCatalogResource;
 import org.springframework.stereotype.Component;
 
@@ -155,7 +156,7 @@ public class RecipeReadinessEvaluator {
                     issues.add(new Issue("STEP_INCOMPLETE", Severity.BLOCKER, process.getId(), node.getId(), stepLabel + " uses a custom action without a name."));
                 } else if (!CUSTOM_ID.equals(action) && !actionIds.contains(action)) {
                     issues.add(new Issue("STEP_INCOMPLETE", Severity.BLOCKER, process.getId(), node.getId(), stepLabel + " has an unknown action: " + action));
-                } else if (process.getType() == ProcessType.MAIN && text(fields.get("actionDescription")).isEmpty()) {
+                } else if (process.getType() == ProcessType.MAIN && instructionOf(fields).isEmpty()) {
                     issues.add(new Issue("STEP_INCOMPLETE", Severity.BLOCKER, process.getId(), node.getId(), stepLabel + " has no instruction."));
                 }
 
@@ -188,6 +189,13 @@ public class RecipeReadinessEvaluator {
                         issues.add(new Issue("REF_DANGLING", Severity.BLOCKER, process.getId(), node.getId(),
                                 stepLabel + " uses the output of a step that no longer provides one."));
                     }
+                }
+
+                List<StepAnnotations.Annotation> unbacked = unbackedAnnotations(fields);
+                if (!unbacked.isEmpty()) {
+                    issues.add(new Issue("ANNOTATION_DANGLING", Severity.WARNING, process.getId(), node.getId(),
+                            stepLabel + " mentions " + String.join(", ", unbacked.stream().map(a -> "\"" + a.label() + "\"").toList())
+                                    + ", which the step no longer uses."));
                 }
 
                 for (Map<?, ?> ingredient : ingredientsOf(fields)) {
@@ -374,12 +382,39 @@ public class RecipeReadinessEvaluator {
         return value instanceof String string ? string.trim() : "";
     }
 
+    /** A step's instruction as prose (annotations read as their labels). */
+    private static String instructionOf(Map<?, ?> fields) {
+        return fields.get("actionDescription") instanceof String description ? StepAnnotations.toPlainText(description).trim() : "";
+    }
+
+    /** Annotations in the description that point at nothing the step's actionOn uses. */
+    private static List<StepAnnotations.Annotation> unbackedAnnotations(Map<?, ?> fields) {
+        if (!(fields.get("actionDescription") instanceof String description) || !StepAnnotations.hasAnnotations(description)) {
+            return List.of();
+        }
+        List<String> ingredientIds = ingredientsOf(fields).stream()
+                .map(ingredient -> StepAnnotations.ingredientId(ingredient.get("ingredientId"), ingredient.get("customIngredientName")))
+                .toList();
+        List<String> preparedIds = referencesOf(fields).stream()
+                .map(reference -> StepAnnotations.preparedId(reference.processId(), reference.stepId()))
+                .toList();
+        List<String> stepIds = stepRefsOf(fields);
+        return StepAnnotations.annotationsOf(description).stream().filter(annotation -> {
+            List<String> targets = switch (annotation.kind()) {
+                case StepAnnotations.INGREDIENT -> ingredientIds;
+                case StepAnnotations.PREPARED -> preparedIds;
+                default -> stepIds;
+            };
+            return targets.stream().noneMatch(id -> StepAnnotations.sameTarget(annotation, annotation.kind(), id));
+        }).toList();
+    }
+
     private static String label(Process process) {
         return process.getType() == ProcessType.MAIN ? "the main process" : "Preparation";
     }
 
     private static String describe(Process process, Process.ProcessNode node) {
-        String description = text(fieldsOf(node).get("actionDescription"));
+        String description = instructionOf(fieldsOf(node));
         if (description.isEmpty() && node.getData() != null) description = text(node.getData().get("title"));
         if (!description.isEmpty()) return "\"" + (description.length() > 48 ? description.substring(0, 45) + "..." : description) + "\"";
         List<Process.ProcessNode> sameKind = process.getNodes().stream().filter(n -> n != null && n.getKind() == node.getKind()).toList();

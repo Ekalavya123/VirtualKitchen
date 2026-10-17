@@ -1,0 +1,108 @@
+[
+  {
+    "name": "plain text has no annotations",
+    "text": "Heat the oil until it shimmers.",
+    "segments": [
+      {
+        "text": "Heat the oil until it shimmers."
+      }
+    ],
+    "plain": "Heat the oil until it shimmers."
+  },
+  {
+    "name": "the three kinds, with text around them",
+    "text": "Add @[onions](ingredient:107) and @[marinated chicken](prepared:12:n-ab3), then @[the base](step:s-1).",
+    "segments": [
+      {
+        "text": "Add "
+      },
+      {
+        "kind": "ingredient",
+        "id": "107",
+        "label": "onions"
+      },
+      {
+        "text": " and "
+      },
+      {
+        "kind": "prepared",
+        "id": "12:n-ab3",
+        "label": "marinated chicken"
+      },
+      {
+        "text": ", then "
+      },
+      {
+        "kind": "step",
+        "id": "s-1",
+        "label": "the base"
+      },
+      {
+        "text": "."
+      }
+    ],
+    "plain": "Add onions and marinated chicken, then the base."
+  },
+  {
+    "name": "a custom ingredient keeps its name in the id",
+    "text": "Stir in @[chilli paste](ingredient:custom:Kashmiri chilli paste)",
+    "segments": [
+      {
+        "text": "Stir in "
+      },
+      {
+        "kind": "ingredient",
+        "id": "custom:Kashmiri chilli paste",
+        "label": "chilli paste"
+      }
+    ],
+    "plain": "Stir in chilli paste"
+  },
+  {
+    "name": "escaped brackets and parentheses survive a round trip",
+    "text": "Add @[sauce \\[thick\\]](ingredient:custom:sauce (thick\\))",
+    "segments": [
+      {
+        "text": "Add "
+      },
+      {
+        "kind": "ingredient",
+        "id": "custom:sauce (thick)",
+        "label": "sauce [thick]"
+      }
+    ],
+    "plain": "Add sauce [thick]"
+  },
+  {
+    "name": "unknown kinds and lookalikes stay plain text",
+    "text": "Email @[me](mailto:x) or see @[notes](equipment:4) [link](step:1) @[x]",
+    "segments": [
+      {
+        "text": "Email @[me](mailto:x) or see @[notes](equipment:4) [link](step:1) @[x]"
+      }
+    ],
+    "plain": "Email @[me](mailto:x) or see @[notes](equipment:4) [link](step:1) @[x]"
+  },
+  {
+    "name": "an annotation without an id reads as its label",
+    "text": "Add @[salt](ingredient: ) to taste",
+    "segments": [
+      {
+        "text": "Add salt to taste"
+      }
+    ],
+    "plain": "Add salt to taste"
+  },
+  {
+    "name": "a description that is only an annotation",
+    "text": "@[Chopped Onions](prepared:2:p1)",
+    "segments": [
+      {
+        "kind": "prepared",
+        "id": "2:p1",
+        "label": "Chopped Onions"
+      }
+    ],
+    "plain": "Chopped Onions"
+  }
+]

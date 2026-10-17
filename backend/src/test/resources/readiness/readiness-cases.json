@@ -170,5 +170,37 @@
       { "code": "REF_DANGLING", "severity": "BLOCKER", "processId": 1, "nodeId": "m3" },
       { "code": "REF_DANGLING", "severity": "BLOCKER", "processId": 1, "nodeId": "m3" }
     ]
+  },
+  {
+    "name": "annotations: an instruction that is only annotations counts; an annotation whose target the step no longer uses is a warning",
+    "processes": [
+      { "id": 1, "type": "MAIN", "name": "Main",
+        "nodes": [
+          { "id": "m1", "kind": "STEP", "data": { "step": { "action": "heat", "actionDescription": "Heat @[oil](ingredient:19)",
+            "actionOn": { "ingredients": [ { "ingredientId": "19", "quantity": 2, "unit": "tbsp" } ], "processes": [], "steps": [] } } } },
+          { "id": "m2", "kind": "STEP", "data": { "step": { "action": "add", "actionDescription": "Add @[onions](ingredient:107) and @[chilli paste](ingredient:custom:kashmiri chilli paste)",
+            "actionOn": { "ingredients": [ { "ingredientId": "custom", "customIngredientName": "Kashmiri Chilli Paste", "quantity": 1, "unit": "tbsp" } ], "processes": [], "steps": [] } } } },
+          { "id": "m3", "kind": "STEP", "data": { "step": { "action": "add", "actionDescription": "@[Chopped Onions](prepared:2:p1)",
+            "actionOn": { "ingredients": [], "processes": [ { "processId": 2, "stepId": "p1" } ], "steps": [] } } } },
+          { "id": "m4", "kind": "STEP", "data": { "step": { "action": "simmer", "actionDescription": "Simmer @[the base](step:m1)",
+            "actionOn": { "ingredients": [], "processes": [], "steps": [] } } } }
+        ],
+        "edges": [
+          { "id": "e1", "source": "m1", "target": "m2" },
+          { "id": "e2", "source": "m2", "target": "m3" },
+          { "id": "e3", "source": "m3", "target": "m4" }
+        ] },
+      { "id": 2, "type": "SUBPROCESS", "name": "Preparation",
+        "nodes": [
+          { "id": "p1", "kind": "STEP", "data": { "step": { "action": "chop", "actionDescription": "Chop @[onions](ingredient:107)", "expectedOutput": "Chopped Onions",
+            "actionOn": { "ingredients": [ { "ingredientId": "107", "quantity": 2, "unit": "piece" } ], "processes": [], "steps": [] } } } }
+        ],
+        "edges": [] }
+    ],
+    "expected": [
+      { "code": "ANNOTATION_DANGLING", "severity": "WARNING", "processId": 1, "nodeId": "m2" },
+      { "code": "CUSTOM_INGREDIENT", "severity": "WARNING", "processId": 1, "nodeId": "m2" },
+      { "code": "ANNOTATION_DANGLING", "severity": "WARNING", "processId": 1, "nodeId": "m4" }
+    ]
   }
 ]

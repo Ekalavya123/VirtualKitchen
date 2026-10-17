@@ -1,6 +1,7 @@
 package com.processVisualisation.virtualKitchen.recipe.migration;
 
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
+import com.processVisualisation.virtualKitchen.recipe.model.StepAnnotations;
 import com.processVisualisation.virtualKitchen.store.catalog.IngredientCatalogSeeder;
 import com.processVisualisation.virtualKitchen.store.catalog.StepCatalogResource;
 import com.processVisualisation.virtualKitchen.store.model.Ingredient;
@@ -97,6 +98,13 @@ public class ProcessIngredientIdMigration implements ApplicationRunner {
         for (Process.ProcessNode node : nodes) {
             if (node == null || node.getData() == null) continue;
             if (!(node.getData().get("step") instanceof Map<?, ?> step)) continue;
+            if (step.get("actionDescription") instanceof String description && StepAnnotations.hasAnnotations(description)) {
+                String migratedDescription = migrateAnnotations(description, resolver);
+                if (!migratedDescription.equals(description)) {
+                    ((Map<String, Object>) step).put("actionDescription", migratedDescription);
+                    changed = true;
+                }
+            }
             if (!(step.get("actionOn") instanceof Map<?, ?> actionOn)) continue;
             if (!(actionOn.get("ingredients") instanceof List<?> ingredients)) continue;
             for (Object item : ingredients) {
@@ -117,6 +125,19 @@ public class ProcessIngredientIdMigration implements ApplicationRunner {
             }
         }
         return changed;
+    }
+
+    /** Ingredient annotations follow their entries: a slug id becomes the catalog id, or a custom name when unknown. */
+    static String migrateAnnotations(String description, Function<String, Ingredient> resolver) {
+        return StepAnnotations.remapIds(description, annotation -> {
+            String id = annotation.id();
+            if (!StepAnnotations.INGREDIENT.equals(annotation.kind()) || id.startsWith(StepAnnotations.CUSTOM_INGREDIENT_PREFIX)
+                    || !needsMigration(id)) {
+                return id;
+            }
+            Ingredient ingredient = resolver.apply(id);
+            return ingredient != null ? String.valueOf(ingredient.getId()) : StepAnnotations.CUSTOM_INGREDIENT_PREFIX + labelOf(id);
+        });
     }
 
     static boolean needsMigration(String ingredientId) {

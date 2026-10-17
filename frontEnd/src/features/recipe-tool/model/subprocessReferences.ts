@@ -8,6 +8,7 @@
 
 import type { Process, ProcessNode } from '../../../types/process'
 import { normalizeRecipeStepNodeData, withRecipeStepActionOnProcesses, type RecipeStepActionOnProcess } from './recipeStepData'
+import { parsePreparedAnnotationId, preparedAnnotationId, remapAnnotationIds } from './stepAnnotations'
 
 /** Matches a reference to `processId` — to any of its steps, or only to `stepId` when given. */
 const matches = (entry: RecipeStepActionOnProcess, processId: number, stepId?: string) =>
@@ -55,7 +56,8 @@ export const isPendingProcessId = (id: number) => id < 0
 /**
  * Rewrites every STEP node's Action On references (`processId`) through `idMap` — used whenever a save creates
  * processes for real (temporary/undone ids -> real ids), so any step that referenced one of them, in any
- * process, points at the real id. Step ids are kept. Returns `nodes` itself when nothing referenced a remapped id.
+ * process, points at the real id. The prepared @ annotations in its description follow too. Step ids are kept.
+ * Returns `nodes` itself when nothing referenced a remapped id.
  */
 export const remapActionOnProcessRefs = (nodes: ProcessNode[], idMap: Map<number, number>): ProcessNode[] => {
   let anyChanged = false
@@ -64,14 +66,29 @@ export const remapActionOnProcessRefs = (nodes: ProcessNode[], idMap: Map<number
 
     const { step } = normalizeRecipeStepNodeData(node.data)
     const references = step.actionOn.processes
-    if (references.length === 0) return node
-
     const remapped = references.map((entry) => ({ ...entry, processId: idMap.get(entry.processId) ?? entry.processId }))
-    const changed = remapped.some((entry, index) => entry.processId !== references[index].processId)
-    if (!changed) return node
+    const referencesChanged = remapped.some((entry, index) => entry.processId !== references[index].processId)
+    const description = remapAnnotationIds(step.actionDescription, (annotation) => {
+      if (annotation.kind !== 'prepared') return undefined
+      const reference = parsePreparedAnnotationId(annotation.id)
+      const processId = reference ? idMap.get(reference.processId) : undefined
+      return reference && processId != null ? preparedAnnotationId({ ...reference, processId }) : undefined
+    })
+    if (!referencesChanged && description === step.actionDescription) return node
 
     anyChanged = true
-    return { ...node, data: withRecipeStepActionOnProcesses(node.data, remapped) as unknown as Record<string, unknown> }
+    const data = referencesChanged ? withRecipeStepActionOnProcesses(node.data, remapped) : node.data
+    return { ...node, data: withActionDescription(data, description) }
   })
   return anyChanged ? next : nodes
+}
+
+/** Node data with the step's description replaced (only when it changed). */
+const withActionDescription = (data: unknown, description: string): Record<string, unknown> => {
+  const record = data as Record<string, unknown>
+  if (!record.step || typeof record.step !== 'object') {
+    return record.actionDescription === description ? record : { ...record, actionDescription: description }
+  }
+  const step = record.step as Record<string, unknown>
+  return step.actionDescription === description ? record : { ...record, step: { ...step, actionDescription: description } }
 }
