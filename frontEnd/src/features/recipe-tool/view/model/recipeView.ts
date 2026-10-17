@@ -75,15 +75,6 @@ export type StepContinuation =
 
 export type RecipeBranchTag = { answer: string; question: string }
 
-/** Something a main step brings in: an ingredient (with its amount) or a prepared component (linking to its card). */
-export type AddedEntity = {
-  key: string
-  kind: 'ingredient' | 'prepared'
-  label: string
-  /** "1 cup" — '' when no amount is stated. */
-  amount: string
-  anchorId?: string
-}
 
 export type RecipeTimelineStep = {
   kind: 'step'
@@ -113,8 +104,6 @@ export type RecipeTimelineStep = {
   /** Where the step lives, to open it in the editor. */
   processId: number
   nodeId: string
-  /** Main process: the ingredients and prepared components this step introduces. */
-  adds: AddedEntity[]
   /**
    * Main process: the step follows straight on from the one before (an edge leads from it) and introduces nothing
    * new — it carries on with what is already cooking.
@@ -143,10 +132,18 @@ export type RecipeTimelineCheck = {
 
 export type RecipeTimelineItem = RecipeTimelineStep | RecipeTimelineCheck
 
-/** One preparation flow, read as one item: "Prepare Marinated Chicken", its steps in order, and what it makes. */
+/**
+ * One preparation flow, read as ONE recipe step: "Prepare Marinated Chicken", its steps as explanatory points in
+ * order, and what it makes. Its points share the flow's step number.
+ */
 export type RecipeTimelineFlow = {
   key: string
   anchorId: string
+  /** The flow's step number (counted like any other step). */
+  number: number
+  /** Where "Open in editor" goes: the step that makes the flow's output (else its first node). */
+  processId: number
+  nodeId: string
   /** "Prepare <output>" (or "Preparation flow N" while the flow has no named output). */
   title: string
   outputName: string
@@ -162,7 +159,7 @@ export type RecipeTimelineSection = {
   /** The process's own description, '' when it has none. */
   summary: string
   isMain: boolean
-  /** Numbered steps in this stage (checks not counted). */
+  /** Numbered steps in this stage (checks not counted; a preparation flow counts as one). */
   stepCount: number
   /** Every item, in order (for a Preparation: flow after flow). */
   items: RecipeTimelineItem[]
@@ -443,6 +440,18 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
   const numberOf = new Map<string, number>()
   let counter = 0
   for (const process of sectionProcesses) {
+    const flows = flowsById.get(process.id)
+    if (flows) {
+      // A preparation flow is one step of the recipe; every point in it carries that number.
+      const nodeById = new Map(process.nodes.map((node) => [node.id, node]))
+      for (const flow of flows) {
+        const stepIds = flow.nodeIds.filter((id) => nodeById.get(id)?.kind === 'STEP')
+        if (stepIds.length === 0) continue
+        const number = ++counter
+        stepIds.forEach((id) => numberOf.set(`${process.id}:${id}`, number))
+      }
+      continue
+    }
     for (const node of orderedById.get(process.id)?.nodes ?? []) {
       if (node.kind === 'STEP') numberOf.set(`${process.id}:${node.id}`, ++counter)
     }
@@ -631,31 +640,14 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
         continuation = { kind: 'choice', targets: targets.map(refOf) }
       }
 
-      // What a main step brings in, said explicitly; a prepared component links to its card.
-      const adds: AddedEntity[] = process.type !== 'MAIN' ? [] : [
-        ...step.actionOn.ingredients.map((entry, at) => ({
-          key: `ingredient-${at}`,
-          kind: 'ingredient' as const,
-          label: getActionOnIngredientDisplayName(entry),
-          amount: formatQuantityWithUnit(entry.quantity, entry.unit, entry.customUnit),
-        })),
-        ...step.actionOn.processes.map((entry, at) => {
-          const sub = processById.get(entry.processId)
-          const anchor = sub && sectionProcesses.includes(sub)
-            ? (entry.stepId ? itemAnchorId(sub.id, entry.stepId) : sectionAnchorId(sub.id))
-            : undefined
-          return { key: `prepared-${at}`, kind: 'prepared' as const, label: productOf(entry) || 'prepared component', amount: '', anchorId: anchor }
-        }),
-      ]
-
       return {
         kind: 'step',
         key,
         anchorId,
         processId: process.id,
         nodeId: node.id,
-        adds,
-        continues: continuing.has(node.id) && adds.length === 0,
+        // Carries on with what is already cooking: follows straight on, and brings in nothing new.
+        continues: continuing.has(node.id) && step.actionOn.ingredients.length === 0 && step.actionOn.processes.length === 0,
         number: numberOf.get(key) ?? 0,
         name,
         showName: composed.length > 0,
@@ -673,9 +665,13 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
     const itemByNode = new Map(ordered.nodes.map((node, at) => [node.id, items[at]]))
     const flows = flowsById.get(process.id)?.map<RecipeTimelineFlow>((flow) => {
       const flowItems = flow.nodeIds.map((id) => itemByNode.get(id) as RecipeTimelineItem)
+      const firstStep = flowItems.find((item) => item.kind === 'step')
       return {
         key: `${process.id}:flow-${flow.index}`,
         anchorId: `recipe-flow-${process.id}-${flow.index}`,
+        number: firstStep?.kind === 'step' ? firstStep.number : 0,
+        processId: process.id,
+        nodeId: flow.outputNodeId ?? flow.nodeIds[0],
         title: flow.title,
         outputName: flow.outputName,
         stepCount: flowItems.filter((item) => item.kind === 'step').length,
@@ -689,7 +685,7 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
       title: sectionTitleOf(process),
       summary: process.description?.trim() ?? '',
       isMain: process.type === 'MAIN',
-      stepCount: items.filter((item) => item.kind === 'step').length,
+      stepCount: flows ? flows.filter((flow) => flow.stepCount > 0).length : items.filter((item) => item.kind === 'step').length,
       items,
       flows,
     }

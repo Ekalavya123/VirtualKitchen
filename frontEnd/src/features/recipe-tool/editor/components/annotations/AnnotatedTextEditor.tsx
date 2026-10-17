@@ -244,7 +244,47 @@ export default function AnnotatedTextEditor({
       event.preventDefault()
       insertTextAtCaret('\n')
       emit()
+      return
     }
+    // Browsers delete a non-editable chip without an input event, so a chip next to the caret is removed here.
+    if (event.key === 'Backspace' || event.key === 'Delete') {
+      const chip = chipNextToCaret(event.key === 'Backspace' ? 'before' : 'after')
+      if (chip) {
+        event.preventDefault()
+        const selection = window.getSelection()
+        const range = document.createRange()
+        range.setStartBefore(chip)
+        range.collapse(true)
+        chip.remove()
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+        emit()
+      }
+    }
+  }
+
+  /** The chip right before/after a collapsed caret, if any. */
+  const chipNextToCaret = (side: 'before' | 'after'): HTMLElement | null => {
+    const selection = window.getSelection()
+    const root = rootRef.current
+    if (!selection || !root || selection.rangeCount === 0 || !selection.isCollapsed) return null
+    const { anchorNode, anchorOffset } = selection
+    if (!anchorNode || !root.contains(anchorNode)) return null
+    let neighbour: Node | null = null
+    if (anchorNode.nodeType === Node.TEXT_NODE) {
+      const length = anchorNode.nodeValue?.length ?? 0
+      if (side === 'before' && anchorOffset === 0) neighbour = anchorNode.previousSibling
+      if (side === 'after' && anchorOffset === length) neighbour = anchorNode.nextSibling
+    } else {
+      neighbour = side === 'before' ? anchorNode.childNodes[anchorOffset - 1] ?? null : anchorNode.childNodes[anchorOffset] ?? null
+    }
+    return neighbour instanceof HTMLElement && neighbour.dataset.annotationKind ? neighbour : null
+  }
+
+  /** Any change the browser made without an input event (e.g. a selection spanning chips deleted) is still saved. */
+  const syncIfChanged = () => {
+    const root = rootRef.current
+    if (root && serialize(root) !== lastValue.current) emit()
   }
 
   const handlePaste = (event: ClipboardEvent<HTMLDivElement>) => {
@@ -289,12 +329,16 @@ export default function AnnotatedTextEditor({
         }}
         onKeyDown={handleKeyDown}
         onKeyUp={(event) => {
+          syncIfChanged()
           if (event.key.startsWith('Arrow') && !(mention && (event.key === 'ArrowDown' || event.key === 'ArrowUp'))) detectMention()
         }}
         onPaste={handlePaste}
         onDrop={(event) => event.preventDefault()}
         onClick={handleClick}
-        onBlur={() => setMention(null)}
+        onBlur={() => {
+          syncIfChanged()
+          setMention(null)
+        }}
       />
       {mention && options.length > 0 && createPortal(
         <div

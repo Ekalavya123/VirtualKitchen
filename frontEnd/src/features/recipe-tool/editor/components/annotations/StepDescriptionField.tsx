@@ -6,8 +6,10 @@ import {
   applyRecipeStepFieldUpdate,
   findAnnotatedIngredientIndex,
   getStepAnnotationTargets,
+  normalizeRecipeStepNodeData,
   stepAnnotationLabelResolver,
   withAnnotationTarget,
+  withoutTargetsOfRemovedAnnotations,
   type ActionOnIngredient,
   type RecipeStepFields,
   type RecipeStepNodeData,
@@ -80,8 +82,10 @@ export default function StepDescriptionField({
 
   const handleChange = useCallback((value: string, inserted?: Annotation) => {
     updateStepData(nodeId, 'actionDescription', (data) => {
+      const before = normalizeRecipeStepNodeData(data).step
       const next = applyRecipeStepFieldUpdate(data, 'actionDescription', value)
-      return inserted ? withAnnotationTarget(next, inserted) : next
+      // The step's targets follow its annotations: a picked one is added, a deleted one leaves "Used in this step".
+      return withoutTargetsOfRemovedAnnotations(before, inserted ? withAnnotationTarget(next, inserted) : next)
     })
   }, [nodeId, updateStepData])
 

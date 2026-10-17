@@ -37,6 +37,7 @@ import {
   type Annotation,
   type AnnotationLabelResolver,
   type StepAnnotationTargets,
+  annotationsOf,
   sameAnnotationTarget,
   unwrapAnnotations,
 } from './stepAnnotations'
@@ -480,6 +481,28 @@ export const withAnnotationTarget = (data: unknown, annotation: Annotation): Rec
   }
   if (actionOn.steps.some((entry) => entry.stepId === annotation.id)) return normalized
   return withRecipeStepActionOnSteps(normalized, [...actionOn.steps.map((entry) => entry.stepId), annotation.id])
+}
+
+/**
+ * After annotations were deleted from a step's description (e.g. a chip removed with Backspace), the targets only
+ * they named leave the step's Action On too — so "Used in this step" follows the text. A target the description
+ * never annotated (added from the panel) is left alone, and so is one still annotated elsewhere in the text.
+ */
+export const withoutTargetsOfRemovedAnnotations = (previous: RecipeStepFields, next: RecipeStepNodeData): RecipeStepNodeData => {
+  const remaining = annotationsOf(next.step.actionDescription)
+  const removed = annotationsOf(previous.actionDescription).filter((annotation) =>
+    !remaining.some((other) => sameAnnotationTarget(other, annotation.kind, annotation.id)))
+  if (removed.length === 0) return next
+  const isRemoved = (kind: Annotation['kind'], id: string) => removed.some((annotation) => sameAnnotationTarget(annotation, kind, id))
+  const { actionOn } = next.step
+  return withStep(next, {
+    ...next.step,
+    actionOn: {
+      ingredients: actionOn.ingredients.filter((entry) => !isRemoved('ingredient', ingredientAnnotationId(entry))),
+      processes: actionOn.processes.filter((entry) => !isRemoved('prepared', preparedAnnotationId(entry))),
+      steps: actionOn.steps.filter((entry) => !isRemoved('step', entry.stepId)),
+    },
+  })
 }
 
 /**

@@ -51,6 +51,8 @@ export const buildAnnotationOptions = (context: StepAnnotationContext, query: st
       title: name,
       hint: formatQuantityWithUnit(entry.quantity, entry.unit, entry.customUnit) || 'no amount',
       icon: getIngredientById(entry.ingredientId).icon,
+      // However it's picked (click or keyboard), an ingredient asks for its amount right away.
+      activateOnInsert: true,
     })
   })
   step.actionOn.processes.forEach((entry) => {

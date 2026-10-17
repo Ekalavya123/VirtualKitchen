@@ -3,7 +3,6 @@ import {
   describeOutcome,
   describeRef,
   type CheckOutcome,
-  type AddedEntity,
   type RecipeBranchTag,
   type RecipeTimelineCheck,
   type RecipeTimelineFlow,
@@ -23,9 +22,6 @@ type RecipeStepsTimelineProps = {
 
 type OpenStep = RecipeStepsTimelineProps['onOpenStep']
 
-/** Above this many steps in a multi-stage recipe, only the first stage starts open. */
-const COLLAPSE_ABOVE_STEPS = 12
-
 type Navigate = (anchorId: string) => void
 
 const stepsLabel = (count: number) => `${count} step${count === 1 ? '' : 's'}`
@@ -38,9 +34,8 @@ const stepsLabel = (count: number) => `${count} step${count === 1 ? '' : 's'}`
  */
 export default function RecipeStepsTimeline({ sections, onOpenStep }: RecipeStepsTimelineProps) {
   const isStaged = sections.length > 1
-  const totalSteps = sections.reduce((count, section) => count + section.stepCount, 0)
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() =>
-    new Set(isStaged && totalSteps > COLLAPSE_ABOVE_STEPS ? sections.slice(1).map((section) => section.key) : []))
+  // Every stage starts open; the reader can fold any of them away.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
 
   // Which stage each anchor (the stage itself, or any step/check in it) lives in.
   const sectionOfAnchor = useMemo(() => {
@@ -114,10 +109,10 @@ export default function RecipeStepsTimeline({ sections, onOpenStep }: RecipeStep
               </h3>
             )}
             {isOpen && section.flows && (
-              // A Preparation: each independent flow is one card, its steps as numbered points.
-              <div id={listId} className="rp-flow-grid">
-                {section.flows.map((flow) => <FlowCard key={flow.key} flow={flow} navigate={navigate} onOpenStep={onOpenStep} />)}
-              </div>
+              // A Preparation: each independent flow is one numbered step, its steps explained as points.
+              <ol id={listId} className="rp-timeline">
+                {section.flows.map((flow) => <FlowItem key={flow.key} flow={flow} navigate={navigate} onOpenStep={onOpenStep} />)}
+              </ol>
             )}
             {isOpen && !section.flows && (
               <ol id={listId} className="rp-timeline">
@@ -163,65 +158,50 @@ function Instruction({ parts, navigate }: { parts: InstructionPart[]; navigate: 
   )
 }
 
-function OpenInEditor({ step, onOpenStep }: { step: RecipeTimelineStep; onOpenStep: OpenStep }) {
+function OpenInEditor({ processId, nodeId, onOpenStep, title = 'Open this step in the editor' }: {
+  processId: number
+  nodeId: string
+  onOpenStep: OpenStep
+  title?: string
+}) {
   if (!onOpenStep) return null
   return (
-    <button type="button" className="rp-open-step" onClick={() => onOpenStep(step.processId, step.nodeId)} title="Open this step in the editor">
+    <button type="button" className="rp-open-step" onClick={() => onOpenStep(processId, nodeId)} title={title}>
       Open in editor ↗
     </button>
   )
 }
 
-/** What a main step brings in — ingredients with amounts, and prepared components linking to their card. */
-function Adds({ adds, navigate }: { adds: AddedEntity[]; navigate: Navigate }) {
-  if (adds.length === 0) return null
+/**
+ * One preparation flow as ONE step of the recipe: "Prepare Marinated Chicken", its steps as explanatory points in
+ * cooking order, the output it makes, and one way into the editor for the whole flow.
+ */
+function FlowItem({ flow, navigate, onOpenStep }: { flow: RecipeTimelineFlow; navigate: Navigate; onOpenStep: OpenStep }) {
   return (
-    <div className="rp-adds">
-      <span className="rp-adds-label">Adds</span>
-      {adds.map((entity) => (
-        entity.kind === 'prepared' && entity.anchorId ? (
-          <button key={entity.key} type="button" className="rp-add is-prepared" onClick={() => navigate(entity.anchorId as string)} title="Prepared in Preparation">
-            <span className="rp-add-badge">prepared</span> {entity.label}
-          </button>
-        ) : (
-          <span key={entity.key} className={`rp-add${entity.kind === 'prepared' ? ' is-prepared' : ''}`}>
-            {entity.kind === 'prepared' && <span className="rp-add-badge">prepared</span>} {entity.label}
-            {entity.amount && <span className="rp-add-amount"> · {entity.amount}</span>}
-          </span>
-        )
-      ))}
-    </div>
-  )
-}
-
-/** One preparation flow: "Prepare Marinated Chicken", its steps in order, and the output it makes. */
-function FlowCard({ flow, navigate, onOpenStep }: { flow: RecipeTimelineFlow; navigate: Navigate; onOpenStep: OpenStep }) {
-  return (
-    <article id={flow.anchorId} className="rp-card rp-flow-card" aria-label={flow.title}>
-      <h4 className="rp-flow-title"><span aria-hidden>🔪</span> {flow.title}</h4>
-      <ol className="rp-flow-points">
-        {flow.items.map((item) => (item.kind === 'step' ? (
-          <li key={item.key} id={item.anchorId} className="rp-flow-point">
-            <span className="rp-flow-point-number" aria-hidden>{item.number}</span>
-            <div className="rp-flow-point-body">
-              <p className="rp-flow-point-text"><Instruction parts={item.instruction} navigate={navigate} /></p>
-              {item.explanation && <p className="rp-flow-point-note">{item.explanation}</p>}
-              <OpenInEditor step={item} onOpenStep={onOpenStep} />
-            </div>
-          </li>
-        ) : (
-          <li key={item.key} id={item.anchorId} className="rp-flow-point is-check">
-            <span className="rp-flow-point-number" aria-hidden>?</span>
-            <div className="rp-flow-point-body">
-              <p className="rp-flow-point-text"><span aria-hidden>🔍</span> {item.question}</p>
-            </div>
-          </li>
-        )))}
-      </ol>
-      <div className={`rp-flow-output${flow.outputName ? '' : ' is-missing'}`}>
-        {flow.outputName ? <>Output: <strong>{flow.outputName}</strong></> : 'No named output yet — give the last step an Expected Output'}
-      </div>
-    </article>
+    <li id={flow.anchorId} className="rp-timeline-item">
+      <span className="rp-step-number" aria-hidden>{flow.number || '?'}</span>
+      <article className="rp-card rp-step-card rp-flow-card" aria-label={flow.title}>
+        <div className="rp-step-body">
+          <h4 className="rp-step-heading"><span className="rp-step-inline-icon" aria-hidden>🔪</span>{flow.title}</h4>
+          <ul className="rp-flow-points">
+            {flow.items.map((item) => (item.kind === 'step' ? (
+              <li key={item.key} id={item.anchorId} className="rp-flow-point">
+                <p className="rp-flow-point-text"><Instruction parts={item.instruction} navigate={navigate} /></p>
+                {item.explanation && <p className="rp-flow-point-note">{item.explanation}</p>}
+              </li>
+            ) : (
+              <li key={item.key} id={item.anchorId} className="rp-flow-point is-check">
+                <p className="rp-flow-point-text"><span aria-hidden>🔍</span> {item.question}</p>
+              </li>
+            )))}
+          </ul>
+          <div className={`rp-flow-output${flow.outputName ? '' : ' is-missing'}`}>
+            {flow.outputName ? <>Output: <strong>{flow.outputName}</strong></> : 'No named output yet — give the last step an Expected Output'}
+          </div>
+          <OpenInEditor processId={flow.processId} nodeId={flow.nodeId} onOpenStep={onOpenStep} title="Open this preparation in the editor" />
+        </div>
+      </article>
+    </li>
   )
 }
 
@@ -249,7 +229,6 @@ function StepItem({ step, navigate, onOpenStep }: { step: RecipeTimelineStep; na
             <Instruction parts={step.instruction} navigate={navigate} />
           </p>
 
-          <Adds adds={step.adds} navigate={navigate} />
 
           {step.explanation && <p className="rp-step-explanation">{step.explanation}</p>}
 
@@ -261,7 +240,7 @@ function StepItem({ step, navigate, onOpenStep }: { step: RecipeTimelineStep; na
           )}
 
           <Continuation continuation={step.continuation} navigate={navigate} />
-          <OpenInEditor step={step} onOpenStep={onOpenStep} />
+          <OpenInEditor processId={step.processId} nodeId={step.nodeId} onOpenStep={onOpenStep} />
         </div>
 
         {hasImage && (

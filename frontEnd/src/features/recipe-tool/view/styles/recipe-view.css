@@ -1161,70 +1161,26 @@ button.rp-continuation:hover {
   }
 }
 
-/* Preparation: one card per flow ("Prepare Marinated Chicken"), its steps as numbered points. */
-.rp-flow-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
-  gap: 16px;
-  margin-top: 12px;
-}
-
-.rp-flow-card {
-  display: flex;
-  flex-direction: column;
-  padding: 18px 18px 14px;
-  gap: 12px;
-}
-
-.rp-flow-title {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 800;
-  color: var(--flow-text);
-}
-
+/* Preparation: each flow is one step of the recipe, its own steps explained as points. */
 .rp-flow-points {
-  list-style: none;
   margin: 0;
-  padding: 0;
+  padding-left: 20px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  flex: 1;
+  gap: 8px;
+  list-style: disc;
 }
 
 .rp-flow-point {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
   scroll-margin-top: 96px;
 }
 
-.rp-flow-point-number {
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12.5px;
-  font-weight: 800;
-  color: #fff;
-  background: var(--rp-accent-gradient);
+.rp-flow-point::marker {
+  color: var(--rp-accent);
 }
 
-.rp-flow-point.is-check .rp-flow-point-number {
-  background: var(--flow-surface-muted);
-  color: var(--flow-text-muted);
-  border: 1px solid var(--flow-border);
-}
-
-.rp-flow-point-body {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+.rp-flow-point.is-check {
+  list-style: none;
 }
 
 .rp-flow-point-text {
@@ -1235,7 +1191,7 @@ button.rp-continuation:hover {
 }
 
 .rp-flow-point-note {
-  margin: 0;
+  margin: 2px 0 0;
   font-size: 13.5px;
   line-height: 1.5;
   color: var(--flow-text-muted);
@@ -1256,60 +1212,7 @@ button.rp-continuation:hover {
   color: var(--flow-danger);
 }
 
-/* Main process: what a step brings in, and steps that carry on with what is already cooking. */
-.rp-adds {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  font-size: 13.5px;
-}
-
-.rp-adds-label {
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--flow-text-muted);
-}
-
-.rp-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 9px;
-  border-radius: 999px;
-  border: 1px solid var(--flow-border);
-  background: var(--flow-surface-muted);
-  color: var(--flow-text);
-  font: inherit;
-  font-weight: 600;
-}
-
-button.rp-add {
-  cursor: pointer;
-}
-
-button.rp-add:hover {
-  border-color: var(--flow-accent);
-}
-
-.rp-add-amount {
-  color: var(--flow-text-muted);
-  font-weight: 500;
-}
-
-.rp-add-badge {
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: #fef3c7;
-  color: #92400e;
-}
-
+/* Main process: a step that carries on with what is already cooking. */
 .rp-continues {
   display: inline-block;
   margin-right: 8px;
