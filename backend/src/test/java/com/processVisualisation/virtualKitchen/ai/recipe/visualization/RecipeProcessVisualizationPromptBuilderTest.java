@@ -17,6 +17,32 @@ class RecipeProcessVisualizationPromptBuilderTest {
     private final RecipeProcessVisualizationPromptBuilder builder = new RecipeProcessVisualizationPromptBuilder();
 
     @Test
+    void buildFlowUserPrompt_severalSteps_asksForOneStoryboardImageEndingWithTheOutput() {
+        RecipeProcessVisualizationInput cut = new RecipeProcessVisualizationInput(
+                "Cut", List.of(), List.of(), "Cut the chicken", "Cut Chicken", "", "", "", null);
+        RecipeProcessVisualizationInput marinate = new RecipeProcessVisualizationInput(
+                "Marinate", List.of(), List.of(), "Coat in yogurt", "Marinated Chicken", "", "", "30 minutes", "Cut Chicken");
+
+        String prompt = builder.buildFlowUserPrompt("Marinated Chicken", List.of(cut, marinate));
+
+        assertTrue(prompt.contains("making Marinated Chicken"));
+        assertTrue(prompt.contains("ONE image laid out as a storyboard of 3 small panels"), prompt);
+        assertTrue(prompt.contains("final panel showing the finished Marinated Chicken"));
+        assertTrue(prompt.indexOf("Cut the chicken") < prompt.indexOf("Coat in yogurt"), "steps are listed in cooking order");
+    }
+
+    @Test
+    void buildFlowUserPrompt_singleStep_isOneScene() {
+        RecipeProcessVisualizationInput chop = new RecipeProcessVisualizationInput(
+                "Chop", List.of(), List.of(), "Chop the onions", "Chopped Onions", "", "", "", null);
+
+        String prompt = builder.buildFlowUserPrompt("Chopped Onions", List.of(chop));
+
+        assertFalse(prompt.contains("storyboard"));
+        assertTrue(prompt.contains("a single still frame"));
+    }
+
+    @Test
     void buildUserPrompt_singleIngredient_doesNotAskForACompositeImage() {
         RecipeProcessVisualizationInput input = new RecipeProcessVisualizationInput(
                 "Cut", List.of(new RecipeProcessVisualizationInput.IngredientTarget("Onion", "2", "", "Medium")),

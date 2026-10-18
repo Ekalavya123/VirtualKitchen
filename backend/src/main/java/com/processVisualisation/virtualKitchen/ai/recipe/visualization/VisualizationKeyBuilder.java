@@ -35,6 +35,15 @@ public final class VisualizationKeyBuilder {
         return normalize(recipeId) + SEPARATOR + normalize(stepId);
     }
 
+    /**
+     * Builds the asset key for one preparation flow's single image, attached to the step that makes the flow's
+     * output: {@code recipeId::flow::outputStepId}. Distinct from step keys (and from narration, which reuses them),
+     * so a flow image never reuses an earlier per-step image of that step.
+     */
+    public static String buildFlow(String recipeId, String outputStepId) {
+        return normalize(recipeId) + SEPARATOR + "flow" + SEPARATOR + normalize(outputStepId);
+    }
+
     private static String normalize(String value) {
         return value == null ? "" : value.trim();
     }
