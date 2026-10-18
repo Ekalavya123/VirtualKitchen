@@ -795,7 +795,9 @@ export default function RecipeStepPanel({
                 {isGeneratingVisuals ? (visualsProgressLabel ?? 'Generating…') : visualization?.imageUrl ? '🔄 Regenerate visuals' : '🖼️ Generate visuals'}
               </button>
               <div style={{ fontSize: 10, color: 'var(--flow-text-subtle)' }}>
-                Generates an image for every step of this process — not only this one.
+                {isPreparation
+                  ? 'Generates one image per preparation flow (a storyboard of its steps), shown on the step that makes its output.'
+                  : 'Generates an image for every step of this process — not only this one.'}
               </div>
             </div>
           </>

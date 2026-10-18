@@ -82,8 +82,9 @@ public class RecipeProcessVisualizationJobService {
             return toDto(running.get(), true);
         }
 
-        RecipeProcessVisualizationService.ProcessStepPreparation preparation =
-                recipeProcessVisualizationService.prepareStepContexts(processId);
+        // One image per MAIN step; one per Preparation flow (see prepareVisualTargets).
+        RecipeProcessVisualizationService.VisualPreparation preparation =
+                recipeProcessVisualizationService.prepareVisualTargets(processId);
         Long owningRecipeId = preparation.process().getRecipeId();
         if (owningRecipeId != null && !owningRecipeId.equals(recipeId)) {
             throw new NoSuchElementException("Process " + processId + " not found in recipe " + recipeId);
@@ -96,7 +97,7 @@ public class RecipeProcessVisualizationJobService {
         job.setUserId(userId);
         job.setActiveKey(activeKey);
         job.setStatus(VisualizationJobStatus.QUEUED);
-        job.setTotalSteps(preparation.steps().size());
+        job.setTotalSteps(preparation.targets().size());
         job.setCompletedSteps(0);
         job.setCreatedAt(Instant.now());
         job.setUpdatedAt(Instant.now());
@@ -155,17 +156,16 @@ public class RecipeProcessVisualizationJobService {
         return "viz:" + processId;
     }
 
-    private void runPipeline(Long userId, Long recipeId, String jobId, RecipeProcessVisualizationService.ProcessStepPreparation preparation) {
+    private void runPipeline(Long userId, Long recipeId, String jobId, RecipeProcessVisualizationService.VisualPreparation preparation) {
         // Runs on the orchestrator pool; binds the job ID before submitAll so every step task inherits it.
         OperationLog operation = OperationLog.start(log, "visualization_job", jobId, "jobId=" + jobId
-                + " recipeId=" + recipeId + " processId=" + preparation.process().getId() + " steps=" + preparation.steps().size());
+                + " recipeId=" + recipeId + " processId=" + preparation.process().getId() + " steps=" + preparation.targets().size());
         markStatus(jobId, VisualizationJobStatus.IN_PROGRESS, Map.of("startedAt", Instant.now()));
         try {
-            List<NamedTask<VisualizationAsset>> tasks = preparation.steps().stream()
-                    .map(ctx -> new NamedTask<VisualizationAsset>(
-                            ctx.node().getId(),
-                            () -> recipeProcessVisualizationService.resolveVisualizationAsset(
-                                    userId, recipeId, ctx.node().getId(), ctx.input())
+            List<NamedTask<VisualizationAsset>> tasks = preparation.targets().stream()
+                    .map(target -> new NamedTask<VisualizationAsset>(
+                            target.nodeId(),
+                            () -> recipeProcessVisualizationService.resolveTarget(userId, recipeId, target)
                     ))
                     .toList();
 

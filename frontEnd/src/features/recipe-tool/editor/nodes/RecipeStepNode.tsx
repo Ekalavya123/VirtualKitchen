@@ -1,9 +1,9 @@
-import { useCallback, useLayoutEffect, useState } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import { useCallback, useLayoutEffect } from 'react'
+import type { CSSProperties } from 'react'
 import { Handle, Position, NodeResizeControl, useNodeId, useUpdateNodeInternals } from '@xyflow/react'
 import '../../../../styles/flow-ui.css'
 import {
-  getActionOnIngredientDisplayName,
+  annotatedIngredientText,
   getRecipeStepActionName,
   getRecipeStepActionSummary,
   getRecipeStepDurationLabel,
@@ -16,17 +16,15 @@ import {
   type RecipeStepActionOnProcess,
   type RecipeStepNodeData,
 } from '../../model/recipeStepData'
-import { parsePreparedAnnotationId, sameAnnotationTarget, unbackedAnnotations, type Annotation } from '../../model/stepAnnotations'
+import { parsePreparedAnnotationId, sameAnnotationTarget, type Annotation } from '../../model/stepAnnotations'
 import AnnotatedText from '../components/annotations/AnnotatedText'
 import type { ChipState } from '../components/annotations/AnnotatedTextEditor'
 import { useNodeHandleSides, useRecipeProcessGraphContext } from '../context/RecipeProcessGraphContext'
 import { DEFAULT_NODE_SIZE } from '../../model/recipeNodeTypes'
 import { getStepOutputLabel, getStepOutputReferenceProblem } from '../../model/recipeStepOutputs'
-import { PREPARED_REFERENCE_PROBLEM_LABELS, describePreparedReference } from '../../model/preparationFlows'
+import { describePreparedReference } from '../../model/preparationFlows'
 import { getStepActionById, type ActionCategory, type StepActionId } from '../../../../shared/catalog/actionCatalog'
-import { getPreparationStyleDisplayName } from '../../../../shared/catalog/preparationStyleCatalog'
 import { getFlameLevelDisplayName } from '../../../../shared/catalog/flameLevelCatalog'
-import { formatQuantityWithUnit } from '../../../../shared/catalog/unitCatalog'
 
 type CategoryTheme = {
   emoji: string
@@ -90,7 +88,13 @@ type RecipeStepNodeProps = {
 
 // Resizing is bounded below only — a card must stay readable, but may grow as large as wanted.
 const MIN_WIDTH = 240
-const MIN_HEIGHT = 140
+/** A titled section of the card (Description, Expected): always present, so every card has the same shape. */
+const SECTION_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 3, borderTop: '1px dashed var(--flow-border)', paddingTop: 6 }
+const SECTION_HEADING_STYLE: CSSProperties = { fontSize: 9, fontWeight: 800, color: 'var(--flow-text)', textTransform: 'uppercase', letterSpacing: '0.03em' }
+const NOT_PROVIDED_STYLE: CSSProperties = { fontSize: 10, color: 'var(--flow-text-subtle)', fontStyle: 'italic' }
+
+/** Smallest card height; a card is otherwise exactly as tall as its content. */
+const MIN_HEIGHT = 60
 
 const BORDER_WIDTH = 1.5
 const ACCENT_BORDER_WIDTH = 5
@@ -110,22 +114,17 @@ const HANDLE_PLACEMENT: Record<'top' | 'left' | 'right' | 'bottom', { position: 
   right: { position: Position.Right, style: { top: '50%', right: 0, transform: 'translate(50%, -50%)' } },
 }
 
-/** "Used in this step" rows shown before collapsing into "+N more" (the full detail stays in the step editor). */
-const COLLAPSED_USED_LIMIT = 4
-
-type UsedRow = { key: string; content: ReactNode; missing?: boolean }
-
-export default function RecipeStepNode({ selected, style: nodeStyle, width: nodeWidth, height: nodeHeight, data }: RecipeStepNodeProps) {
+export default function RecipeStepNode({ selected, style: nodeStyle, width: nodeWidth, data }: RecipeStepNodeProps) {
   const nodeId = useNodeId()
   const updateNodeInternals = useUpdateNodeInternals()
   const { recipeProcesses, stepOrder, stepOutputGraph, onNodeResizeStart, onNodeResizeEnd, onOpenPrepared, highlightedNodeId } = useRecipeProcessGraphContext()
-  const [expanded, setExpanded] = useState(false)
   const normalized = normalizeRecipeStepNodeData(data)
   const step = normalized.step
   const theme = getCategoryTheme(step.action)
   const handleSides = useNodeHandleSides(nodeId)
   const width = Math.max(toNumber(nodeWidth, toNumber(nodeStyle?.width, DEFAULT_NODE_SIZE.step.width)), MIN_WIDTH)
-  const minHeight = Math.max(toNumber(nodeHeight, toNumber(nodeStyle?.height, DEFAULT_NODE_SIZE.step.height)), MIN_HEIGHT)
+  // Height follows the content (description, badges, image); only the width is set by resizing.
+  const minHeight = MIN_HEIGHT
 
   const stepIndex = nodeId ? stepOrder.indexOf(nodeId) : -1
   const stepNumber = stepIndex >= 0 ? stepIndex + 1 : data.stepNumber
@@ -149,7 +148,7 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
   // once this render has laid the card out at its new size, or edges keep pointing at the old center.
   useLayoutEffect(() => {
     syncNodeLayout()
-  }, [syncNodeLayout, width, minHeight, expanded, imageUrl, handleSides.target, handleSides.source])
+  }, [syncNodeLayout, width, minHeight, imageUrl, handleSides.target, handleSides.source])
 
   // A used prepared component shows its *current* name: the Preparation step's live Expected Output.
   const preparedName = (reference: RecipeStepActionOnProcess) => describePreparedReference(recipeProcesses, reference).label
@@ -173,73 +172,9 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
     if (reference) onOpenPrepared?.(reference)
   }
 
-  const stepOutputRows: UsedRow[] = step.actionOn.steps.map((entry) => {
-    const label = getStepOutputLabel(stepOutputGraph, entry.stepId)
-    const available = nodeId != null && getStepOutputReferenceProblem(stepOutputGraph, entry.stepId, nodeId) == null
-    return {
-      key: `step-output-${entry.stepId}`,
-      missing: !available,
-      content: (
-        <span className="step-used-name" style={{ fontWeight: 700 }} title={available ? 'Result of an earlier step' : 'Unavailable step output'}>
-          ↳ {label || 'Unavailable step output'}
-        </span>
-      ),
-    }
-  })
-
-  const ingredientRows: UsedRow[] = step.actionOn.ingredients.map((entry, index) => {
-    const quantity = formatQuantityWithUnit(entry.quantity, entry.unit, entry.customUnit)
-    const prepStyle = getPreparationStyleDisplayName(entry.preparationStyleId ?? '', entry.customPreparationStyle)
-    return {
-      key: `ingredient-${index}`,
-      content: (
-        <>
-          <span className="step-used-name" style={{ fontWeight: 700, color: theme.accentStrong }}>{getActionOnIngredientDisplayName(entry)}</span>
-          {quantity && <span className="step-used-amount">· {quantity}</span>}
-          {prepStyle && <span className="step-used-amount" style={{ fontWeight: 500 }}>({prepStyle})</span>}
-        </>
-      ),
-    }
-  })
-
-  const preparedRows: UsedRow[] = step.actionOn.processes.map((entry) => {
-    const { label, problem } = describePreparedReference(recipeProcesses, entry)
-    return {
-      key: `prepared-${entry.processId}-${entry.stepId ?? ''}`,
-      missing: problem != null,
-      content: (
-        <>
-          <span className="step-used-badge">prepared</span>
-          {problem ? (
-            <span className="step-used-name" style={{ fontWeight: 700 }}>{PREPARED_REFERENCE_PROBLEM_LABELS[problem]}</span>
-          ) : (
-            <button
-              type="button"
-              className="step-used-link nodrag"
-              title="Open the flow that makes it"
-              onClick={(event) => {
-                event.stopPropagation()
-                onOpenPrepared?.(entry)
-              }}
-            >
-              {label}
-            </button>
-          )}
-        </>
-      ),
-    }
-  })
-
-  // Mentioned with @ but no longer used by the step (its target was removed or deleted elsewhere).
-  const danglingRows: UsedRow[] = unbackedAnnotations(step.actionDescription, targets).map((annotation, index) => ({
-    key: `dangling-${index}`,
-    missing: true,
-    content: <span className="step-used-name" title="Mentioned in the description, but the step doesn't use it">⚠ {annotation.label} · not used</span>,
-  }))
-
-  const usedRows = [...stepOutputRows, ...ingredientRows, ...preparedRows, ...danglingRows]
-  const visibleRows = expanded ? usedRows : usedRows.slice(0, COLLAPSED_USED_LIMIT)
-  const hiddenCount = usedRows.length - visibleRows.length
+  // Ingredient chips read with their amount ("2 onions"), taken from Action On — the card's only place for it.
+  const chipText = (annotation: Annotation, words: string) =>
+    (annotation.kind === 'ingredient' ? annotatedIngredientText(step, annotation.id, words) : null)
 
   const flameLevel = getFlameLevelDisplayName(step.flameLevelId, step.customFlameLevel)
   const duration = getRecipeStepDurationLabel(step)
@@ -282,13 +217,14 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
           nodeId={nodeId ?? undefined}
           minWidth={MIN_WIDTH}
           minHeight={MIN_HEIGHT}
+          resizeDirection="horizontal"
           onResizeStart={() => { if (nodeId) onNodeResizeStart?.(nodeId) }}
           onResize={() => syncNodeLayout()}
           onResizeEnd={() => {
             syncNodeLayout()
             if (nodeId) onNodeResizeEnd?.(nodeId)
           }}
-          position="bottom-right"
+          position="right"
           style={{
             background: theme.accent,
             border: '2px solid #fff',
@@ -358,67 +294,34 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
             </div>
           )}
 
-          {step.actionDescription.trim() ? (
-            <AnnotatedText
-              text={step.actionDescription.trim()}
-              resolveLabel={resolveLabel}
-              chipState={chipState}
-              onOpenPrepared={openPreparedAnnotation}
-              style={{ fontSize: 10.5, color: 'var(--flow-text-muted)', lineHeight: 1.55, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
-            />
-          ) : (
-            <div style={{ fontSize: 10.5, color: 'var(--flow-text-subtle)', fontStyle: 'italic' }}>No description yet</div>
-          )}
+          {/* Description — always shown, like Expected below, so every card has the same shape. */}
+          <div style={SECTION_STYLE}>
+            <span style={SECTION_HEADING_STYLE}>Description</span>
+            {step.actionDescription.trim() ? (
+              <AnnotatedText
+                text={step.actionDescription.trim()}
+                resolveLabel={resolveLabel}
+                chipState={chipState}
+                chipText={chipText}
+                onOpenPrepared={openPreparedAnnotation}
+                style={{ fontSize: 10.5, color: 'var(--flow-text-muted)', lineHeight: 1.55 }}
+              />
+            ) : (
+              <span style={NOT_PROVIDED_STYLE}>Not provided</span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Expected Output — pulled out of the image/text row so it always reads full width. */}
-      {step.expectedOutput.trim() && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, borderTop: '1px dashed var(--flow-border)', paddingTop: 6 }}>
-          <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--flow-text)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-            Expected
-          </span>
+      {/* Expected Output — pulled out of the image/text row so it always reads full width; always shown. */}
+      <div style={SECTION_STYLE}>
+        <span style={SECTION_HEADING_STYLE}>Expected</span>
+        {step.expectedOutput.trim() ? (
           <span style={{ fontSize: 10, color: 'var(--flow-text-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
             {step.expectedOutput.trim()}
           </span>
-        </div>
-      )}
-
-      {/* Used in this step — every structured input the step really has (its Action On), so what the system
-          recognises can be checked against the description. Annotations without a target show as missing. */}
-      <div className="step-used-list">
-        <span className="step-used-heading">Used in this step</span>
-        {usedRows.length === 0 && (
-          <span style={{ fontSize: 10.5, color: 'var(--flow-text-subtle)', fontStyle: 'italic' }}>Nothing yet — type @ in the description</span>
-        )}
-        {visibleRows.map((row) => (
-          <div key={row.key} className={`step-used-row${row.missing ? ' is-missing' : ''}`}>{row.content}</div>
-        ))}
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            className="nodrag"
-            onClick={(event) => {
-              event.stopPropagation()
-              setExpanded(true)
-            }}
-            style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', padding: 0, fontSize: 10.5, fontWeight: 700, color: theme.accentStrong, cursor: 'pointer' }}
-          >
-            +{hiddenCount} more
-          </button>
-        )}
-        {expanded && usedRows.length > COLLAPSED_USED_LIMIT && (
-          <button
-            type="button"
-            className="nodrag"
-            onClick={(event) => {
-              event.stopPropagation()
-              setExpanded(false)
-            }}
-            style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', padding: 0, fontSize: 10.5, fontWeight: 700, color: 'var(--flow-text-subtle)', cursor: 'pointer' }}
-          >
-            Show less
-          </button>
+        ) : (
+          <span style={NOT_PROVIDED_STYLE}>Not provided</span>
         )}
       </div>
 

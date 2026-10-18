@@ -131,6 +131,51 @@ class RecipeProcessVisualizationServiceTest {
     }
 
     @Test
+    void prepareVisualTargets_givesAPreparationOneImagePerFlow_attachedToItsOutputStep() {
+        Process preparation = new Process();
+        preparation.setId(5L);
+        preparation.setRecipeId(9L);
+        preparation.setType(ProcessType.SUBPROCESS);
+        Process.ProcessNode cut = stepNode("cut", "cut", List.of(ingredient("chicken", 500, "g", "bite-sized")), "Cut the chicken", "Cut Chicken");
+        Process.ProcessNode marinate = stepNode("marinate", "marinate", List.of(ingredient("yogurt", 1, "cup", null)), "Coat in yogurt", "Marinated Chicken");
+        Process.ProcessNode chop = stepNode("chop", "chop", List.of(ingredient("onion", 2, "piece", "chopped")), "Chop the onions", "Chopped Onions");
+        preparation.setNodes(new ArrayList<>(List.of(cut, marinate, chop)));
+        preparation.setEdges(new ArrayList<>(List.of(edge("cut", "marinate"))));
+        when(processRepository.findById(5L)).thenReturn(Optional.of(preparation));
+
+        RecipeProcessVisualizationService.VisualPreparation targets = service.prepareVisualTargets(5L);
+
+        assertEquals(2, targets.targets().size(), "one image per flow, not per step");
+        RecipeProcessVisualizationService.VisualTarget chicken = targets.targets().stream()
+                .filter(target -> target.nodeId().equals("marinate")).findFirst().orElseThrow();
+        assertEquals("Marinated Chicken", chicken.flow().outputName());
+        assertEquals(List.of("Cut Chicken", "Marinated Chicken"), chicken.flow().steps().stream().map(RecipeProcessVisualizationInput::expectedOutput).toList());
+        RecipeProcessVisualizationService.VisualTarget onions = targets.targets().stream()
+                .filter(target -> target.nodeId().equals("chop")).findFirst().orElseThrow();
+        assertNull(onions.flow().steps().get(0).previousExpectedOutput(), "an independent flow doesn't continue from another");
+        assertEquals(List.of("marinate", "chop").stream().sorted().toList(),
+                RecipeProcessVisualizationService.visualTargetNodeIds(preparation).stream().sorted().toList());
+    }
+
+    @Test
+    void prepareVisualTargets_keepsOneImagePerStepForTheMainProcess() {
+        Process main = new Process();
+        main.setId(6L);
+        main.setRecipeId(9L);
+        main.setType(ProcessType.MAIN);
+        main.setNodes(new ArrayList<>(List.of(
+                stepNode("heat", "heat", List.of(), "Heat the oil", "Hot oil"),
+                stepNode("fry", "fry", List.of(), "Fry", "Fried"))));
+        main.setEdges(new ArrayList<>(List.of(edge("heat", "fry"))));
+        when(processRepository.findById(6L)).thenReturn(Optional.of(main));
+
+        RecipeProcessVisualizationService.VisualPreparation targets = service.prepareVisualTargets(6L);
+
+        assertEquals(List.of("heat", "fry"), targets.targets().stream().map(RecipeProcessVisualizationService.VisualTarget::nodeId).toList());
+        assertTrue(targets.targets().stream().allMatch(target -> target.flow() == null && target.step() != null));
+    }
+
+    @Test
     void prepareStepContexts_conditionNodesAreSkipped() {
         Process process = new Process();
         process.setId(1L);

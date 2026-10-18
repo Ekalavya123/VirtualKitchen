@@ -13,6 +13,8 @@ import com.processVisualisation.virtualKitchen.ai.platform.queue.AiRequestProper
 import com.processVisualisation.virtualKitchen.ai.platform.registry.AiModelProperties;
 import com.processVisualisation.virtualKitchen.ai.platform.registry.ModelDefinition;
 import com.processVisualisation.virtualKitchen.ai.platform.registry.ModelTier;
+import com.processVisualisation.virtualKitchen.auth.model.User;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
@@ -270,8 +272,15 @@ public class AnalyticsQueryService {
      * @param values         per filter, every value it can take
      * @param displayCurrency the currency the admin UI shows costs in
      * @param usdToDisplay   the recorded conversion from stored USD costs ({@code ai.request.usd-to-inr})
+     * @param users          users that made at least one recorded AI request, by name
+     * @param recipes        recipes with at least one recorded AI request, by name
      */
-    public record AnalyticsOptions(Map<String, List<String>> values, String displayCurrency, double usdToDisplay) {
+    public record AnalyticsOptions(Map<String, List<String>> values, String displayCurrency, double usdToDisplay,
+                                   List<Choice> users, List<Choice> recipes) {
+    }
+
+    /** A filter value with a display label (the value is what the filter is sent as). */
+    public record Choice(String id, String label) {
     }
 
     /**
@@ -291,7 +300,34 @@ public class AnalyticsQueryService {
         values.put("status", merge(enumNames(AnalyticsStatus.values(), null), distinct("status")));
         values.put("source", merge(enumNames(AnalyticsSource.values(), null), distinct("source")));
         values.put("groupBy", new ArrayList<>(DIMENSIONS.keySet()));
-        return new AnalyticsOptions(values, "INR", requestProperties.getUsdToInr());
+        return new AnalyticsOptions(values, "INR", requestProperties.getUsdToInr(),
+                choices(distinct("userId"), User.class, "User #%s"),
+                choices(distinct("recipeId"), RecipeTemplate.class, "Recipe #%s (deleted)"));
+    }
+
+    /**
+     * Labels ids found in the analytics records with the name of the user or recipe they belong to (only names are
+     * read — no emails), sorted by label. Ids whose document no longer exists keep a fallback label.
+     */
+    private List<Choice> choices(List<String> ids, Class<?> type, String fallback) {
+        List<Long> numericIds = ids.stream().filter(id -> id.matches("\\d{1,18}")).map(Long::valueOf).toList();
+        Map<String, String> names = new LinkedHashMap<>();
+        if (!numericIds.isEmpty()) {
+            Query query = Query.query(where("_id").in(numericIds));
+            query.fields().include("_id", "name");
+            List<org.bson.Document> docs = mongoTemplate.find(query, org.bson.Document.class,
+                    mongoTemplate.getCollectionName(type));
+            for (org.bson.Document doc : docs == null ? List.<org.bson.Document>of() : docs) {
+                Object name = doc.get("name");
+                if (doc.get("_id") != null && name instanceof String text && !text.isBlank()) {
+                    names.put(doc.get("_id").toString(), text.trim());
+                }
+            }
+        }
+        return ids.stream()
+                .map(id -> new Choice(id, names.getOrDefault(id, String.format(fallback, id))))
+                .sorted(Comparator.comparing(Choice::label, String.CASE_INSENSITIVE_ORDER).thenComparing(Choice::id))
+                .toList();
     }
 
     private static List<String> enumNames(Enum<?>[] values, Enum<?> except) {

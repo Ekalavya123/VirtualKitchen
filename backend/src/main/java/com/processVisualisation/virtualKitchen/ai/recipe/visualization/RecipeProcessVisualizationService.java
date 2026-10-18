@@ -23,7 +23,9 @@ import com.processVisualisation.virtualKitchen.ai.recipe.RecipeProcessAiExceptio
 import com.processVisualisation.virtualKitchen.ai.recipe.vocabulary.RecipeStepVocabularyProvider;
 import com.processVisualisation.virtualKitchen.common.logging.FailureLogger;
 import com.processVisualisation.virtualKitchen.common.persistence.SequenceGeneratorService;
+import com.processVisualisation.virtualKitchen.recipe.model.PreparationFlows;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
+import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
 import com.processVisualisation.virtualKitchen.recipe.model.StepAnnotations;
 import com.processVisualisation.virtualKitchen.recipe.repository.ProcessRepository;
 import com.processVisualisation.virtualKitchen.recipe.service.ProcessStepOrder;
@@ -33,6 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.*;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -124,20 +127,33 @@ public class RecipeProcessVisualizationService {
      * since {@code stepId} (a generated node id) is already globally unique.
      */
     public VisualizationAsset resolveVisualizationAsset(Long userId, Long recipeId, String stepId, RecipeProcessVisualizationInput input) {
-        String visualizationKey = VisualizationKeyBuilder.build(String.valueOf(recipeId), stepId);
+        return resolveAsset(userId, VisualizationKeyBuilder.build(String.valueOf(recipeId), stepId), () -> promptBuilder.buildUserPrompt(input));
+    }
+
+    /**
+     * Resolves the image for one visual target: a MAIN step's own image, or a preparation flow's single image
+     * ({@link RecipeProcessVisualizationPromptBuilder#buildFlowUserPrompt}) keyed by its output step.
+     */
+    public VisualizationAsset resolveTarget(Long userId, Long recipeId, VisualTarget target) {
+        if (target.flow() == null) return resolveVisualizationAsset(userId, recipeId, target.nodeId(), target.step());
+        return resolveAsset(userId, VisualizationKeyBuilder.buildFlow(String.valueOf(recipeId), target.nodeId()),
+                () -> promptBuilder.buildFlowUserPrompt(target.flow().outputName(), target.flow().steps()));
+    }
+
+    private VisualizationAsset resolveAsset(Long userId, String visualizationKey, Supplier<String> userPrompt) {
         Optional<VisualizationAsset> existingAsset = assetRepository.findByVisualizationKey(visualizationKey);
         VisualizationAsset asset;
         if (existingAsset.isPresent()) {
             asset = existingAsset.get();
             if (asset.getImagePrompt() == null || asset.getImagePrompt().isEmpty()) {
-                asset = generatePrompt(userId, visualizationKey, input);
+                asset = generatePrompt(userId, visualizationKey, userPrompt);
             }
             requirePrompted(asset, visualizationKey);
             if (asset.getImageUrl() == null || asset.getImageUrl().isEmpty()) {
                 asset = generateImage(userId, asset);
             }
         } else {
-            asset = createAsset(userId, visualizationKey, input);
+            asset = createAsset(userId, visualizationKey, userPrompt);
         }
         return asset;
     }
@@ -155,6 +171,66 @@ public class RecipeProcessVisualizationService {
                 process.getId(), stepId, asset.getId(), asset.getImagePrompt(), asset.getImageUrl()));
     }
 
+    /**
+     * What a visualization job generates for one process: one image per MAIN step, but ONE image per Preparation
+     * flow (attached to the step that makes the flow's output), never one per preparation step.
+     */
+    public VisualPreparation prepareVisualTargets(Long processId) {
+        ProcessStepPreparation prepared = prepareStepContexts(processId);
+        Process process = prepared.process();
+        if (process.getType() != ProcessType.SUBPROCESS) {
+            return new VisualPreparation(process, prepared.steps().stream()
+                    .map(context -> new VisualTarget(context.node().getId(), context.input(), null)).toList());
+        }
+        List<Process.ProcessNode> orderedSteps = ProcessStepOrder.orderedSteps(process);
+        Map<String, String> preparedNameByKey = resolvePreparedNames(orderedSteps);
+        List<VisualTarget> targets = new ArrayList<>();
+        for (PreparationFlows.Flow flow : PreparationFlows.flowsOf(process)) {
+            if (flow.output() == null) continue;
+            Set<String> nodeIds = new HashSet<>();
+            flow.nodes().forEach(node -> nodeIds.add(node.getId()));
+            // Continuity stays inside the flow: independent flows don't continue from one another.
+            List<RecipeProcessVisualizationInput> inputs = new ArrayList<>();
+            String previousExpectedOutput = null;
+            for (Process.ProcessNode node : orderedSteps) {
+                if (!nodeIds.contains(node.getId())) continue;
+                Map<String, Object> data = node.getData() != null ? node.getData() : new LinkedHashMap<>();
+                RecipeProcessVisualizationInput input = extractVisualizationInput(data, preparedNameByKey, previousExpectedOutput);
+                inputs.add(input);
+                previousExpectedOutput = input.expectedOutput();
+            }
+            if (inputs.isEmpty()) continue;
+            targets.add(new VisualTarget(flow.output().getId(), null, new FlowContext(flow.outputName(), inputs)));
+        }
+        return new VisualPreparation(process, targets);
+    }
+
+    /**
+     * The node ids a visualization job attaches images to, without loading inputs: every STEP of a MAIN process,
+     * the output step of every Preparation flow (see {@link #prepareVisualTargets}).
+     */
+    public static List<String> visualTargetNodeIds(Process process) {
+        if (process.getType() != ProcessType.SUBPROCESS) {
+            return ProcessStepOrder.orderedSteps(process).stream().map(Process.ProcessNode::getId).toList();
+        }
+        return PreparationFlows.flowsOf(process).stream()
+                .filter(flow -> flow.output() != null)
+                .map(flow -> flow.output().getId())
+                .toList();
+    }
+
+    /** One image to generate: a MAIN step ({@code step}) or a whole Preparation flow ({@code flow}), attached to {@code nodeId}. */
+    public record VisualTarget(String nodeId, RecipeProcessVisualizationInput step, FlowContext flow) {
+    }
+
+    /** A Preparation flow's single image: its named output and its steps in cooking order. */
+    public record FlowContext(String outputName, List<RecipeProcessVisualizationInput> steps) {
+    }
+
+    /** The result of {@link #prepareVisualTargets}: the loaded process with what to generate for it. */
+    public record VisualPreparation(Process process, List<VisualTarget> targets) {
+    }
+
     /** One STEP's pre-loaded generation context: its process node and extracted visualization input. */
     public record StepContext(Process.ProcessNode node, RecipeProcessVisualizationInput input) {
     }
@@ -163,7 +239,7 @@ public class RecipeProcessVisualizationService {
     public record ProcessStepPreparation(Process process, List<StepContext> steps) {
     }
 
-    private VisualizationAsset generatePrompt(Long userId, String visualizationKey, RecipeProcessVisualizationInput input) {
+    private VisualizationAsset generatePrompt(Long userId, String visualizationKey, Supplier<String> userPrompt) {
         try {
             AiRequestOutcome<String> outcome = queueService.executeInline(
                     userId,
@@ -177,7 +253,7 @@ public class RecipeProcessVisualizationService {
                         AiRequest request = AiRequest.builder()
                                 .model(selection.model().getProviderModelId())
                                 .systemPrompt(promptBuilder.buildSystemPrompt())
-                                .userPrompt(promptBuilder.buildUserPrompt(input))
+                                .userPrompt(userPrompt.get())
                                 .temperature(0.4d)
                                 .maxTokens(2000)
                                 .operation("VISUALIZATION_PROMPT")
@@ -255,8 +331,8 @@ public class RecipeProcessVisualizationService {
         return assetRepository.save(asset);
     }
 
-    private VisualizationAsset createAsset(Long userId, String visualizationKey, RecipeProcessVisualizationInput input) {
-        VisualizationAsset asset = generatePrompt(userId, visualizationKey, input);
+    private VisualizationAsset createAsset(Long userId, String visualizationKey, Supplier<String> userPrompt) {
+        VisualizationAsset asset = generatePrompt(userId, visualizationKey, userPrompt);
         requirePrompted(asset, visualizationKey);
         return generateImage(userId, asset);
     }

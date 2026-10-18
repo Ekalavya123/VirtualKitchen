@@ -848,10 +848,15 @@ function RecipeProcessCanvasContent({
     }))
   }, [setNodes])
 
+  // The Preparation gets one image per flow (attached to its output step); every other process one per step.
+  const isPreparationProcess = process.type === 'SUBPROCESS'
   const visuals = useProcessVisuals({
     recipeId,
     processId,
-    stepCount: nodes.filter(isRecipeStepNode).length,
+    stepCount: isPreparationProcess
+      ? getPreparationFlows(flowToProcess(process, nodes, edges)).filter((flow) => flow.output != null).length
+      : nodes.filter(isRecipeStepNode).length,
+    unit: isPreparationProcess ? 'flows' : 'steps',
     applyStep: applyStepVisualization,
   })
 

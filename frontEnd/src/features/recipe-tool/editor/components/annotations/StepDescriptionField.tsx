@@ -3,6 +3,7 @@ import type { Process } from '../../../../../types/process'
 import { useIngredientCatalog } from '../../../../../shared/catalog/ingredientCatalog'
 import { describePreparedReference } from '../../../model/preparationFlows'
 import {
+  annotatedIngredientText,
   applyRecipeStepFieldUpdate,
   findAnnotatedIngredientIndex,
   getStepAnnotationTargets,
@@ -73,6 +74,10 @@ export default function StepDescriptionField({
     return 'ok'
   }, [targetsKey, recipeProcesses, stepOutputGraph, nodeId])
 
+  // Ingredient chips read with their amount ("2 onions") — taken from Action On, never stored in the text.
+  const chipText = useCallback((annotation: Annotation, words: string) =>
+    (annotation.kind === 'ingredient' ? annotatedIngredientText(step, annotation.id, words) : null), [step])
+
   const getOptions = useCallback(
     (query: string) => buildAnnotationOptions({ nodeId, step, recipeProcesses, isPreparation, stepOutputGraph }, query),
     // catalogVersion: the ingredient catalog may finish loading while the editor is open.
@@ -115,6 +120,7 @@ export default function StepDescriptionField({
         getOptions={getOptions}
         resolveLabel={resolveLabel}
         chipState={chipState}
+        chipText={chipText}
         onChipActivate={handleChipActivate}
         placeholder="Describe what this step does — type @ to name an ingredient or prepared component"
         ariaLabel="Action description"

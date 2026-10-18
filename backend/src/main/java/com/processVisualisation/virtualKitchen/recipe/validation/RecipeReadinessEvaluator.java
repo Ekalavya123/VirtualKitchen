@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.recipe.validation;
 
+import com.processVisualisation.virtualKitchen.recipe.model.PreparationFlows;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessNodeKind;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
@@ -7,10 +8,8 @@ import com.processVisualisation.virtualKitchen.recipe.model.StepAnnotations;
 import com.processVisualisation.virtualKitchen.store.catalog.StepCatalogResource;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -52,12 +51,7 @@ public class RecipeReadinessEvaluator {
     /** A use of another process's output: one of its steps, or (legacy data) the whole process. */
     private record Reference(long processId, String stepId) {}
 
-    /** One preparation flow: its nodes, the STEPs it ends with, and the step naming its output (may be null). */
-    private record Flow(List<Process.ProcessNode> nodes, List<Process.ProcessNode> endSteps, Process.ProcessNode output) {}
-
     private static final String CUSTOM_ID = StepCatalogResource.CUSTOM_ID;
-    /** The handle of a check's "No" edge — it loops back and never moves a flow forward. */
-    private static final String CONDITION_NO_HANDLE = "condition-no";
 
     private final Set<String> actionIds;
 
@@ -121,7 +115,7 @@ public class RecipeReadinessEvaluator {
                         "Preparation has no steps" + (referenced ? ", but a step uses something from it." : ".")));
                 continue;
             }
-            for (Flow flow : flowsOf(preparation)) {
+            for (PreparationFlows.Flow flow : PreparationFlows.flowsOf(preparation)) {
                 Process.ProcessNode anchor = flow.output() != null ? flow.output() : flow.nodes().get(0);
                 String outputName = flow.output() == null ? "" : expectedOutputOf(flow.output());
                 if (outputName.isEmpty()) {
@@ -229,23 +223,9 @@ public class RecipeReadinessEvaluator {
 
     // --- graph ---
 
-    /** Weakly connected components, nodes in node order, components ordered by their first node. */
-    private static List<List<Process.ProcessNode>> componentsOf(Process process) {
-        List<Process.ProcessNode> nodes = process.getNodes() == null ? List.of() : process.getNodes().stream().filter(Objects::nonNull).toList();
-        Map<String, String> parent = new HashMap<>();
-        nodes.forEach(node -> parent.put(node.getId(), node.getId()));
-        for (Process.ProcessEdge edge : edgesOf(process)) {
-            if (!parent.containsKey(edge.getSource()) || !parent.containsKey(edge.getTarget())) continue;
-            parent.put(find(parent, edge.getSource()), find(parent, edge.getTarget()));
-        }
-        Map<String, List<Process.ProcessNode>> groups = new LinkedHashMap<>();
-        nodes.forEach(node -> groups.computeIfAbsent(find(parent, node.getId()), key -> new ArrayList<>()).add(node));
-        return new ArrayList<>(groups.values());
-    }
-
     /** Every component except the main one (the largest; the earliest on a tie). */
     private static List<List<Process.ProcessNode>> strayComponents(Process process) {
-        List<List<Process.ProcessNode>> components = componentsOf(process);
+        List<List<Process.ProcessNode>> components = PreparationFlows.componentsOf(process);
         if (components.size() <= 1) return List.of();
         List<Process.ProcessNode> largest = components.get(0);
         for (List<Process.ProcessNode> component : components) {
@@ -253,47 +233,6 @@ public class RecipeReadinessEvaluator {
         }
         List<Process.ProcessNode> mainComponent = largest;
         return components.stream().filter(component -> component != mainComponent).toList();
-    }
-
-    /** Each flow of a Preparation, with the STEPs it ends with and the step naming its output. */
-    private static List<Flow> flowsOf(Process preparation) {
-        Map<String, List<String>> forward = new HashMap<>();
-        for (Process.ProcessEdge edge : edgesOf(preparation)) {
-            if (CONDITION_NO_HANDLE.equals(edge.getSourceHandle()) || Objects.equals(edge.getSource(), edge.getTarget())) continue;
-            forward.computeIfAbsent(edge.getSource(), key -> new ArrayList<>()).add(edge.getTarget());
-        }
-        List<Flow> flows = new ArrayList<>();
-        for (List<Process.ProcessNode> component : componentsOf(preparation)) {
-            Map<String, Process.ProcessNode> byId = new HashMap<>();
-            component.forEach(node -> byId.put(node.getId(), node));
-            List<Process.ProcessNode> endSteps = component.stream()
-                    .filter(node -> node.getKind() == ProcessNodeKind.STEP && !reachesAnotherStep(node, forward, byId))
-                    .toList();
-            Process.ProcessNode output = endSteps.stream().filter(step -> !expectedOutputOf(step).isEmpty()).findFirst()
-                    .orElse(endSteps.isEmpty() ? null : endSteps.get(0));
-            flows.add(new Flow(component, endSteps, output));
-        }
-        return flows;
-    }
-
-    private static boolean reachesAnotherStep(Process.ProcessNode start, Map<String, List<String>> forward, Map<String, Process.ProcessNode> byId) {
-        Set<String> seen = new HashSet<>(Set.of(start.getId()));
-        Deque<String> queue = new ArrayDeque<>(forward.getOrDefault(start.getId(), List.of()));
-        while (!queue.isEmpty()) {
-            String next = queue.poll();
-            if (!seen.add(next)) continue;
-            Process.ProcessNode node = byId.get(next);
-            if (node != null && node.getKind() == ProcessNodeKind.STEP) return true;
-            queue.addAll(forward.getOrDefault(next, List.of()));
-        }
-        return false;
-    }
-
-    private static String find(Map<String, String> parent, String id) {
-        String root = id;
-        while (!parent.get(root).equals(root)) root = parent.get(root);
-        parent.put(id, root);
-        return root;
     }
 
     private static List<Process.ProcessNode> startNodesOf(Process process) {

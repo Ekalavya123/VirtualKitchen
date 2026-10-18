@@ -47,6 +47,40 @@ public class RecipeProcessVisualizationPromptBuilder {
         return prompt.toString();
     }
 
+    /** At most this many panels in one preparation image; longer flows merge their middle steps. */
+    static final int MAX_FLOW_PANELS = 6;
+
+    /**
+     * One image for a whole independent preparation flow (e.g. "Marinated Chicken"), attached to the step that makes
+     * its output. A single step is one scene; several steps become one image laid out as a storyboard of small
+     * panels in cooking order, ending with the finished component.
+     */
+    public String buildFlowUserPrompt(String outputName, List<RecipeProcessVisualizationInput> steps) {
+        String output = StringUtils.hasText(outputName) ? outputName.trim() : "the prepared component";
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("Describe a photorealistic kitchen visualization of one complete preparation: making ")
+                .append(output).append(".\n\n");
+        prompt.append("Preparation steps, in order:\n");
+        for (int i = 0; i < steps.size(); i++) {
+            prompt.append(i + 1).append(". ").append(describeStep(steps.get(i))).append('\n');
+        }
+        prompt.append('\n');
+        if (steps.size() <= 1) {
+            prompt.append("Generate imagePrompt: a single still frame showing this preparation and the finished ")
+                    .append(output).append(".");
+        } else {
+            int panels = Math.min(steps.size(), MAX_FLOW_PANELS) + 1;
+            prompt.append("Compose ONE image laid out as a storyboard of ").append(panels)
+                    .append(" small panels in a clean grid, read left to right and top to bottom: one panel per step in ")
+                    .append("the order above");
+            if (steps.size() > MAX_FLOW_PANELS) prompt.append(" (merge consecutive minor steps to fit)");
+            prompt.append(", and a final panel showing the finished ").append(output)
+                    .append(". Keep the same kitchen, lighting and ingredients across panels; no text or labels.\n\n");
+            prompt.append("Generate imagePrompt: a single image describing that storyboard.");
+        }
+        return prompt.toString();
+    }
+
     private String describeStep(RecipeProcessVisualizationInput step) {
         StringBuilder description = new StringBuilder();
         description.append("action=").append(orNone(step.action()));

@@ -3,15 +3,14 @@
  * the audio element, the narration API and the clock injected, so the playback rules are
  * unit-testable (frontEnd/tests/narrationPlayer.test.ts).
  *
- * In play mode each step works like this: show the step, get its narration (reuse it if READY,
- * otherwise ask the backend to generate it and poll), play it, wait a short dwell, then move on.
- * A step that has no narration (narration off, no text, generation failed, audio error) does not
- * stall the slideshow: it stays on screen for a reading-time dwell instead.
+ * In play mode each step works like this: show the step, play its narration if it is READY (or wait
+ * for one that is already GENERATING), wait a short dwell, then move on. A step that has no
+ * narration (narration off, no text, never generated, failed, audio error) does not stall the
+ * slideshow: it stays on screen for a reading-time dwell instead.
  *
- * Cost rules the player relies on and keeps:
- * - Reading narration state never generates. `ensure` is only called for the step about to play,
- *   plus one prefetch of the next step while the current one plays.
- * - Speed, mute and pause act on the existing audio only and never touch the backend.
+ * Cost rule the player keeps: playing never generates narration. It only reads (`list`); audio is
+ * generated only by an explicit request (AI Recipe Creation's narration task), which shows its cost
+ * first. Speed, mute and pause act on the existing audio only and never touch the backend.
  */
 
 import type { StepNarration } from '../../../../types/narration'
@@ -42,10 +41,9 @@ export interface NarrationAudio {
 
 export type NarrationProgress = { currentTime: number; duration: number }
 
-/** Narration state from the backend for one process's steps. */
+/** Narration state from the backend for one process's steps — read only; playing never generates audio. */
 export interface NarrationSource {
   list(): Promise<StepNarration[]>
-  ensure(stepId: string, force?: boolean): Promise<StepNarration>
 }
 
 export type PlayerStep = { id: string; text?: string }
@@ -129,7 +127,6 @@ export class NarrationPlayer {
   private generation = 0
   private timer: TimerHandle | null = null
   private generatingSince: number | null = null
-  private prefetched = new Set<string>()
   private disposed = false
 
   constructor(options: NarrationPlayerOptions) {
@@ -336,38 +333,29 @@ export class NarrationPlayer {
       this.playUrl(known.audioUrl, generation)
       return
     }
-    if (known && !known.narratable) {
-      this.update({ phase: 'unavailable', failureReason: null })
-      this.scheduleSilentAdvance(step)
+    // Only narration that exists (or is already being generated elsewhere) is used; nothing is requested.
+    if (known?.status === 'GENERATING' || known?.status === 'FAILED') {
+      this.handleNarration(step, known, generation)
       return
     }
-
-    this.update({ phase: 'loading', failureReason: null })
-    this.source.ensure(step.id).then(
-      (narration) => {
-        if (generation !== this.generation) return
-        this.mergeNarrations([narration])
-        this.handleNarration(step, narration, generation)
-      },
-      (error: unknown) => {
-        if (generation !== this.generation) return
-        this.fail(step, error instanceof Error ? error.message : 'Could not load narration')
-      },
-    )
+    this.update({ phase: 'unavailable', failureReason: null })
+    this.scheduleSilentAdvance(step)
   }
 
   private handleNarration(step: PlayerStep, narration: StepNarration, generation: number) {
     if (narration.status === 'READY' && narration.audioUrl) {
       this.generatingSince = null
       this.playUrl(narration.audioUrl, generation)
-    } else if (!narration.narratable) {
+    } else if (!narration.narratable || narration.status === 'NOT_GENERATED' || narration.status === 'STALE') {
+      // Not generated (or out of date): shown for a reading-time dwell — playing never asks for audio.
+      this.generatingSince = null
       this.update({ phase: 'unavailable', failureReason: null })
       this.scheduleSilentAdvance(step)
     } else if (narration.status === 'FAILED') {
       this.generatingSince = null
       this.fail(step, narration.failureReason ?? 'Narration could not be generated')
     } else {
-      // GENERATING (or a transient NOT_GENERATED/STALE right after a claim): wait for it.
+      // GENERATING (started by an explicit request): wait for it.
       this.generatingSince ??= this.now()
       if (this.now() - this.generatingSince > this.generationTimeoutMs) {
         this.generatingSince = null
@@ -393,20 +381,6 @@ export class NarrationPlayer {
     if (generation !== this.generation) return
     this.mergeNarrations(narrations)
     const current = this.state.narrations[step.id]
-    if (current && (current.status === 'NOT_GENERATED' || current.status === 'STALE')) {
-      // The generation died or the text changed under it: ask again (the backend dedupes).
-      this.source.ensure(step.id).then(
-        (narration) => {
-          if (generation !== this.generation) return
-          this.mergeNarrations([narration])
-          this.handleNarration(step, narration, generation)
-        },
-        () => {
-          if (generation === this.generation) this.handleNarration(step, current, generation)
-        },
-      )
-      return
-    }
     this.handleNarration(step, current ?? { stepId: step.id, status: 'GENERATING', narratable: true }, generation)
   }
 
@@ -422,7 +396,6 @@ export class NarrationPlayer {
       () => {
         if (generation !== this.generation) return
         this.update({ phase: 'playing' })
-        this.prefetchNext()
       },
       (error: unknown) => {
         if (generation !== this.generation) return
@@ -498,23 +471,6 @@ export class NarrationPlayer {
     this.abandonStep()
     this.update({ index: this.state.index + 1, phase: 'idle', failureReason: null })
     this.startStep()
-  }
-
-  /** While a step plays, warm up the next one so it is usually READY by the time we get there. */
-  private prefetchNext() {
-    if (!this.source || !this.state.autoplay || !this.state.narrationEnabled) return
-    const nextStep = this.steps[this.state.index + 1]
-    if (!nextStep || this.prefetched.has(nextStep.id)) return
-    const known = this.state.narrations[nextStep.id]
-    if (known && (known.status === 'READY' || known.status === 'GENERATING' || !known.narratable)) return
-    this.prefetched.add(nextStep.id)
-    this.source.ensure(nextStep.id).then(
-      (narration) => this.mergeNarrations([narration]),
-      () => {
-        // The step will be requested again when it is reached.
-        this.prefetched.delete(nextStep.id)
-      },
-    )
   }
 
   /** Stops whatever the current step was doing and invalidates its pending async work. */

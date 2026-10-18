@@ -95,13 +95,17 @@ public class AdminAiAnalyticsController {
                 .orElseGet(() -> notFound("No analytics record " + id));
     }
 
-    /** Grouped metrics; {@code groupBy} is a comma-separated list of dimensions (e.g. {@code operationContext,model}). */
+    /**
+     * Grouped metrics; {@code groupBy} is a comma-separated list of dimensions (e.g. {@code operationContext,model}).
+     * Empty or absent: only the totals over every matching request (one group).
+     */
     @GetMapping("/aggregate")
     public ApiResponse<AnalyticsQueryService.AggregateResult> aggregate(
             @ModelAttribute AnalyticsFilter filter,
-            @RequestParam(defaultValue = "operationContext") String groupBy) {
+            @RequestParam(required = false) String groupBy) {
         CurrentUser.requireAdmin();
-        return ok(queryService.aggregate(filter, Arrays.stream(groupBy.split(",")).map(String::trim).toList()));
+        List<String> dims = groupBy == null ? List.of() : Arrays.stream(groupBy.split(",")).map(String::trim).toList();
+        return ok(queryService.aggregate(filter, dims));
     }
 
     @GetMapping("/overview")

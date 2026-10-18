@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { ClipboardEvent, KeyboardEvent, MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { formatAnnotation, parseDescription, type Annotation, type AnnotationLabelResolver } from '../../../model/stepAnnotations'
+import { defaultChipText, type ChipText } from './chipText'
 import './annotations.css'
 
 /**
@@ -35,6 +36,8 @@ type AnnotatedTextEditorProps = {
   getOptions: (query: string) => AnnotationOption[]
   resolveLabel: AnnotationLabelResolver
   chipState?: (annotation: Annotation) => ChipState
+  /** How a chip reads (e.g. an ingredient with its amount); display only — the saved label stays the words. */
+  chipText?: ChipText
   onChipActivate?: (annotation: Annotation, anchor: DOMRect) => void
   placeholder?: string
   ariaLabel?: string
@@ -44,7 +47,7 @@ type AnnotatedTextEditorProps = {
 /** An "@query" being typed; its text node is kept in a ref (DOM nodes don't belong in state). */
 type Mention = { start: number; end: number; query: string; rect: DOMRect }
 
-const KIND_PREFIX: Record<Annotation['kind'], string> = { ingredient: '', prepared: 'prepared · ', step: '↳ ' }
+
 
 const annotationOfChip = (element: HTMLElement): Annotation | null => {
   const { annotationKind, annotationId, annotationLabel } = element.dataset
@@ -55,10 +58,13 @@ const annotationOfChip = (element: HTMLElement): Annotation | null => {
 const chipsOf = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>('[data-annotation-kind]')]
 
 /** Gives a chip its live name and state; the live name also becomes the snapshot label written back. */
-const paintChip = (chip: HTMLElement, annotation: Annotation, resolveLabel: AnnotationLabelResolver, chipState?: (annotation: Annotation) => ChipState) => {
+const paintChip = (
+  chip: HTMLElement, annotation: Annotation, resolveLabel: AnnotationLabelResolver,
+  chipState?: (annotation: Annotation) => ChipState, chipText?: ChipText,
+) => {
   const live = (resolveLabel(annotation) || '').trim() || annotation.label
   const missing = chipState?.(annotation) === 'missing'
-  const text = `${KIND_PREFIX[annotation.kind]}${live}`
+  const text = chipText?.(annotation, live) || defaultChipText(annotation, live)
   if (chip.textContent !== text) chip.textContent = text
   if (chip.dataset.annotationLabel !== live) chip.dataset.annotationLabel = live
   const className = `annotation-chip annotation-chip--${annotation.kind}${missing ? ' is-missing' : ''}`
@@ -66,13 +72,16 @@ const paintChip = (chip: HTMLElement, annotation: Annotation, resolveLabel: Anno
   chip.title = missing ? 'This step no longer uses it' : annotation.kind === 'prepared' ? 'Prepared component — click to open its flow' : 'Click to edit'
 }
 
-const createChip = (annotation: Annotation, resolveLabel: AnnotationLabelResolver, chipState?: (annotation: Annotation) => ChipState) => {
+const createChip = (
+  annotation: Annotation, resolveLabel: AnnotationLabelResolver,
+  chipState?: (annotation: Annotation) => ChipState, chipText?: ChipText,
+) => {
   const chip = document.createElement('span')
   chip.contentEditable = 'false'
   chip.dataset.annotationKind = annotation.kind
   chip.dataset.annotationId = annotation.id
   chip.dataset.annotationLabel = annotation.label
-  paintChip(chip, annotation, resolveLabel, chipState)
+  paintChip(chip, annotation, resolveLabel, chipState, chipText)
   return chip
 }
 
@@ -119,6 +128,7 @@ export default function AnnotatedTextEditor({
   getOptions,
   resolveLabel,
   chipState,
+  chipText,
   onChipActivate,
   placeholder,
   ariaLabel,
@@ -139,10 +149,10 @@ export default function AnnotatedTextEditor({
     const root = rootRef.current
     if (!root || value === lastValue.current) return
     root.replaceChildren(...parseDescription(value).map((segment) =>
-      (segment.type === 'text' ? document.createTextNode(segment.text) : createChip(segment, resolveLabel, chipState))))
+      (segment.type === 'text' ? document.createTextNode(segment.text) : createChip(segment, resolveLabel, chipState, chipText))))
     ensureTrailingFiller(root)
     lastValue.current = value
-  }, [value, resolveLabel, chipState])
+  }, [value, resolveLabel, chipState, chipText])
 
   // Names and states change without the text changing (a renamed output, a removed target).
   useLayoutEffect(() => {
@@ -150,7 +160,7 @@ export default function AnnotatedTextEditor({
     if (!root) return
     chipsOf(root).forEach((chip) => {
       const annotation = annotationOfChip(chip)
-      if (annotation) paintChip(chip, annotation, resolveLabel, chipState)
+      if (annotation) paintChip(chip, annotation, resolveLabel, chipState, chipText)
     })
   })
 
@@ -203,7 +213,7 @@ export default function AnnotatedTextEditor({
     const text = node.nodeValue ?? ''
     const afterText = text.slice(mention.end)
     node.nodeValue = text.slice(0, mention.start)
-    const chip = createChip(option.annotation, resolveLabel, chipState)
+    const chip = createChip(option.annotation, resolveLabel, chipState, chipText)
     const after = document.createTextNode(afterText.startsWith(' ') ? afterText : ` ${afterText}`)
     node.after(chip, after)
     const selection = window.getSelection()
@@ -218,7 +228,7 @@ export default function AnnotatedTextEditor({
       const annotation = annotationOfChip(chip) ?? option.annotation
       requestAnimationFrame(() => onChipActivate(annotation, chip.getBoundingClientRect()))
     }
-  }, [mention, resolveLabel, chipState, emit, onChipActivate])
+  }, [mention, resolveLabel, chipState, chipText, emit, onChipActivate])
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (mention && options.length > 0) {

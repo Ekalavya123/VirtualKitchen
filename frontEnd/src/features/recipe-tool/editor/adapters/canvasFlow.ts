@@ -88,7 +88,9 @@ export const normalizeFlowNode = (node: FlowNodePayload): Node => {
   // previously resized size immediately, instead of falling back to their default dimensions.
   const measured = node.measured as Node['measured']
   const width = node.width ?? measured?.width
-  const height = node.height ?? measured?.height
+  // A step card is as tall as its content (only its width is resizable), so a height saved from an earlier,
+  // taller version of the card never leaves blank space at its bottom.
+  const height = nodeType === RECIPE_NODE_TYPES.step ? undefined : node.height ?? measured?.height
 
   return {
     id: node.id,

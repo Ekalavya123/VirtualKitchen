@@ -42,7 +42,7 @@ import {
   unwrapAnnotations,
 } from './stepAnnotations'
 import { deriveStepTitle } from './stepTitle'
-import { CUSTOM_UNIT_ID, resolveUnitId, type UnitId } from '../../../shared/catalog/unitCatalog'
+import { CUSTOM_UNIT_ID, formatQuantityWithUnit, isQuantifiableUnit, resolveUnitId, type UnitId } from '../../../shared/catalog/unitCatalog'
 import {
   buildDurationLabel,
   buildTemperatureLabel,
@@ -456,6 +456,17 @@ export const getStepAnnotationTargets = (step: RecipeStepFields): StepAnnotation
 /** The index of the Action On ingredient an ingredient annotation points at (-1 when none). */
 export const findAnnotatedIngredientIndex = (step: RecipeStepFields, annotationId: string) =>
   step.actionOn.ingredients.findIndex((entry) => ingredientAnnotationId(entry).toLowerCase() === annotationId.toLowerCase())
+
+/**
+ * How an ingredient annotation reads with its amount, taken from the step's Action On entry (amounts are never stored
+ * in the text): "2 onions", "1 cup water", "salt to taste". Just the words when no amount is stated.
+ */
+export const annotatedIngredientText = (step: RecipeStepFields, annotationId: string, words: string) => {
+  const entry = step.actionOn.ingredients[findAnnotatedIngredientIndex(step, annotationId)]
+  const amount = entry ? formatQuantityWithUnit(entry.quantity, entry.unit, entry.customUnit) : ''
+  if (!amount) return words
+  return isQuantifiableUnit(entry.unit) ? `${amount} ${words}` : `${words} ${amount}`
+}
 
 /**
  * The step with an annotation's target in its Action On — added (without an amount, in the ingredient's default

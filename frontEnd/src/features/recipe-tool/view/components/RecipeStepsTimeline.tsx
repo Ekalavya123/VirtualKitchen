@@ -177,10 +177,11 @@ function OpenInEditor({ processId, nodeId, onOpenStep, title = 'Open this step i
  * cooking order, the output it makes, and one way into the editor for the whole flow.
  */
 function FlowItem({ flow, navigate, onOpenStep }: { flow: RecipeTimelineFlow; navigate: Navigate; onOpenStep: OpenStep }) {
+  const hasImage = Boolean(flow.imageUrl)
   return (
     <li id={flow.anchorId} className="rp-timeline-item">
       <span className="rp-step-number" aria-hidden>{flow.number || '?'}</span>
-      <article className="rp-card rp-step-card rp-flow-card" aria-label={flow.title}>
+      <article className={`rp-card rp-step-card rp-flow-card${hasImage ? ' has-image' : ''}`} aria-label={flow.title}>
         <div className="rp-step-body">
           <h4 className="rp-step-heading"><span className="rp-step-inline-icon" aria-hidden>🔪</span>{flow.title}</h4>
           <ul className="rp-flow-points">
@@ -200,6 +201,13 @@ function FlowItem({ flow, navigate, onOpenStep }: { flow: RecipeTimelineFlow; na
           </div>
           <OpenInEditor processId={flow.processId} nodeId={flow.nodeId} onOpenStep={onOpenStep} title="Open this preparation in the editor" />
         </div>
+
+        {/* One image for the whole preparation (a storyboard of its steps when it has several). */}
+        {hasImage && (
+          <div className="rp-step-media">
+            <RecipeImage src={flow.imageUrl} alt="" fallbackIcon="🔪" />
+          </div>
+        )}
       </article>
     </li>
   )

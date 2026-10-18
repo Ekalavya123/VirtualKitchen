@@ -614,7 +614,7 @@ public class RecipeAiWorkflowService {
         return names;
     }
 
-    /** Saved steps still missing an image (resp. usable narration), which is what approval would pay for. */
+    /** Images still missing (per MAIN step / Preparation flow) and steps without usable narration: what approval would pay for. */
     private RecipeAiWorkflowEstimator.StepCounts remainingStepCounts(Long userId, Long recipeId, Map<Long, List<String>> steps) {
         int visual = 0;
         int narration = 0;
@@ -622,11 +622,16 @@ public class RecipeAiWorkflowService {
             if (entry.getValue().isEmpty()) {
                 continue;
             }
+            // Images are per MAIN step but per Preparation flow (one image for each flow's output step).
             Set<String> withImage = new HashSet<>();
-            processRepository.findById(entry.getKey()).ifPresent(process -> process.getNodes().stream()
-                    .filter(node -> hasImage(node.getData()))
-                    .forEach(node -> withImage.add(node.getId())));
-            visual += (int) entry.getValue().stream().filter(stepId -> !withImage.contains(stepId)).count();
+            List<String> imageTargets = new ArrayList<>();
+            processRepository.findById(entry.getKey()).ifPresent(process -> {
+                process.getNodes().stream()
+                        .filter(node -> hasImage(node.getData()))
+                        .forEach(node -> withImage.add(node.getId()));
+                imageTargets.addAll(RecipeProcessVisualizationService.visualTargetNodeIds(process));
+            });
+            visual += (int) imageTargets.stream().filter(nodeId -> !withImage.contains(nodeId)).count();
             try {
                 narration += (int) narrationService.list(userId, recipeId, entry.getKey()).stream()
                         .filter(dto -> dto.isNarratable() && !"READY".equals(dto.getStatus()))

@@ -6,6 +6,9 @@ import com.processVisualisation.virtualKitchen.ai.platform.registry.AiCapability
 import com.processVisualisation.virtualKitchen.ai.platform.registry.AiModelProperties;
 import com.processVisualisation.virtualKitchen.ai.platform.registry.ModelDefinition;
 import com.processVisualisation.virtualKitchen.ai.platform.registry.ModelTier;
+import com.processVisualisation.virtualKitchen.auth.model.User;
+import com.processVisualisation.virtualKitchen.recipe.model.RecipeTemplate;
+import org.bson.Document;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
@@ -84,5 +87,28 @@ class AnalyticsOptionsTest {
 
         assertThat(service(mongo).filterOptions().values().get("model"))
                 .containsExactly("gemini-flash", "ollama-qwen", "retired-model");
+    }
+
+    @Test
+    void usersAndRecipes_areLabelledByName_withAFallbackForMissingDocuments() {
+        MongoTemplate mongo = mock(MongoTemplate.class);
+        when(mongo.findDistinct(any(Query.class), anyString(), eq(AiRequestAnalytics.class), eq(Object.class))).thenReturn(List.of());
+        when(mongo.findDistinct(any(Query.class), eq("userId"), eq(AiRequestAnalytics.class), eq(Object.class)))
+                .thenReturn(List.of(7L, 3L));
+        when(mongo.findDistinct(any(Query.class), eq("recipeId"), eq(AiRequestAnalytics.class), eq(Object.class)))
+                .thenReturn(List.of("12", "99"));
+        when(mongo.getCollectionName(User.class)).thenReturn("users");
+        when(mongo.getCollectionName(RecipeTemplate.class)).thenReturn("process_template");
+        when(mongo.find(any(Query.class), eq(Document.class), eq("users")))
+                .thenReturn(List.of(new Document("_id", 7L).append("name", "Zoe"), new Document("_id", 3L).append("name", "Asha")));
+        when(mongo.find(any(Query.class), eq(Document.class), eq("process_template")))
+                .thenReturn(List.of(new Document("_id", 12L).append("name", "Dal tadka")));
+
+        AnalyticsQueryService.AnalyticsOptions options = service(mongo).filterOptions();
+
+        assertThat(options.users()).containsExactly(
+                new AnalyticsQueryService.Choice("3", "Asha"), new AnalyticsQueryService.Choice("7", "Zoe"));
+        assertThat(options.recipes()).containsExactly(
+                new AnalyticsQueryService.Choice("12", "Dal tadka"), new AnalyticsQueryService.Choice("99", "Recipe #99 (deleted)"));
     }
 }

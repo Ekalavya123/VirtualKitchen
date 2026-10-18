@@ -13,10 +13,12 @@ export type GenerateVisualsStatus = { type: 'success' | 'error' | 'info'; text: 
  * is followed by the app-level JobTracker (keyed by process), so it keeps running, and its progress stays
  * visible, across process switches, page navigation and reloads; only the start request is local.
  */
-export function useProcessVisuals({ recipeId, processId, stepCount, applyStep }: {
+export function useProcessVisuals({ recipeId, processId, stepCount, unit = 'steps', applyStep }: {
   recipeId: number
   processId: number
+  /** How many images a run makes: one per step, or one per flow in the Preparation. */
   stepCount: number
+  unit?: 'steps' | 'flows'
   applyStep: (step: RecipeProcessVisualizationStepResult) => void
 }) {
   const jobTracker = useJobTracker()
@@ -73,14 +75,14 @@ export function useProcessVisuals({ recipeId, processId, stepCount, applyStep }:
     const { job } = visualsJob
     if (visualsJob.pollError) return { type: 'error', text: `Lost track of visuals generation: ${visualsJob.pollError}` }
     if (isTrackedJobActive(visualsJob)) {
-      const progress = `Generating visuals… ${job.completedSteps}/${job.totalSteps} steps`
+      const progress = `Generating visuals… ${job.completedSteps}/${job.totalSteps} ${unit}`
       return { type: 'info', text: visualsJob.connectionLost ? `${progress} (connection lost, retrying…)` : progress }
     }
     const successCount = job.steps.filter((step) => step.success).length
-    if (job.status === 'COMPLETED') return { type: 'success', text: `Generated visuals for all ${job.totalSteps} steps` }
-    if (job.status === 'COMPLETED_WITH_ERRORS') return { type: 'error', text: `Generated ${successCount}/${job.totalSteps} steps — ${job.totalSteps - successCount} failed` }
+    if (job.status === 'COMPLETED') return { type: 'success', text: `Generated visuals for all ${job.totalSteps} ${unit}` }
+    if (job.status === 'COMPLETED_WITH_ERRORS') return { type: 'error', text: `Generated ${successCount}/${job.totalSteps} ${unit} — ${job.totalSteps - successCount} failed` }
     return { type: 'error', text: job.errorMessage || 'Unable to generate visuals right now.' }
-  }, [message, visualsJob])
+  }, [message, visualsJob, unit])
 
   const progressLabel = visualsJob && isTrackedJobActive(visualsJob)
     ? `Generating… ${visualsJob.job.completedSteps}/${visualsJob.job.totalSteps}`

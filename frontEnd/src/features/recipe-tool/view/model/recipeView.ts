@@ -144,6 +144,8 @@ export type RecipeTimelineFlow = {
   /** Where "Open in editor" goes: the step that makes the flow's output (else its first node). */
   processId: number
   nodeId: string
+  /** The flow's one generated image (stored on the step that makes its output), if any. */
+  imageUrl?: string
   /** "Prepare <output>" (or "Preparation flow N" while the flow has no named output). */
   title: string
   outputName: string
@@ -666,12 +668,14 @@ export const buildRecipePresentation = (processes: Process[]): RecipePresentatio
     const flows = flowsById.get(process.id)?.map<RecipeTimelineFlow>((flow) => {
       const flowItems = flow.nodeIds.map((id) => itemByNode.get(id) as RecipeTimelineItem)
       const firstStep = flowItems.find((item) => item.kind === 'step')
+      const outputItem = flow.outputNodeId ? itemByNode.get(flow.outputNodeId) : undefined
       return {
         key: `${process.id}:flow-${flow.index}`,
         anchorId: `recipe-flow-${process.id}-${flow.index}`,
         number: firstStep?.kind === 'step' ? firstStep.number : 0,
         processId: process.id,
         nodeId: flow.outputNodeId ?? flow.nodeIds[0],
+        imageUrl: outputItem?.kind === 'step' ? outputItem.imageUrl : undefined,
         title: flow.title,
         outputName: flow.outputName,
         stepCount: flowItems.filter((item) => item.kind === 'step').length,
