@@ -88,6 +88,11 @@ type RecipeStepNodeProps = {
 
 // Resizing is bounded below only — a card must stay readable, but may grow as large as wanted.
 const MIN_WIDTH = 240
+/** A titled section of the card (Description, Expected): always present, so every card has the same shape. */
+const SECTION_STYLE: CSSProperties = { display: 'flex', flexDirection: 'column', gap: 3, borderTop: '1px dashed var(--flow-border)', paddingTop: 6 }
+const SECTION_HEADING_STYLE: CSSProperties = { fontSize: 9, fontWeight: 800, color: 'var(--flow-text)', textTransform: 'uppercase', letterSpacing: '0.03em' }
+const NOT_PROVIDED_STYLE: CSSProperties = { fontSize: 10, color: 'var(--flow-text-subtle)', fontStyle: 'italic' }
+
 /** Smallest card height; a card is otherwise exactly as tall as its content. */
 const MIN_HEIGHT = 60
 
@@ -289,32 +294,36 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
             </div>
           )}
 
-          {step.actionDescription.trim() ? (
-            <AnnotatedText
-              text={step.actionDescription.trim()}
-              resolveLabel={resolveLabel}
-              chipState={chipState}
-              chipText={chipText}
-              onOpenPrepared={openPreparedAnnotation}
-              style={{ fontSize: 10.5, color: 'var(--flow-text-muted)', lineHeight: 1.55 }}
-            />
-          ) : (
-            <div style={{ fontSize: 10.5, color: 'var(--flow-text-subtle)', fontStyle: 'italic' }}>No description yet</div>
-          )}
+          {/* Description — always shown, like Expected below, so every card has the same shape. */}
+          <div style={SECTION_STYLE}>
+            <span style={SECTION_HEADING_STYLE}>Description</span>
+            {step.actionDescription.trim() ? (
+              <AnnotatedText
+                text={step.actionDescription.trim()}
+                resolveLabel={resolveLabel}
+                chipState={chipState}
+                chipText={chipText}
+                onOpenPrepared={openPreparedAnnotation}
+                style={{ fontSize: 10.5, color: 'var(--flow-text-muted)', lineHeight: 1.55 }}
+              />
+            ) : (
+              <span style={NOT_PROVIDED_STYLE}>Not provided</span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Expected Output — pulled out of the image/text row so it always reads full width. */}
-      {step.expectedOutput.trim() && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, borderTop: '1px dashed var(--flow-border)', paddingTop: 6 }}>
-          <span style={{ fontSize: 9, fontWeight: 800, color: 'var(--flow-text)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-            Expected
-          </span>
+      {/* Expected Output — pulled out of the image/text row so it always reads full width; always shown. */}
+      <div style={SECTION_STYLE}>
+        <span style={SECTION_HEADING_STYLE}>Expected</span>
+        {step.expectedOutput.trim() ? (
           <span style={{ fontSize: 10, color: 'var(--flow-text-muted)', lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
             {step.expectedOutput.trim()}
           </span>
-        </div>
-      )}
+        ) : (
+          <span style={NOT_PROVIDED_STYLE}>Not provided</span>
+        )}
+      </div>
 
       <Handle
         type="source"
