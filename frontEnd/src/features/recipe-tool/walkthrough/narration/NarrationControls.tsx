@@ -72,7 +72,7 @@ const describe = (state: NarrationPlayerState, stepId: string | undefined, unava
     default:
       if (known?.status === 'READY') return { tone: 'muted', text: 'Narration ready' }
       if (known?.status === 'GENERATING') return { tone: 'info', text: 'Generating narration…' }
-      if (known?.status === 'STALE') return { tone: 'muted', text: 'Step changed. Narration will be regenerated when played' }
+      if (known?.status === 'STALE') return { tone: 'muted', text: 'Step changed since its narration was made' }
       if (known && !known.narratable) return { tone: 'muted', text: 'No narration for this step' }
       return { tone: 'muted', text: '' }
   }

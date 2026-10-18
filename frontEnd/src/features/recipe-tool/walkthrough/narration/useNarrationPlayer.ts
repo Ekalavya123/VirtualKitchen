@@ -1,5 +1,4 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { httpStatusOf } from '../../../../api/client'
 import { StepNarrationApi } from '../../../../api/narrationApi'
 import { createHtmlNarrationAudio } from './narrationAudio'
 import { NarrationPlayer, PLAYBACK_RATES, type NarrationPlayerState, type NarrationSource, type PlayerStep } from './narrationPlayer'
@@ -35,19 +34,6 @@ const savePrefs = (prefs: NarrationPrefs) => {
   }
 }
 
-/** A failed narration request as the viewer should read it (the raw HTTP text means nothing to them). */
-const describeRequestError = (error: unknown): Error => {
-  const status = httpStatusOf(error)
-  const message =
-    status === 401 || status === 403 ? 'narration is not available for your account on this recipe'
-      : status === 404 ? 'this server does not provide narration'
-        : status === 429 ? 'narration is busy right now, try again shortly'
-          : status === 503 ? 'no speech provider is available'
-            : status != null && status >= 500 ? 'the speech service failed, try again later'
-              : 'could not reach the narration service'
-  return new Error(message, { cause: error })
-}
-
 /** A recipe-wide step id: the step's process and its node id, as `${processId}:${nodeId}`. */
 const recipeStepId = (processId: number, nodeId: string) => `${processId}:${nodeId}`
 
@@ -77,17 +63,6 @@ const recipeWideSource = (
       const perProcess = await Promise.all(processIds.map(async (processId) =>
         (await StepNarrationApi.list(recipeId, processId)).map((narration) => ({ ...narration, stepId: recipeStepId(processId, narration.stepId) }))))
       return [...perProcess.flat().filter((narration) => !silent.has(narration.stepId)), ...[...silent].map(silentNarration)]
-    },
-    ensure: async (id, force) => {
-      if (silent.has(id)) return silentNarration(id)
-      await gate
-      const { processId, stepId } = splitRecipeStepId(id)
-      if (!(processId > 0)) throw new Error('this part of the recipe is not saved yet')
-      try {
-        return { ...(await StepNarrationApi.ensure(recipeId, processId, stepId, force)), stepId: id }
-      } catch (error) {
-        throw describeRequestError(error)
-      }
     },
   }
 }
@@ -135,14 +110,6 @@ export function useNarrationPlayer({ recipeId, processId, steps, silentStepIds, 
             list: async () => {
               await gate
               return StepNarrationApi.list(recipeId, processId)
-            },
-            ensure: async (stepId, force) => {
-              await gate
-              try {
-                return await StepNarrationApi.ensure(recipeId, processId, stepId, force)
-              } catch (error) {
-                throw describeRequestError(error)
-              }
             },
           }
     return {

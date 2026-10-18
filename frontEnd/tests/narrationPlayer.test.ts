@@ -79,24 +79,17 @@ const ready = (stepId: string): StepNarration => ({
 const generating = (stepId: string): StepNarration => ({ stepId, status: 'GENERATING', narratable: true })
 const missing = (stepId: string): StepNarration => ({ stepId, status: 'NOT_GENERATED', narratable: true })
 
-/** A backend whose narration state the test sets per step; counts every call. */
+/**
+ * A backend whose narration state the test sets per step; counts every call. It can only be read: the player's
+ * source has no way to generate narration, so playing can never spend credits on it.
+ */
 class FakeSource implements NarrationSource {
   narrations = new Map<string, StepNarration>()
-  ensureCalls: string[] = []
   listCalls = 0
-  /** What `ensure` turns a step into (default: READY immediately). */
-  onEnsure: (stepId: string) => StepNarration = (stepId) => ready(stepId)
 
   async list() {
     this.listCalls += 1
     return Array.from(this.narrations.values())
-  }
-  async ensure(stepId: string) {
-    this.ensureCalls.push(stepId)
-    const current = this.narrations.get(stepId)
-    const result = current?.status === 'READY' ? current : this.onEnsure(stepId)
-    this.narrations.set(stepId, result)
-    return result
   }
 }
 
@@ -154,7 +147,6 @@ describe('NarrationPlayer', () => {
     assert.equal(state().index, 2)
     assert.equal(state().finished, true)
     assert.equal(state().autoplay, false)
-    assert.deepEqual(source.ensureCalls, [], 'READY narration is reused, never re-requested')
   })
 
   it('pauses and resumes the same audio without reloading it', async () => {
@@ -234,7 +226,6 @@ describe('NarrationPlayer', () => {
     player.play()
     await flushMicrotasks()
     const listCalls = source.listCalls
-    const ensureCalls = [...source.ensureCalls] // includes the prefetch of the next step
 
     player.setPlaybackRate(1.2)
     await flushMicrotasks()
@@ -243,19 +234,32 @@ describe('NarrationPlayer', () => {
     assert.equal(state().playbackRate, 1.2)
     assert.equal(state().phase, 'playing')
     assert.equal(source.listCalls, listCalls)
-    assert.deepEqual(source.ensureCalls, ensureCalls)
     assert.equal(audio.loads.length, 1, 'the same audio keeps playing; nothing is regenerated or reloaded')
   })
 
-  it('requests missing narration, polls while it generates, then plays it', async () => {
+  it('never generates narration: a step without it is shown for a reading-time dwell', async () => {
     const { clock, audio, source, player, state } = setup()
-    source.onEnsure = generating
+    source.narrations.set('a', missing('a'))
+    await player.init()
+    const listCalls = source.listCalls
+
+    player.play()
+    await flushMicrotasks()
+    assert.equal(state().phase, 'unavailable')
+    assert.equal(audio.src, null)
+    await clock.advance(2000)
+    assert.equal(state().index, 1, 'the slideshow moves on without audio')
+    assert.equal(source.listCalls, listCalls, 'nothing was asked of the backend while playing')
+  })
+
+  it('waits for narration that is already being generated, then plays it', async () => {
+    const { clock, audio, source, player, state } = setup()
+    source.narrations.set('a', generating('a'))
     await player.init()
 
     player.play()
     await flushMicrotasks()
     assert.equal(state().phase, 'generating')
-    assert.deepEqual(source.ensureCalls, ['a'])
 
     await clock.advance(1000)
     assert.equal(state().phase, 'generating', 'still generating after the first poll')
@@ -264,12 +268,23 @@ describe('NarrationPlayer', () => {
     await clock.advance(1000)
     assert.equal(state().phase, 'playing')
     assert.equal(audio.src, 'https://audio.example/a.wav')
-    assert.deepEqual(source.ensureCalls, ['a', 'b'], 'only the next step is prefetched, once')
+  })
+
+  it('treats narration that is out of date as missing, without regenerating it', async () => {
+    const { clock, source, player, state } = setup()
+    source.narrations.set('a', { stepId: 'a', status: 'STALE', narratable: true })
+    await player.init()
+
+    player.play()
+    await flushMicrotasks()
+    assert.equal(state().phase, 'unavailable')
+    await clock.advance(2000)
+    assert.equal(state().index, 1)
   })
 
   it('falls back to a reading-time dwell when narration failed', async () => {
     const { clock, source, player, state } = setup()
-    source.onEnsure = (stepId) => ({ stepId, status: 'FAILED', narratable: true, failureReason: 'quota exceeded' })
+    source.narrations.set('a', { stepId: 'a', status: 'FAILED', narratable: true, failureReason: 'quota exceeded' })
     await player.init()
 
     player.play()
@@ -285,7 +300,7 @@ describe('NarrationPlayer', () => {
 
   it('gives up on generation that takes too long', async () => {
     const { clock, source, player, state } = setup()
-    source.onEnsure = generating
+    source.narrations.set('a', generating('a'))
     await player.init()
     player.play()
     await flushMicrotasks()
@@ -313,9 +328,10 @@ describe('NarrationPlayer', () => {
     assert.equal(audio.src, 'https://audio.example/a.wav')
   })
 
-  it('only shows the step when browsing outside play mode, and generates nothing', async () => {
+  it('only shows the step when browsing outside play mode, and asks the backend for nothing', async () => {
     const { audio, source, player, state } = setup()
     await player.init()
+    const listCalls = source.listCalls
 
     player.next()
     await flushMicrotasks()
@@ -323,23 +339,27 @@ describe('NarrationPlayer', () => {
     assert.equal(state().index, 1)
     assert.equal(state().phase, 'idle')
     assert.equal(audio.src, null)
-    assert.deepEqual(source.ensureCalls, [])
+    assert.equal(source.listCalls, listCalls)
   })
 
   it('ignores a late narration answer for a step the user already left', async () => {
-    const { audio, source, player, state } = setup()
-    const slow = deferred<StepNarration>()
-    source.ensure = async (stepId: string) => {
-      source.ensureCalls.push(stepId)
-      return stepId === 'a' ? slow.promise : ready(stepId)
-    }
+    const { clock, audio, source, player, state } = setup()
+    source.narrations.set('a', generating('a'))
+    source.narrations.set('b', ready('b'))
     await player.init()
     player.play()
     await flushMicrotasks()
 
+    // A's next poll answers late, after the user has moved on to B.
+    const slow = deferred<StepNarration[]>()
+    source.list = async () => {
+      source.listCalls += 1
+      return slow.promise
+    }
+    await clock.advance(1000)
     player.next()
     await flushMicrotasks()
-    slow.resolve(ready('a'))
+    slow.resolve([ready('a'), ready('b')])
     await flushMicrotasks()
 
     assert.equal(state().index, 1)
@@ -371,7 +391,6 @@ describe('NarrationPlayer', () => {
     player.play()
     await flushMicrotasks()
     assert.equal(state().phase, 'unavailable')
-    assert.deepEqual(source.ensureCalls, [])
     await clock.advance(2000)
     assert.equal(state().index, 1)
   })
@@ -387,7 +406,6 @@ describe('NarrationPlayer', () => {
     assert.equal(audio.src, null)
     await clock.advance(2000)
     assert.equal(state().index, 1)
-    assert.deepEqual(source.ensureCalls, [])
   })
 
   it('works without a narration source (unsaved process) as a timed slideshow', async () => {
