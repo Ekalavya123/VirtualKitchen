@@ -325,6 +325,14 @@ export interface AnalyticsOptions {
   /** Currency the UI shows costs in, and the recorded rate from stored USD costs. */
   displayCurrency: string
   usdToDisplay: number
+  /** Users and recipes that have recorded AI requests, labelled by name. */
+  users: AnalyticsChoice[]
+  recipes: AnalyticsChoice[]
+}
+
+export interface AnalyticsChoice {
+  id: string
+  label: string
 }
 
 export type QueryParams = Record<string, string | number | boolean>

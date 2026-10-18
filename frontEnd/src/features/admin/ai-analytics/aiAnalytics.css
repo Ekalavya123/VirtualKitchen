@@ -87,6 +87,35 @@
 .aia-chip-row { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: flex-start; }
 .aia-filter-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr)); gap: 0.75rem; }
 .aia-applied { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.6rem; }
+
+/* Filter dropdowns */
+.aia-dropdown-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; margin-top: 0.75rem; }
+.aia-dropdown { position: relative; display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; width: 150px; }
+.aia-dropdown--wide { width: 210px; }
+.aia-dropdown-label { font-size: 0.75rem; font-weight: 600; color: var(--flow-text-muted); }
+.aia-dropdown-button {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; width: 100%;
+  border: 1px solid var(--flow-border-strong); background: var(--flow-surface); color: var(--flow-text);
+  border-radius: var(--flow-radius-sm); padding: 0.4rem 0.6rem; font: inherit; font-size: 0.85rem; cursor: pointer; text-align: left;
+}
+.aia-dropdown-button:hover { border-color: var(--flow-accent); }
+.aia-dropdown-button.is-set { border-color: var(--flow-accent); background: var(--flow-accent-soft); color: var(--flow-accent-strong); font-weight: 600; }
+.aia-dropdown-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aia-dropdown-menu {
+  position: absolute; left: 0; top: calc(100% + 4px); z-index: 20; display: flex; flex-direction: column; gap: 0.35rem;
+  padding: 0.6rem 0.8rem; background: var(--flow-surface); border: 1px solid var(--flow-border); border-radius: var(--flow-radius-md);
+  box-shadow: var(--flow-shadow-panel); min-width: 200px; max-height: 320px; overflow-y: auto;
+}
+.aia-dropdown-reset { align-self: center; margin-top: 1rem; }
+@media (max-width: 640px) {
+  .aia-dropdown, .aia-dropdown--wide { width: calc(50% - 0.3rem); }
+}
+
+/* Summary of all matching requests */
+.aia-summary { margin-top: 1.75rem; padding-top: 1.25rem; border-top: 1px solid var(--flow-border); display: flex; flex-direction: column; gap: 0.75rem; }
+.aia-summary h2 { margin: 0; font-size: 1rem; }
+.aia-summary .aia-stats + .aia-stats { margin-top: 0.75rem; }
+.aia-summary .is-loading { opacity: 0.6; }
 @media (max-width: 640px) {
   .aia-filter-group { grid-template-columns: 1fr; }
 }
