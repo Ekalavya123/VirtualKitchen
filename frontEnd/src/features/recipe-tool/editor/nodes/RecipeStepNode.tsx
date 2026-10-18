@@ -88,7 +88,8 @@ type RecipeStepNodeProps = {
 
 // Resizing is bounded below only — a card must stay readable, but may grow as large as wanted.
 const MIN_WIDTH = 240
-const MIN_HEIGHT = 140
+/** Smallest card height; a card is otherwise exactly as tall as its content. */
+const MIN_HEIGHT = 60
 
 const BORDER_WIDTH = 1.5
 const ACCENT_BORDER_WIDTH = 5
@@ -108,7 +109,7 @@ const HANDLE_PLACEMENT: Record<'top' | 'left' | 'right' | 'bottom', { position: 
   right: { position: Position.Right, style: { top: '50%', right: 0, transform: 'translate(50%, -50%)' } },
 }
 
-export default function RecipeStepNode({ selected, style: nodeStyle, width: nodeWidth, height: nodeHeight, data }: RecipeStepNodeProps) {
+export default function RecipeStepNode({ selected, style: nodeStyle, width: nodeWidth, data }: RecipeStepNodeProps) {
   const nodeId = useNodeId()
   const updateNodeInternals = useUpdateNodeInternals()
   const { recipeProcesses, stepOrder, stepOutputGraph, onNodeResizeStart, onNodeResizeEnd, onOpenPrepared, highlightedNodeId } = useRecipeProcessGraphContext()
@@ -117,7 +118,8 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
   const theme = getCategoryTheme(step.action)
   const handleSides = useNodeHandleSides(nodeId)
   const width = Math.max(toNumber(nodeWidth, toNumber(nodeStyle?.width, DEFAULT_NODE_SIZE.step.width)), MIN_WIDTH)
-  const minHeight = Math.max(toNumber(nodeHeight, toNumber(nodeStyle?.height, DEFAULT_NODE_SIZE.step.height)), MIN_HEIGHT)
+  // Height follows the content (description, badges, image); only the width is set by resizing.
+  const minHeight = MIN_HEIGHT
 
   const stepIndex = nodeId ? stepOrder.indexOf(nodeId) : -1
   const stepNumber = stepIndex >= 0 ? stepIndex + 1 : data.stepNumber
@@ -210,13 +212,14 @@ export default function RecipeStepNode({ selected, style: nodeStyle, width: node
           nodeId={nodeId ?? undefined}
           minWidth={MIN_WIDTH}
           minHeight={MIN_HEIGHT}
+          resizeDirection="horizontal"
           onResizeStart={() => { if (nodeId) onNodeResizeStart?.(nodeId) }}
           onResize={() => syncNodeLayout()}
           onResizeEnd={() => {
             syncNodeLayout()
             if (nodeId) onNodeResizeEnd?.(nodeId)
           }}
-          position="bottom-right"
+          position="right"
           style={{
             background: theme.accent,
             border: '2px solid #fff',
