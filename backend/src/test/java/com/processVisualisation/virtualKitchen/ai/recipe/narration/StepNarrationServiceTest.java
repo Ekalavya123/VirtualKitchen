@@ -576,6 +576,11 @@ class StepNarrationServiceTest {
             files.remove(storagePath);
         }
 
+        @Override
+        public synchronized Optional<byte[]> read(String storagePath) {
+            return Optional.ofNullable(files.get(storagePath));
+        }
+
         String onlyPath() {
             Set<String> paths = files.keySet();
             assertEquals(1, paths.size());

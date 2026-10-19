@@ -8,6 +8,7 @@ import com.processVisualisation.virtualKitchen.ai.provider.config.GeminiProperti
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiAuthenticationException;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiCommunicationException;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiInvalidResponseException;
+import com.processVisualisation.virtualKitchen.ai.provider.exception.AiRateLimitedException;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiTimeoutException;
 import com.processVisualisation.virtualKitchen.ai.provider.tts.AudioFormat;
 import com.processVisualisation.virtualKitchen.ai.provider.tts.GeneratedAudio;
@@ -15,6 +16,7 @@ import com.processVisualisation.virtualKitchen.ai.provider.tts.TtsProvider;
 import com.processVisualisation.virtualKitchen.ai.provider.tts.TtsRequest;
 import com.processVisualisation.virtualKitchen.ai.provider.tts.WavAudio;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -22,6 +24,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -42,6 +45,7 @@ import java.util.regex.Pattern;
 public class GeminiTtsProvider implements TtsProvider {
 
     private static final Pattern RATE = Pattern.compile("rate=(\\d+)");
+    private static final Pattern SECONDS = Pattern.compile("(\\d+(?:\\.\\d+)?)s");
     private static final int CHANNELS = 1;
     private static final int BITS_PER_SAMPLE = 16;
 
@@ -67,7 +71,8 @@ public class GeminiTtsProvider implements TtsProvider {
      * Generates speech with Gemini and returns it as WAV.
      *
      * @throws AiAuthenticationException if Gemini rejects the API key (401/403)
-     * @throws AiCommunicationException on rate limiting (429), any other HTTP error, or invalid configuration
+     * @throws AiRateLimitedException on rate limiting (429) or overload (503), which the queue retries with backoff
+     * @throws AiCommunicationException on a daily quota (429), any other HTTP error, or invalid configuration
      * @throws AiTimeoutException if the request times out or the host cannot be reached
      * @throws AiInvalidResponseException if the response is not JSON or carries no audio
      */
@@ -96,8 +101,8 @@ public class GeminiTtsProvider implements TtsProvider {
             if (status == 401 || status == 403) {
                 throw new AiAuthenticationException("Gemini TTS authentication failed", ex);
             }
-            if (status == 429) {
-                throw new AiCommunicationException("Gemini TTS rate limit or quota exceeded (429)", ex);
+            if (status == 429 || status == 503) {
+                throw throttled(ex, status);
             }
             throw new AiCommunicationException("Gemini TTS request failed with status: " + ex.getStatusCode(), ex);
         } catch (ResourceAccessException ex) {
@@ -107,6 +112,55 @@ public class GeminiTtsProvider implements TtsProvider {
         } catch (IllegalArgumentException ex) {
             throw new AiCommunicationException("Gemini TTS endpoint configuration is invalid", ex);
         }
+    }
+
+    /**
+     * Maps a 429/503 to a retryable {@link AiRateLimitedException} carrying Gemini's requested wait
+     * (the {@code Retry-After} header, else the body's {@code RetryInfo.retryDelay}). A 429 caused
+     * by a per-day quota stays a plain {@link AiCommunicationException}: waiting seconds won't help.
+     */
+    private AiCommunicationException throttled(RestClientResponseException ex, int status) {
+        JsonNode error = readError(ex.getResponseBodyAsString());
+        if (status == 429 && error.toString().contains("PerDay")) {
+            return new AiCommunicationException("Gemini TTS daily quota exhausted (429)", ex);
+        }
+        Duration retryAfter = retryAfterHeader(ex);
+        if (retryAfter == null) {
+            for (JsonNode detail : error.path("details")) {
+                retryAfter = parseSeconds(detail.path("retryDelay").asText(""));
+                if (retryAfter != null) {
+                    break;
+                }
+            }
+        }
+        String reason = status == 429 ? "rate limit or quota exceeded (429)" : "model overloaded (503)";
+        return new AiRateLimitedException("Gemini TTS " + reason, retryAfter, ex);
+    }
+
+    private JsonNode readError(String body) {
+        if (!StringUtils.hasText(body)) {
+            return objectMapper.missingNode();
+        }
+        try {
+            return objectMapper.readTree(body).path("error");
+        } catch (JsonProcessingException ignored) {
+            return objectMapper.missingNode();
+        }
+    }
+
+    private static Duration retryAfterHeader(RestClientResponseException ex) {
+        HttpHeaders headers = ex.getResponseHeaders();
+        String value = headers == null ? null : headers.getFirst(HttpHeaders.RETRY_AFTER);
+        return value == null ? null : parseSeconds(value.trim() + "s");
+    }
+
+    /** Parses Google's duration form ({@code "37s"}, {@code "1.5s"}); null when absent or malformed. */
+    private static Duration parseSeconds(String value) {
+        Matcher matcher = SECONDS.matcher(value == null ? "" : value.trim());
+        if (!matcher.matches()) {
+            return null;
+        }
+        return Duration.ofMillis(Math.round(Double.parseDouble(matcher.group(1)) * 1000));
     }
 
     private Map<String, Object> buildPayload(String text, String voice, String languageCode) {

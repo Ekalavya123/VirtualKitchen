@@ -9,6 +9,7 @@ import com.processVisualisation.virtualKitchen.recipe.dto.RecipeIngredientDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateRequestDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateUpdateDTO;
+import com.processVisualisation.virtualKitchen.recipe.event.RecipeCopiedEvent;
 import com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.recipe.mapper.RecipeTemplateMapper;
 import com.processVisualisation.virtualKitchen.recipe.model.NutritionInfo;
@@ -20,6 +21,7 @@ import com.processVisualisation.virtualKitchen.recipe.repository.RecipeTemplateR
 import com.processVisualisation.virtualKitchen.recipe.validation.ProcessValidationException;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -50,6 +52,9 @@ public class RecipeTemplateService {
 
     @Autowired
     private ProcessService processService;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     /**
      * One lock per recipe for {@link #createMainProcess}: concurrent calls for the same recipe (a page opened twice
@@ -223,6 +228,11 @@ public class RecipeTemplateService {
             saved.setMainProcessId(processCopy.mainProcessId());
             saved = repo.save(saved);
         }
+
+        // Step narration lives beside the recipe, keyed by recipe and step id; its listener copies it
+        // onto the new ids so the copy plays without regenerating (and paying for) the audio.
+        eventPublisher.publishEvent(new RecipeCopiedEvent(original.getId(), saved.getId(), userId,
+                processCopy.processIdMap(), processCopy.nodeIdMaps()));
 
         return mapper.toDTO(saved);
     }

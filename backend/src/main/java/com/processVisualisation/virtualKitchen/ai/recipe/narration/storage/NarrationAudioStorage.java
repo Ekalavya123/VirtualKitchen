@@ -2,6 +2,8 @@ package com.processVisualisation.virtualKitchen.ai.recipe.narration.storage;
 
 import com.processVisualisation.virtualKitchen.ai.provider.tts.AudioFormat;
 
+import java.util.Optional;
+
 /**
  * Where generated narration audio lives. Exactly one implementation is active, chosen by
  * {@code ai.narration.storage.type}; adding object storage (S3, GCS, ...) means adding one more.
@@ -23,6 +25,12 @@ public interface NarrationAudioStorage {
 
     /** Deletes a previously stored object; must not throw for an object that is already gone. */
     void delete(String storagePath);
+
+    /**
+     * Reads back a previously stored object, so it can be stored again as an independent copy
+     * (copying a recipe). Empty when the object is gone or cannot be read.
+     */
+    Optional<byte[]> read(String storagePath);
 
     /**
      * @param url the URL the browser plays the audio from

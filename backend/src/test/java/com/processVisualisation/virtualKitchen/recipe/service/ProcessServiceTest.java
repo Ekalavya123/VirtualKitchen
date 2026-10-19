@@ -493,6 +493,9 @@ class ProcessServiceTest {
         assertNotEquals("m1", copiedStep.getId());
         assertEquals(copiedStep.getId(), copiedMain.getEdges().get(0).getSource());
         assertEquals(copiedMain.getNodes().get(1).getId(), copiedMain.getEdges().get(0).getTarget());
+        // ...and are reported, so data keyed by step id (narration) can follow the copy.
+        assertEquals(copiedStep.getId(), result.nodeIdMaps().get(main.getId()).get("m1"));
+        assertEquals(copiedSub.getNodes().get(0).getId(), result.nodeIdMaps().get(sub.getId()).get("s1"));
 
         // Action On now points at the copied subprocess; the reference outside the source recipe is dropped.
         assertEquals(List.of(copiedSubId), actionOnProcessIds(copiedStep));

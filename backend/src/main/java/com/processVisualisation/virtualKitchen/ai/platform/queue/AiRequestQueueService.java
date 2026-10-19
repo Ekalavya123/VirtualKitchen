@@ -18,6 +18,7 @@ import com.processVisualisation.virtualKitchen.ai.platform.usage.AiUsage;
 import com.processVisualisation.virtualKitchen.ai.platform.usage.AiUsageMeter;
 import com.processVisualisation.virtualKitchen.ai.platform.usage.AiUsageSummary;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiCommunicationException;
+import com.processVisualisation.virtualKitchen.ai.provider.exception.AiRateLimitedException;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiTimeoutException;
 import com.processVisualisation.virtualKitchen.common.concurrent.NamedTask;
 import com.processVisualisation.virtualKitchen.common.concurrent.TaskPool;
@@ -38,6 +39,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -89,6 +91,8 @@ public class AiRequestQueueService {
     private final AiAnalyticsRecorder analytics;
 
     private final Map<String, AtomicInteger> inFlightByPool = new ConcurrentHashMap<>();
+
+    private Sleeper sleeper = AiRequestQueueService::sleepQuietly;
 
     /** Without analytics; for callers (mostly tests) that don't need it. */
     public AiRequestQueueService(
@@ -444,11 +448,13 @@ public class AiRequestQueueService {
     private <R> AiRequestOutcome<R> runWithRetries(
             AiRequestJob job, ModelSelectionOutcome selection, AiUsage usage, Attempt<R> attempt
     ) {
-        int maxAttempts = job.getMaxAttempts();
+        int transientRetriesLeft = job.getMaxAttempts() - 1;
+        int rateLimitRetriesLeft = Math.max(0, requestProperties.getRateLimitMaxRetries());
+        int rateLimitRetries = 0;
         Exception lastError = null;
 
         AiAnalyticsRecorder.RequestTracker tracker = trackerOf(usage);
-        for (int i = 1; i <= maxAttempts; i++) {
+        for (int i = 1; ; i++) {
             job.setAttempt(i);
             if (tracker != null) {
                 tracker.transportAttempt(i);
@@ -472,12 +478,21 @@ public class AiRequestQueueService {
                 lastError = e;
             }
 
-            if (!isRetryable(lastError) || i == maxAttempts) {
+            long backoffMs;
+            if (lastError instanceof AiRateLimitedException throttled && rateLimitRetriesLeft > 0) {
+                // Throttling has its own, longer budget: a per-minute limit clears in seconds, not 500ms.
+                rateLimitRetriesLeft--;
+                backoffMs = rateLimitBackoffMs(throttled, rateLimitRetries++);
+            } else if (isRetryable(lastError) && !(lastError instanceof AiRateLimitedException) && transientRetriesLeft > 0) {
+                transientRetriesLeft--;
+                backoffMs = requestProperties.getRetryBackoffMs();
+            } else {
                 break;
             }
-            log.warn("event=ai_request_retrying aiRequestId={} attempt={} maxAttempts={} errorType={} error={}",
-                    job.getId(), i, maxAttempts, lastError.getClass().getSimpleName(), lastError.getMessage());
-            sleepBackoff();
+            job.setMaxAttempts(Math.max(job.getMaxAttempts(), i + 1));
+            log.warn("event=ai_request_retrying aiRequestId={} attempt={} maxAttempts={} backoffMs={} errorType={} error={}",
+                    job.getId(), i, job.getMaxAttempts(), backoffMs, lastError.getClass().getSimpleName(), lastError.getMessage());
+            sleeper.sleep(backoffMs);
         }
 
         AiUsageSummary summary = recordUsage(job, selection, usage);
@@ -552,9 +567,34 @@ public class AiRequestQueueService {
         return error instanceof AiTimeoutException || error instanceof AiCommunicationException;
     }
 
-    private void sleepBackoff() {
+    /**
+     * The wait before retry {@code retryIndex} (0-based) of a throttled request: the provider's
+     * Retry-After when it gave one, else exponential from {@code rateLimitBackoffMs}; either way
+     * capped and spread by up to +20% jitter so parallel workers don't hit the limit again together.
+     */
+    long rateLimitBackoffMs(AiRateLimitedException throttled, int retryIndex) {
+        long cap = requestProperties.getRateLimitMaxBackoffMs();
+        long base = throttled.getRetryAfter() != null
+                ? throttled.getRetryAfter().toMillis()
+                : requestProperties.getRateLimitBackoffMs() << Math.min(retryIndex, 16);
+        long bounded = Math.min(Math.max(base, 0L), cap);
+        long jitter = bounded <= 0 ? 0 : ThreadLocalRandom.current().nextLong(bounded / 5 + 1);
+        return Math.min(bounded + jitter, cap);
+    }
+
+    /** Swapped in tests so retry backoff does not really sleep. */
+    void setSleeper(Sleeper sleeper) {
+        this.sleeper = sleeper;
+    }
+
+    @FunctionalInterface
+    interface Sleeper {
+        void sleep(long millis);
+    }
+
+    private static void sleepQuietly(long millis) {
         try {
-            Thread.sleep(requestProperties.getRetryBackoffMs());
+            Thread.sleep(millis);
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();
         }

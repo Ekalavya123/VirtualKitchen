@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -67,6 +68,21 @@ public class SupabaseNarrationAudioStorage implements NarrationAudioStorage {
         } catch (RestClientException e) {
             // Best effort: an orphaned object costs storage, never correctness.
             log.warn("event=narration_object_delete_failed path={} errorType={}", storagePath, e.getClass().getSimpleName());
+        }
+    }
+
+    @Override
+    public Optional<byte[]> read(String storagePath) {
+        try {
+            return Optional.ofNullable(restClient.get()
+                    .uri("/storage/v1/object/{bucket}/{path}", supabaseProperties.getBucket(), storagePath)
+                    .header("Authorization", "Bearer " + supabaseProperties.getServiceKey())
+                    .header("apikey", supabaseProperties.getServiceKey())
+                    .retrieve()
+                    .body(byte[].class));
+        } catch (RestClientException e) {
+            log.warn("event=narration_object_read_failed path={} errorType={}", storagePath, e.getClass().getSimpleName());
+            return Optional.empty();
         }
     }
 }
