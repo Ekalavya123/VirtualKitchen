@@ -22,6 +22,8 @@ public class RecipeDetailResponseDTO {
     private String description;
     private Long createdBy;
     private Visibility visibility;
+    /** The public recipe this one was copied from; null if it wasn't copied. */
+    private Long copiedFromRecipeId;
     private List<RecipeIngredientDTO> ingredients;
     private NutritionInfoDTO nutrition;
     /** The recipe's own default preparation guidance; null means the application's default text. */

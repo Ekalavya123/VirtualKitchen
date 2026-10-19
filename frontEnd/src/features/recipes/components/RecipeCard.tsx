@@ -14,6 +14,10 @@ type RecipeCardProps = {
   onDelete?: () => void
   onToggleVisibility?: () => void
   onAddToMyRecipes?: () => void
+  /** Global Recipes: the user's own copy of this recipe, if they already added it. */
+  ownCopyId?: number | null
+  /** Opens the user's own copy (shown instead of "Add" once they have one). */
+  onOpenOwnCopy?: () => void
 }
 
 export default function RecipeCard({
@@ -25,6 +29,8 @@ export default function RecipeCard({
   onDelete,
   onToggleVisibility,
   onAddToMyRecipes,
+  ownCopyId,
+  onOpenOwnCopy,
 }: RecipeCardProps) {
   // Falls back to the recipe icon when there is no thumbnail or it fails to load.
   const [failedThumbnail, setFailedThumbnail] = useState<string | null>(null)
@@ -44,7 +50,7 @@ export default function RecipeCard({
 
   return (
     <article className={`recipe-card group${highlighted ? ' recipe-card-highlighted' : ''}`}>
-      {/* The whole card opens the recipe (Global Recipes: its preview). */}
+      {/* The whole card opens the recipe in read mode. */}
       <button
         onClick={onOpen}
         className="recipe-card-content"
@@ -108,12 +114,22 @@ export default function RecipeCard({
 
       {variant === 'global' && (
         <div className="recipe-card-footer">
-          <button
-            onClick={onAddToMyRecipes}
-            className="recipe-card-order-button"
-          >
-            + Add to My Recipes
-          </button>
+          {ownCopyId != null ? (
+            <button
+              onClick={onOpenOwnCopy}
+              className="recipe-card-order-button"
+              title="You already added this recipe — open your copy"
+            >
+              ✓ In your kitchen · Open
+            </button>
+          ) : (
+            <button
+              onClick={onAddToMyRecipes}
+              className="recipe-card-order-button"
+            >
+              + Add to My Recipes
+            </button>
+          )}
         </div>
       )}
     </article>

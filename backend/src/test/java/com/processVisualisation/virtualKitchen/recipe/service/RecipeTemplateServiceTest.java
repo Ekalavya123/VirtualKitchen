@@ -286,6 +286,8 @@ class RecipeTemplateServiceTest {
         assertNotEquals(sourceId, copy.getId());
         assertEquals(OTHER_USER_ID, copy.getCreatedBy());
         assertEquals(Visibility.PRIVATE, copy.getVisibility());
+        assertEquals(sourceId, copy.getCopiedFromRecipeId());
+        assertEquals(sourceId, copyDto.getCopiedFromRecipeId());
         assertEquals(20L, copy.getMainProcessId());
         assertEquals(1, copy.getIngredients().size());
         assertEquals(5L, copy.getIngredients().get(0).getIngredientId());

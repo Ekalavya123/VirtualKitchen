@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   describeOutcome,
   describeRef,
@@ -36,6 +36,12 @@ export default function RecipeStepsTimeline({ sections, onOpenStep }: RecipeStep
   const isStaged = sections.length > 1
   // Every stage starts open; the reader can fold any of them away.
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
+  // A printed recipe shows every stage, whatever the reader had folded away.
+  useEffect(() => {
+    const expandAll = () => setCollapsed(new Set())
+    window.addEventListener('beforeprint', expandAll)
+    return () => window.removeEventListener('beforeprint', expandAll)
+  }, [])
 
   // Which stage each anchor (the stage itself, or any step/check in it) lives in.
   const sectionOfAnchor = useMemo(() => {

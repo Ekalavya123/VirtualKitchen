@@ -19,6 +19,8 @@ export interface Recipe {
   createdAt?: string
   createdBy?: number
   visibility?: RecipeVisibility
+  /** The public recipe this one was copied from ("Add to My Recipes"); null when it wasn't copied. */
+  copiedFromRecipeId?: number | null
   /** The recipe's latest generated step visual, resolved by the backend. Only the recipe list endpoints fill it; null when there is none. */
   thumbnailUrl?: string | null
 }

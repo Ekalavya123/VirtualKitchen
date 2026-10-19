@@ -97,6 +97,51 @@
   margin-bottom: -20px;
 }
 
+/* Someone else's recipe: read-only until the reader adds a copy to their kitchen. */
+.rp-readonly-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--flow-radius-md);
+  border: 1px solid var(--rp-accent-border);
+  background: var(--rp-accent-soft);
+  color: var(--flow-text);
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin-bottom: -20px;
+}
+
+.rp-readonly-banner-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.rp-readonly-banner-text {
+  flex: 1 1 260px;
+  min-width: 0;
+  color: var(--flow-text-muted);
+}
+
+.rp-readonly-banner-text strong {
+  color: var(--flow-text);
+}
+
+.rp-page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-bottom: -28px;
+}
+
+.rp-button:disabled {
+  opacity: 0.65;
+  cursor: progress;
+  transform: none;
+}
+
 /* ---------- hero ---------- */
 
 .rp-hero {
@@ -1241,4 +1286,84 @@ button.rp-continuation:hover {
 
 .rp-open-step:hover {
   text-decoration: underline;
+}
+
+/* ---------- print ---------- */
+
+/* Printing the Recipe Process gives just the recipe: light colours, no app chrome or controls, and the
+   page's own scroll containers opened up so every section prints (the stages are expanded on beforeprint). */
+@media print {
+  :root,
+  :root[data-theme='dark'] {
+    --flow-bg: #fff;
+    --flow-surface: #fff;
+    --flow-surface-muted: #f8fafc;
+    --flow-text: #111827;
+    --flow-text-muted: #4b5563;
+    --flow-border: #d1d5db;
+    --rp-hero-bg: #fff;
+    --rp-accent: #c2410c;
+    --rp-accent-strong: #9a3412;
+    --rp-accent-soft: #fff7ed;
+    --rp-accent-border: #fdba74;
+    --rp-card-shadow: none;
+    --rp-card-shadow-hover: none;
+  }
+
+  .kitchen-navbar,
+  .app-footer,
+  .recipe-tool-navbar,
+  .rp-draft-banner,
+  .rp-readonly-banner,
+  .rp-page-actions,
+  .rp-jump-nav,
+  .rp-stage-overview,
+  .rp-section-header .rp-button,
+  .rp-open-step,
+  .rp-part-chevron {
+    display: none !important;
+  }
+
+  html,
+  body,
+  #root,
+  .kitchen-page,
+  .kitchen-body,
+  .kitchen-content,
+  .flow-canvas-container,
+  .rp-page {
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  .rp-container {
+    max-width: none;
+    padding: 0;
+    gap: 24px;
+  }
+
+  .rp-hero {
+    padding: 0 0 16px;
+    border: 0;
+    border-bottom: 1px solid var(--flow-border);
+    border-radius: 0;
+  }
+
+  .rp-hero-media {
+    max-height: 220px;
+    box-shadow: none;
+  }
+
+  .rp-card,
+  .rp-ingredient,
+  .rp-timeline-item {
+    break-inside: avoid;
+  }
+
+  .rp-step-media {
+    max-width: 180px;
+  }
 }

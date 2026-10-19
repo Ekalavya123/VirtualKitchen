@@ -5,6 +5,8 @@ import type { RecipeDetail } from '../../../types/recipe'
 import { recipeToolPath, type RecipeToolView } from '../recipeToolRoutes'
 import RecipeSummarySection from './RecipeSummarySection'
 import RecipePreviewButton from './RecipePreviewButton'
+import AddToMyRecipesButton from './AddToMyRecipesButton'
+import type { AddToMyRecipes } from './useAddToMyRecipes'
 import ActionMenu, { type ActionMenuItem } from '../../../shared/components/ActionMenu'
 import { useReadinessGate } from '../session/useRecipeReadiness'
 import type { ReadinessIssue } from '../model/recipeReadiness'
@@ -16,6 +18,10 @@ const TABS: { id: RecipeToolView; label: string; icon: string }[] = [
 
 type RecipeToolNavbarProps = {
   recipe: RecipeDetail
+  /** Someone else's recipe: no editor tab, just a "Read only" marker. */
+  readOnly?: boolean
+  /** Readers of a public recipe: "Add to My Recipes" / "Open your copy". */
+  addToMyRecipes?: AddToMyRecipes | null
   onBack: () => void
   /** Owners only: "Order Recipe" starts a recipe order (of the last saved version) and opens it — once the recipe is saved and ready. */
   onOrderRecipe?: () => void
@@ -33,14 +39,15 @@ type RecipeToolNavbarProps = {
  * The Recipe Tool's own internal top navbar: compact recipe metadata on the
  * left (collapsing to just an icon button on narrow viewports, via Tailwind
  * responsive classes rather than a resize listener) and the two tool tabs
- * on the right. Each tab is its own route (see recipeToolRoutes.ts), so the
+ * on the right (owners only — a reader of someone else's recipe gets a "Read only" marker and
+ * "Add to My Recipes" instead). Each tab is its own route (see recipeToolRoutes.ts), so the
  * active tab is whichever route is current — NavLink marks it.
  * There is no recipe-level image in the current backend model (only
  * ingredients have one), so the compact metadata uses a plain icon rather
  * than fabricating a thumbnail.
  */
 export default function RecipeToolNavbar({
-  recipe, onBack, onOrderRecipe, ordering = false, onShowIssue, onEditDetails, onToggleVisibility, onDeleteRecipe,
+  recipe, readOnly = false, addToMyRecipes, onBack, onOrderRecipe, ordering = false, onShowIssue, onEditDetails, onToggleVisibility, onDeleteRecipe,
 }: RecipeToolNavbarProps) {
   const [showDetails, setShowDetails] = useState(false)
   const [checking, setChecking] = useState(false)
@@ -65,7 +72,7 @@ export default function RecipeToolNavbar({
 
   return (
     <div
-      className="h-[3.75rem] flex-shrink-0 items-center gap-3 border-b border-[var(--flow-border)] bg-[var(--flow-surface)] px-4"
+      className="recipe-tool-navbar h-[3.75rem] flex-shrink-0 items-center gap-3 border-b border-[var(--flow-border)] bg-[var(--flow-surface)] px-4"
       style={{ position: 'relative', display: 'grid', gridTemplateColumns: '1fr auto 1fr' }}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -121,33 +128,58 @@ export default function RecipeToolNavbar({
       </div>
 
       <div className="flex flex-shrink-0 items-center gap-2">
-        <div className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[var(--flow-border)] bg-[var(--flow-surface-muted)] p-1">
-          {TABS.map((tab) => (
-            <NavLink
-              key={tab.id}
-              to={recipeToolPath(recipe.id, tab.id)}
-              replace
-              style={({ isActive }) => ({
-                padding: '7px 12px',
-                borderRadius: 7,
-                background: isActive ? 'var(--flow-surface)' : 'transparent',
-                boxShadow: isActive ? '0 1px 3px rgba(15,23,42,0.12)' : 'none',
-                color: isActive ? 'var(--flow-accent-strong)' : 'var(--flow-text-muted)',
-                fontSize: 12,
-                fontWeight: 700,
-                textDecoration: 'none',
-                whiteSpace: 'nowrap',
-              })}
-            >
-              <span className="hidden sm:inline">{tab.icon} {tab.label}</span>
-              <span className="sm:hidden" aria-label={tab.label}>{tab.icon}</span>
-            </NavLink>
-          ))}
-        </div>
+        {readOnly ? (
+          <span
+            title="This is someone else's recipe — add it to your kitchen to edit it"
+            style={{
+              padding: '7px 12px', borderRadius: 8, whiteSpace: 'nowrap', fontSize: 12, fontWeight: 700,
+              border: '1px solid var(--flow-border)', background: 'var(--flow-surface-muted)', color: 'var(--flow-text-muted)',
+            }}
+          >
+            <span aria-hidden>👀</span><span className="hidden sm:inline"> Read only</span>
+          </span>
+        ) : (
+          <div className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[var(--flow-border)] bg-[var(--flow-surface-muted)] p-1">
+            {TABS.map((tab) => (
+              <NavLink
+                key={tab.id}
+                to={recipeToolPath(recipe.id, tab.id)}
+                replace
+                style={({ isActive }) => ({
+                  padding: '7px 12px',
+                  borderRadius: 7,
+                  background: isActive ? 'var(--flow-surface)' : 'transparent',
+                  boxShadow: isActive ? '0 1px 3px rgba(15,23,42,0.12)' : 'none',
+                  color: isActive ? 'var(--flow-accent-strong)' : 'var(--flow-text-muted)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                })}
+              >
+                <span className="hidden sm:inline">{tab.icon} {tab.label}</span>
+                <span className="sm:hidden" aria-label={tab.label}>{tab.icon}</span>
+              </NavLink>
+            ))}
+          </div>
+        )}
         <RecipePreviewButton recipeId={recipe.id} />
       </div>
 
       <div className="flex min-w-0 items-center justify-end gap-2">
+        {addToMyRecipes && (
+          <AddToMyRecipesButton
+            action={addToMyRecipes}
+            compact
+            style={{
+              padding: '8px 12px', borderRadius: 8, border: 0, flexShrink: 0, whiteSpace: 'nowrap',
+              background: 'linear-gradient(135deg, var(--flow-accent), var(--flow-accent-secondary))',
+              color: 'white', fontSize: 12, fontWeight: 700, cursor: addToMyRecipes.adding ? 'progress' : 'pointer',
+              opacity: addToMyRecipes.adding ? 0.7 : 1,
+            }}
+          />
+        )}
+
         {onOrderRecipe && (
           <button
             type="button"

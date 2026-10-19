@@ -59,6 +59,12 @@ public class RecipeTemplate {
     private Long mainProcessId;
 
     /**
+     * The public recipe this one was copied from via "Add to My Recipes", so the app can tell a reader they
+     * already have it. Null for recipes created from scratch (and for copies made before this was recorded).
+     */
+    private Long copiedFromRecipeId;
+
+    /**
      * Optimistic-concurrency counter for the recipe-level process save ({@code PUT .../processes}):
      * bumped atomically by {@code RecipeTemplateRepository.claimProcessRevision} on every batch save,
      * so a client saving from a stale base is rejected instead of silently overwriting a newer save.

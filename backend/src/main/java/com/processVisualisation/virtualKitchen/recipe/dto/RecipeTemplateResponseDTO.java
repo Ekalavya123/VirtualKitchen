@@ -19,6 +19,8 @@ public class RecipeTemplateResponseDTO {
     private String description;
     private Long createdBy;
     private Visibility visibility;
+    /** The public recipe this one was copied from; null if it wasn't copied. */
+    private Long copiedFromRecipeId;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

@@ -14,19 +14,20 @@ import EmptyState from './components/EmptyState'
 import OrderRecipeModal from './components/OrderRecipeModal'
 import RecipeCard from './components/RecipeCard'
 import RecipeToolbar from './components/RecipeToolbar'
-import ViewRecipeModal from './components/ViewRecipeModal'
 import { useRecipeLibrary, type RecipeTab } from './useRecipeLibrary'
 
 type RecipeLibraryPageProps = {
   userId: number
-  /** Opens a recipe — called for "Open recipe" and right after creating one. The app routes it to the Recipe Tool. */
+  /** Opens a recipe in read mode — any card, own or global. The app routes it to the Recipe Tool's Recipe Process. */
+  onOpenRecipe?: (recipeId: number) => void
+  /** Called right after creating a recipe. The app routes it to the Recipe Editor. */
   onCreateRecipe?: (recipeId: number, title: string) => void
 }
 
 const HIGHLIGHT_MS = 3000
 
 /** The recipe library: the user's recipes and the public ones, with create, order, edit, share and copy. */
-export default function RecipeLibraryPage({ userId, onCreateRecipe }: RecipeLibraryPageProps) {
+export default function RecipeLibraryPage({ userId, onOpenRecipe, onCreateRecipe }: RecipeLibraryPageProps) {
   const [activeTab, setActiveTab] = useState<RecipeTab>('mine')
   const library = useRecipeLibrary(userId, activeTab)
   const { startOrder, orderingRecipeId } = useStartRecipeOrder()
@@ -40,7 +41,6 @@ export default function RecipeLibraryPage({ userId, onCreateRecipe }: RecipeLibr
   const [createError, setCreateError] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
-  const [viewRecipe, setViewRecipe] = useState<Recipe | null>(null)
   const [orderModalOpen, setOrderModalOpen] = useState(false)
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null)
   const [visibilityRecipe, setVisibilityRecipe] = useState<Recipe | null>(null)
@@ -59,6 +59,15 @@ export default function RecipeLibraryPage({ userId, onCreateRecipe }: RecipeLibr
     return source.filter((recipe) =>
       recipe.name.toLowerCase().includes(query) || recipe.description?.toLowerCase().includes(query))
   }, [library.recipes, library.globalRecipes, activeTab, search])
+
+  // Global recipes the user already added, mapped to their own copy, so a card offers "Open" instead of a duplicate.
+  const ownCopyIdBySource = useMemo(() => {
+    const map = new Map<number, number>()
+    for (const recipe of library.recipes) {
+      if (recipe.copiedFromRecipeId != null && !map.has(recipe.copiedFromRecipeId)) map.set(recipe.copiedFromRecipeId, recipe.id)
+    }
+    return map
+  }, [library.recipes])
 
   // Long lists render a page at a time, revealing more as the user scrolls.
   const {
@@ -182,11 +191,16 @@ export default function RecipeLibraryPage({ userId, onCreateRecipe }: RecipeLibr
                   recipe={recipe}
                   variant={activeTab}
                   highlighted={recipe.id === highlightedRecipeId}
-                  onOpen={() => (activeTab === 'mine' ? onCreateRecipe?.(recipe.id, recipe.name) : setViewRecipe(recipe))}
+                  onOpen={() => onOpenRecipe?.(recipe.id)}
                   onEditDetails={() => setEditingRecipe(recipe)}
                   onDelete={() => void library.deleteRecipe(recipe)}
                   onToggleVisibility={() => setVisibilityRecipe(recipe)}
                   onAddToMyRecipes={() => void handleAddToMyRecipes(recipe)}
+                  ownCopyId={activeTab === 'global' ? ownCopyIdBySource.get(recipe.id) : undefined}
+                  onOpenOwnCopy={() => {
+                    const copyId = ownCopyIdBySource.get(recipe.id)
+                    if (copyId != null) onOpenRecipe?.(copyId)
+                  }}
                 />
               ))}
             </div>
@@ -235,8 +249,6 @@ export default function RecipeLibraryPage({ userId, onCreateRecipe }: RecipeLibr
         onCreateRecipe={openCreateModal}
         onClose={() => setOrderModalOpen(false)}
       />
-
-      <ViewRecipeModal recipe={viewRecipe} onClose={() => setViewRecipe(null)} />
 
       <ConfirmVisibilityModal
         recipe={visibilityRecipe}

@@ -14,10 +14,14 @@ import RecipeHero from './RecipeHero'
 import RecipeIngredientsList from './RecipeIngredientsList'
 import RecipeNutritionPanel from './RecipeNutritionPanel'
 import RecipeStepsTimeline from './RecipeStepsTimeline'
+import AddToMyRecipesButton from '../../page/AddToMyRecipesButton'
+import type { AddToMyRecipes } from '../../page/useAddToMyRecipes'
 
 type RecipeViewPageProps = {
   recipe: RecipeDetail
   isOwner: boolean
+  /** Readers of someone else's public recipe: adding it to their kitchen (or opening the copy they have). */
+  addToMyRecipes?: AddToMyRecipes | null
   onNutritionSaved: (nutrition: NutritionInfo | null) => void
   /** Opens an issue that blocks cook mode in the editor (owners only). */
   onShowIssue?: (issue: ReadinessIssue) => void
@@ -37,7 +41,7 @@ const ANCHORS = {
  * recipe session the Recipe Editor edits (see buildRecipePresentation), so it always reflects the
  * editor's latest content, including edits that haven't been saved yet.
  */
-export default function RecipeViewPage({ recipe, isOwner, onNutritionSaved, onShowIssue, onOpenStep }: RecipeViewPageProps) {
+export default function RecipeViewPage({ recipe, isOwner, addToMyRecipes, onNutritionSaved, onShowIssue, onOpenStep }: RecipeViewPageProps) {
   const session = useRecipeSession()
   const readinessGate = useReadinessGate(isOwner ? onShowIssue : undefined)
 
@@ -76,6 +80,29 @@ export default function RecipeViewPage({ recipe, isOwner, onNutritionSaved, onSh
             Showing unsaved changes from the Recipe Editor.
           </div>
         )}
+
+        {!isOwner && (
+          <div className="rp-readonly-banner" role="note">
+            <span className="rp-readonly-banner-icon" aria-hidden>👀</span>
+            <span className="rp-readonly-banner-text">
+              {addToMyRecipes?.existingCopyId != null
+                ? <><strong>You already have this recipe.</strong> This is the public original — open your copy to edit or order it.</>
+                : <><strong>You're viewing a public recipe from another cook.</strong> Add it to your kitchen to edit, customise or order it.</>}
+            </span>
+            {addToMyRecipes && <AddToMyRecipesButton action={addToMyRecipes} className="rp-button" />}
+          </div>
+        )}
+
+        <div className="rp-page-actions">
+          {isOwner && (
+            <Link className="rp-button" to={recipeToolPath(recipe.id, 'editor')} title="Open this recipe in the Recipe Editor">
+              <span aria-hidden>✏️</span> Edit recipe
+            </Link>
+          )}
+          <button type="button" className="rp-button rp-button-ghost" onClick={() => window.print()} title="Print this recipe">
+            <span aria-hidden>🖨️</span> Print
+          </button>
+        </div>
 
         <RecipeHero
           recipe={recipe}

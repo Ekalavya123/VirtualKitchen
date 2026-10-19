@@ -207,6 +207,7 @@ public class RecipeTemplateService {
         copy.setDescription(original.getDescription());
         copy.setCreatedBy(userId);
         copy.setVisibility(Visibility.PRIVATE);
+        copy.setCopiedFromRecipeId(original.getId());
         copy.setIngredients(cloneIngredients(original.getIngredients()));
         copy.setNutrition(cloneNutrition(original.getNutrition()));
         copy.setPreparationNotes(original.getPreparationNotes());
