@@ -4,6 +4,7 @@ import '../../../styles/flow-ui.css'
 import type { RecipeDetail } from '../../../types/recipe'
 import { recipeToolPath, type RecipeToolView } from '../recipeToolRoutes'
 import RecipeSummarySection from './RecipeSummarySection'
+import RecipePreviewButton from './RecipePreviewButton'
 import ActionMenu, { type ActionMenuItem } from '../../../shared/components/ActionMenu'
 import { useReadinessGate } from '../session/useRecipeReadiness'
 import type { ReadinessIssue } from '../model/recipeReadiness'
@@ -119,28 +120,31 @@ export default function RecipeToolNavbar({
         </button>
       </div>
 
-      <div className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[var(--flow-border)] bg-[var(--flow-surface-muted)] p-1">
-        {TABS.map((tab) => (
-          <NavLink
-            key={tab.id}
-            to={recipeToolPath(recipe.id, tab.id)}
-            replace
-            style={({ isActive }) => ({
-              padding: '7px 12px',
-              borderRadius: 7,
-              background: isActive ? 'var(--flow-surface)' : 'transparent',
-              boxShadow: isActive ? '0 1px 3px rgba(15,23,42,0.12)' : 'none',
-              color: isActive ? 'var(--flow-accent-strong)' : 'var(--flow-text-muted)',
-              fontSize: 12,
-              fontWeight: 700,
-              textDecoration: 'none',
-              whiteSpace: 'nowrap',
-            })}
-          >
-            <span className="hidden sm:inline">{tab.icon} {tab.label}</span>
-            <span className="sm:hidden" aria-label={tab.label}>{tab.icon}</span>
-          </NavLink>
-        ))}
+      <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="flex flex-shrink-0 items-center gap-1 rounded-lg border border-[var(--flow-border)] bg-[var(--flow-surface-muted)] p-1">
+          {TABS.map((tab) => (
+            <NavLink
+              key={tab.id}
+              to={recipeToolPath(recipe.id, tab.id)}
+              replace
+              style={({ isActive }) => ({
+                padding: '7px 12px',
+                borderRadius: 7,
+                background: isActive ? 'var(--flow-surface)' : 'transparent',
+                boxShadow: isActive ? '0 1px 3px rgba(15,23,42,0.12)' : 'none',
+                color: isActive ? 'var(--flow-accent-strong)' : 'var(--flow-text-muted)',
+                fontSize: 12,
+                fontWeight: 700,
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              })}
+            >
+              <span className="hidden sm:inline">{tab.icon} {tab.label}</span>
+              <span className="sm:hidden" aria-label={tab.label}>{tab.icon}</span>
+            </NavLink>
+          ))}
+        </div>
+        <RecipePreviewButton recipeId={recipe.id} />
       </div>
 
       <div className="flex min-w-0 items-center justify-end gap-2">

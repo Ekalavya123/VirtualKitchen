@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { User } from '../../types/User'
 import { AuthenticationApi, KitchenApi } from '../../api'
 import type { Kitchen } from '../../types/kitchen'
@@ -6,6 +6,7 @@ import { setStoredToken } from '../../api/authToken'
 import GoogleSignInButton from './GoogleSignInButton'
 import chefLogo from '../../assets/kitchen/blackShadowChef.png'
 import { errorMessage } from '../../shared/errors'
+import { clearDraft, draftKeys, readDraft, writeDraft } from '../../shared/drafts/draftStore'
 import './Auth.css'
 
 interface LoginPageProps {
@@ -23,16 +24,46 @@ type View =
   | 'forgot-otp'
   | 'forgot-reset'
 
-export default function Auth({ onLoginSuccess, onClose }: LoginPageProps) {
-  const [view, setView] = useState<View>('signup')
+type AuthDraft = { view: 'signup' | 'login'; name: string; email: string }
+type AuthSecrets = { view: View | null; password: string; confirmPassword: string; otp: string; newPassword: string; confirmNewPassword: string }
 
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [otp, setOtp] = useState('')
-  const [newPassword, setNewPassword] = useState('')
-  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+const EMPTY_SECRETS: AuthSecrets = { view: null, password: '', confirmPassword: '', otp: '', newPassword: '', confirmNewPassword: '' }
+
+// What was typed survives the form being closed by accident: the tab, name and email as a draft (so a
+// reload keeps them too); passwords, codes and the exact step (a code / reset step that only makes
+// sense right away) only in memory for this page load — they never touch storage. Both are cleared
+// once sign-in succeeds.
+let secretsDraft: AuthSecrets = EMPTY_SECRETS
+
+const clearAuthDrafts = () => {
+  clearDraft(draftKeys.auth())
+  secretsDraft = EMPTY_SECRETS
+}
+
+const isTab = (view: View): view is AuthDraft['view'] => view === 'signup' || view === 'login'
+
+export default function Auth({ onLoginSuccess, onClose }: LoginPageProps) {
+  const [initialDraft] = useState(() => readDraft<Partial<AuthDraft>>(draftKeys.auth()))
+  const [view, setView] = useState<View>(secretsDraft.view ?? initialDraft?.view ?? 'signup')
+
+  const [name, setName] = useState(initialDraft?.name ?? '')
+  const [email, setEmail] = useState(initialDraft?.email ?? '')
+  const [password, setPassword] = useState(secretsDraft.password)
+  const [confirmPassword, setConfirmPassword] = useState(secretsDraft.confirmPassword)
+  const [otp, setOtp] = useState(secretsDraft.otp)
+  const [newPassword, setNewPassword] = useState(secretsDraft.newPassword)
+  const [confirmNewPassword, setConfirmNewPassword] = useState(secretsDraft.confirmNewPassword)
+
+  // Deeper steps belong to the tab they started from (a reset or code login starts from Login).
+  const tab: AuthDraft['view'] = isTab(view) ? view : view === 'verify-signup-otp' ? 'signup' : 'login'
+  useEffect(() => {
+    if (name || email || tab !== 'signup') writeDraft<AuthDraft>(draftKeys.auth(), { view: tab, name, email })
+    else clearDraft(draftKeys.auth())
+  }, [tab, name, email])
+
+  useEffect(() => {
+    secretsDraft = { view, password, confirmPassword, otp, newPassword, confirmNewPassword }
+  }, [view, password, confirmPassword, otp, newPassword, confirmNewPassword])
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -61,6 +92,7 @@ export default function Auth({ onLoginSuccess, onClose }: LoginPageProps) {
       throw new Error('No kitchen found for this user')
     }
 
+    clearAuthDrafts()
     onLoginSuccess(user, kitchen)
   }
 

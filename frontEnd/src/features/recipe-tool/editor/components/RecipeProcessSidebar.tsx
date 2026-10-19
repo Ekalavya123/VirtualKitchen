@@ -138,7 +138,7 @@ export default function RecipeProcessSidebar({
               aria-label={`${counts.blockers} blocking, ${counts.warnings} warnings`}
               style={{
                 flexShrink: 0, width: 8, height: 8, borderRadius: 999,
-                background: counts.blockers > 0 ? 'var(--flow-danger)' : 'var(--flow-warning-border)',
+                background: counts.blockers > 0 ? 'var(--flow-warning)' : 'var(--flow-warning-border)',
               }}
             />
           )}

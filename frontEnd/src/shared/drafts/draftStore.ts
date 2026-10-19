@@ -108,4 +108,6 @@ export const draftKeys = {
   nutrition: (recipeId: number) => `recipe.${recipeId}.nutrition`,
   stepIngredient: (stepId: string) => `step.${stepId}.newIngredient`,
   newRecipe: () => 'newRecipe',
+  /** The sign-up / login form's step, name and email — never its passwords or codes. */
+  auth: () => 'auth',
 }
