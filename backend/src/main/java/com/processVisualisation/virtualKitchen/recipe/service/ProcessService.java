@@ -329,7 +329,7 @@ public class ProcessService {
         }
 
         processRepository.saveAll(copies);
-        return new RecipeProcessCopyResult(processIdMap, copiedMainId);
+        return new RecipeProcessCopyResult(processIdMap, copiedMainId, nodeIdMaps);
     }
 
     /**

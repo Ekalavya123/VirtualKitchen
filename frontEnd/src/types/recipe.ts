@@ -257,6 +257,8 @@ export interface RecipeDetail {
   description?: string
   createdBy?: number
   visibility?: 'PUBLIC' | 'PRIVATE'
+  /** The public recipe this one was copied from ("Add to My Recipes"); null when it wasn't copied. */
+  copiedFromRecipeId?: number | null
   ingredients: RecipeIngredient[]
   nutrition?: NutritionInfo | null
   /** The recipe's own default preparation guidance; null/absent means the app's default text. */

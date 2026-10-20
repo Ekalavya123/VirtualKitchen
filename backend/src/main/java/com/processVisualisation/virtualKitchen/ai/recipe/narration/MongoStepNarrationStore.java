@@ -148,6 +148,22 @@ public class MongoStepNarrationStore implements StepNarrationStore {
     }
 
     @Override
+    public List<StepNarration> findReadyByRecipeId(Long recipeId) {
+        return mongoTemplate.find(
+                query(where("recipeId").is(recipeId).and("status").is(StepNarrationStatus.READY)), StepNarration.class);
+    }
+
+    @Override
+    public boolean insertIfAbsent(StepNarration narration) {
+        try {
+            mongoTemplate.insert(narration);
+            return true;
+        } catch (DuplicateKeyException e) {
+            return false;
+        }
+    }
+
+    @Override
     public Optional<StepNarration> delete(String narrationKey) {
         return Optional.ofNullable(mongoTemplate.findAndRemove(
                 query(where("narrationKey").is(narrationKey)), StepNarration.class));

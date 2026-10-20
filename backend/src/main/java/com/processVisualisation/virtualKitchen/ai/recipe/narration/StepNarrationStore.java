@@ -40,6 +40,16 @@ public interface StepNarrationStore {
     /** Marks the narration FAILED, but only while it still carries {@code token}. */
     boolean markFailed(String narrationKey, String token, String reason, Instant failedAt);
 
+    /** Every READY narration of the recipe, whatever process it belongs to. */
+    List<StepNarration> findReadyByRecipeId(Long recipeId);
+
+    /**
+     * Inserts a complete record (a copied narration) unless one already exists for its key.
+     *
+     * @return false when the key was already taken, leaving the existing record untouched
+     */
+    boolean insertIfAbsent(StepNarration narration);
+
     /** Deletes the record and returns it, so its audio can be deleted too. */
     Optional<StepNarration> delete(String narrationKey);
 

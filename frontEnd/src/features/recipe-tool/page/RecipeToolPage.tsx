@@ -8,6 +8,7 @@ import RecipeToolNavbar from './RecipeToolNavbar'
 import RecipeEditorView from '../editor/components/RecipeEditorView'
 import RecipeViewPage from '../view/components/RecipeViewPage'
 import { recipeToolPath, type RecipeToolView } from '../recipeToolRoutes'
+import { useAddToMyRecipes } from './useAddToMyRecipes'
 import EditRecipeDetailsModal, { type RecipeDetailsDraft } from './EditRecipeDetailsModal'
 import { useConfirm } from '../../../shared/components/confirm/confirmContext'
 import { useNotifications } from '../../../shared/components/notifications/notificationContext'
@@ -18,7 +19,7 @@ import type { ReadinessIssue } from '../model/recipeReadiness'
 type RecipeToolPageProps = {
   recipeId: number
   currentUserId: number
-  /** From the route; undefined on the bare `/tool` URL, which lands on the owner's editor or a reader's Recipe Process. */
+  /** From the route; undefined on the bare `/tool` URL, which lands on the Recipe Process (read mode). */
   view?: RecipeToolView
   onBack: () => void
   /** Starts an order for this recipe; supplied by the app, since ordering is its own feature. Owners only. */
@@ -108,6 +109,8 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, 
   }, [recipeId, currentUserId])
 
   const isOwner = recipe != null && recipe.createdBy != null && recipe.createdBy === currentUserId
+  // Someone else's public recipe stays read-only until the reader adds their own copy.
+  const addToMyRecipes = useAddToMyRecipes(recipe, isOwner, currentUserId)
 
   const handleMainProcessChanged = useCallback((mainProcessId: number) => {
     setRecipe((current) => (current ? { ...current, mainProcessId } : current))
@@ -197,12 +200,12 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, 
     )
   }
 
-  if (!view) {
-    return <Navigate to={recipeToolPath(recipeId, isOwner ? 'editor' : 'process')} replace />
+  // A recipe always opens in read mode (the Recipe Process); only its owner can switch to the editor.
+  if (!view || (view === 'editor' && !isOwner)) {
+    return <Navigate to={recipeToolPath(recipeId, 'process')} replace />
   }
 
   return (
-    // Readers can look around the editor, but only the owner's edits are autosaved/kept for recovery.
     <RecipeSessionProvider recipeId={recipeId} canEdit={isOwner}>
       {/* `flow-canvas-container` strips .kitchen-body's ambient page padding/scroll (see
           KitchenLayout.css) so the editor's canvas can use the full available area edge-to-edge;
@@ -210,6 +213,8 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, 
       <div className="flow-canvas-container flex h-full w-full flex-col" style={{ background: 'var(--flow-surface-muted)' }}>
         <RecipeToolNavbar
           recipe={recipe}
+          readOnly={!isOwner}
+          addToMyRecipes={addToMyRecipes}
           onBack={onBack}
           onOrderRecipe={isOwner && onOrderRecipe ? () => onOrderRecipe(recipe.id, recipe.nutrition?.servings) : undefined}
           ordering={orderingRecipeId === recipe.id}
@@ -225,7 +230,7 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, 
           onClose={() => setEditingDetails(false)}
         />
 
-        {editorMounted && (
+        {editorMounted && isOwner && (
           <div className="min-h-0 flex-1" style={{ display: view === 'editor' ? 'flex' : 'none', flexDirection: 'column' }}>
             <RecipeEditorView
               recipeId={recipeId}
@@ -241,7 +246,14 @@ export default function RecipeToolPage({ recipeId, currentUserId, view, onBack, 
         )}
 
         {view === 'process' && (
-          <RecipeViewPage recipe={recipe} isOwner={isOwner} onNutritionSaved={handleNutritionSaved} onShowIssue={showIssue} onOpenStep={openStep} />
+          <RecipeViewPage
+            recipe={recipe}
+            isOwner={isOwner}
+            addToMyRecipes={addToMyRecipes}
+            onNutritionSaved={handleNutritionSaved}
+            onShowIssue={showIssue}
+            onOpenStep={openStep}
+          />
         )}
       </div>
     </RecipeSessionProvider>

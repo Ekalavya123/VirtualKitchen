@@ -57,6 +57,7 @@ public class RecipeTemplateMapper {
                 .description(pt.getDescription())
                 .createdBy(pt.getCreatedBy())
                 .visibility(pt.getVisibility())
+                .copiedFromRecipeId(pt.getCopiedFromRecipeId())
                 .createdAt(pt.getCreatedAt())
                 .updatedAt(pt.getUpdatedAt())
                 .build();
@@ -76,6 +77,7 @@ public class RecipeTemplateMapper {
                 .description(pt.getDescription())
                 .createdBy(pt.getCreatedBy())
                 .visibility(pt.getVisibility())
+                .copiedFromRecipeId(pt.getCopiedFromRecipeId())
                 .ingredients(toIngredientDTOs(pt.getIngredients()))
                 .nutrition(toNutritionDTO(pt.getNutrition()))
                 .preparationNotes(pt.getPreparationNotes())

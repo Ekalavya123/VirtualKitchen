@@ -6,6 +6,7 @@ import com.processVisualisation.virtualKitchen.recipe.dto.ProcessResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeDetailResponseDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeIngredientDTO;
 import com.processVisualisation.virtualKitchen.recipe.dto.RecipeTemplateResponseDTO;
+import com.processVisualisation.virtualKitchen.recipe.event.RecipeCopiedEvent;
 import com.processVisualisation.virtualKitchen.recipe.exception.RecipeAccessDeniedException;
 import com.processVisualisation.virtualKitchen.recipe.mapper.RecipeTemplateMapper;
 import com.processVisualisation.virtualKitchen.recipe.model.NutritionInfo;
@@ -18,6 +19,8 @@ import com.processVisualisation.virtualKitchen.recipe.validation.ProcessValidati
 import com.processVisualisation.virtualKitchen.store.units.UnitType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.ArrayList;
@@ -62,6 +65,7 @@ class RecipeTemplateServiceTest {
     private final Map<Long, RecipeTemplate> recipeStore = new HashMap<>();
 
     private ProcessService processService;
+    private ApplicationEventPublisher eventPublisher;
     private RecipeTemplateService service;
 
     @BeforeEach
@@ -96,6 +100,8 @@ class RecipeTemplateServiceTest {
         ReflectionTestUtils.setField(service, "mapper", new RecipeTemplateMapper());
         ReflectionTestUtils.setField(service, "seq", seq);
         ReflectionTestUtils.setField(service, "processService", processService);
+        eventPublisher = mock(ApplicationEventPublisher.class);
+        ReflectionTestUtils.setField(service, "eventPublisher", eventPublisher);
     }
 
     @Test
@@ -271,7 +277,8 @@ class RecipeTemplateServiceTest {
         source.setNutrition(nutrition);
         source.setMainProcessId(10L);
         when(processService.copyAllToRecipe(eq(sourceId), anyLong()))
-                .thenAnswer(inv -> new RecipeProcessCopyResult(Map.of(10L, 20L, 11L, 21L), 20L));
+                .thenAnswer(inv -> new RecipeProcessCopyResult(Map.of(10L, 20L, 11L, 21L), 20L,
+                        Map.of(10L, Map.of("step-1", "step-1-copy"))));
 
         RecipeTemplateResponseDTO copyDto = service.copyToUser(sourceId, OTHER_USER_ID);
 
@@ -279,6 +286,8 @@ class RecipeTemplateServiceTest {
         assertNotEquals(sourceId, copy.getId());
         assertEquals(OTHER_USER_ID, copy.getCreatedBy());
         assertEquals(Visibility.PRIVATE, copy.getVisibility());
+        assertEquals(sourceId, copy.getCopiedFromRecipeId());
+        assertEquals(sourceId, copyDto.getCopiedFromRecipeId());
         assertEquals(20L, copy.getMainProcessId());
         assertEquals(1, copy.getIngredients().size());
         assertEquals(5L, copy.getIngredients().get(0).getIngredientId());
@@ -288,6 +297,15 @@ class RecipeTemplateServiceTest {
         assertEquals(2, copy.getNutrition().getServings());
         assertNotSame(nutrition, copy.getNutrition());
         verify(processService).copyAllToRecipe(sourceId, copy.getId());
+
+        // Narration (kept outside the recipe documents) is copied by a listener keyed on the new ids.
+        ArgumentCaptor<RecipeCopiedEvent> event = ArgumentCaptor.forClass(RecipeCopiedEvent.class);
+        verify(eventPublisher).publishEvent(event.capture());
+        assertEquals(sourceId, event.getValue().sourceRecipeId());
+        assertEquals(copy.getId(), event.getValue().targetRecipeId());
+        assertEquals(OTHER_USER_ID, event.getValue().userId());
+        assertEquals(Map.of(10L, 20L, 11L, 21L), event.getValue().processIdMap());
+        assertEquals("step-1-copy", event.getValue().nodeIdMaps().get(10L).get("step-1"));
 
         // The source recipe is untouched.
         assertEquals(10L, source.getMainProcessId());
@@ -301,6 +319,7 @@ class RecipeTemplateServiceTest {
 
         assertThrows(ProcessValidationException.class, () -> service.copyToUser(sourceId, OTHER_USER_ID));
         assertEquals(1, recipeStore.size(), "only the source recipe remains");
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test

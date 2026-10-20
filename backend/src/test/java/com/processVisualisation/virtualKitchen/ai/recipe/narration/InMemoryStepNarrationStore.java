@@ -107,6 +107,23 @@ class InMemoryStepNarrationStore implements StepNarrationStore {
     }
 
     @Override
+    public synchronized List<StepNarration> findReadyByRecipeId(Long recipeId) {
+        return records.values().stream()
+                .filter(r -> recipeId.equals(r.getRecipeId()) && r.getStatus() == StepNarrationStatus.READY)
+                .map(InMemoryStepNarrationStore::copy)
+                .toList();
+    }
+
+    @Override
+    public synchronized boolean insertIfAbsent(StepNarration narration) {
+        if (records.containsKey(narration.getNarrationKey())) {
+            return false;
+        }
+        records.put(narration.getNarrationKey(), copy(narration));
+        return true;
+    }
+
+    @Override
     public synchronized Optional<StepNarration> delete(String narrationKey) {
         return Optional.ofNullable(records.remove(narrationKey));
     }

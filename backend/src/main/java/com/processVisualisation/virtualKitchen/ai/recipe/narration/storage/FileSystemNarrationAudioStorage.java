@@ -74,6 +74,18 @@ public class FileSystemNarrationAudioStorage implements NarrationAudioStorage {
         });
     }
 
+    @Override
+    public Optional<byte[]> read(String storagePath) {
+        return resolve(storagePath).flatMap(path -> {
+            try {
+                return Optional.of(Files.readAllBytes(path));
+            } catch (IOException e) {
+                log.warn("event=narration_file_read_failed file={} errorType={}", storagePath, e.getClass().getSimpleName());
+                return Optional.empty();
+            }
+        });
+    }
+
     /** The file for a name this storage issued, or empty for anything else (including traversal attempts). */
     public Optional<Path> resolve(String fileName) {
         if (fileName == null || !FILE_NAME.matcher(fileName).matches()) {

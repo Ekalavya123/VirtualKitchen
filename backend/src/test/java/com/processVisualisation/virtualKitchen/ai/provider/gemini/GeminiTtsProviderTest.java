@@ -5,6 +5,7 @@ import com.processVisualisation.virtualKitchen.ai.provider.config.GeminiProperti
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiAuthenticationException;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiCommunicationException;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiInvalidResponseException;
+import com.processVisualisation.virtualKitchen.ai.provider.exception.AiRateLimitedException;
 import com.processVisualisation.virtualKitchen.ai.provider.exception.AiTimeoutException;
 import com.processVisualisation.virtualKitchen.ai.provider.tts.AudioFormat;
 import com.processVisualisation.virtualKitchen.ai.provider.tts.GeneratedAudio;
@@ -12,6 +13,7 @@ import com.processVisualisation.virtualKitchen.ai.provider.tts.TtsRequest;
 import com.processVisualisation.virtualKitchen.ai.provider.tts.WavAudio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -19,11 +21,14 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.net.SocketTimeoutException;
+import java.time.Duration;
 import java.util.Base64;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
@@ -130,14 +135,58 @@ class GeminiTtsProviderTest {
     @Test
     void rateLimitIsARetryableCommunicationFailure() {
         server.expect(requestTo(GENERATE_URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS));
-        AiCommunicationException ex = assertThrows(AiCommunicationException.class, () -> provider.synthesize(request()));
+        AiRateLimitedException ex = assertThrows(AiRateLimitedException.class, () -> provider.synthesize(request()));
         assertEquals(true, ex.getMessage().contains("429"));
+        assertNull(ex.getRetryAfter());
+    }
+
+    @Test
+    void rateLimitCarriesGeminisRetryDelay() {
+        server.expect(requestTo(GENERATE_URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("""
+                        {"error":{"code":429,"status":"RESOURCE_EXHAUSTED","details":[
+                          {"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[
+                            {"quotaId":"GenerateRequestsPerMinutePerProjectPerModel"}]},
+                          {"@type":"type.googleapis.com/google.rpc.RetryInfo","retryDelay":"37s"}]}}
+                        """));
+        AiRateLimitedException ex = assertThrows(AiRateLimitedException.class, () -> provider.synthesize(request()));
+        assertEquals(Duration.ofSeconds(37), ex.getRetryAfter());
+    }
+
+    @Test
+    void retryAfterHeaderWinsOverTheBody() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set(HttpHeaders.RETRY_AFTER, "12");
+        server.expect(requestTo(GENERATE_URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).headers(headers));
+        AiRateLimitedException ex = assertThrows(AiRateLimitedException.class, () -> provider.synthesize(request()));
+        assertEquals(Duration.ofSeconds(12), ex.getRetryAfter());
+    }
+
+    @Test
+    void dailyQuotaIsNotRetryable() {
+        server.expect(requestTo(GENERATE_URL)).andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("""
+                        {"error":{"code":429,"status":"RESOURCE_EXHAUSTED","details":[
+                          {"@type":"type.googleapis.com/google.rpc.QuotaFailure","violations":[
+                            {"quotaId":"GenerateRequestsPerDayPerProjectPerModel"}]}]}}
+                        """));
+        AiCommunicationException ex = assertThrows(AiCommunicationException.class, () -> provider.synthesize(request()));
+        assertFalse(ex instanceof AiRateLimitedException);
+    }
+
+    @Test
+    void overloadIsARetryableRateLimit() {
+        server.expect(requestTo(GENERATE_URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+        assertThrows(AiRateLimitedException.class, () -> provider.synthesize(request()));
     }
 
     @Test
     void serverErrorIsACommunicationFailure() {
-        server.expect(requestTo(GENERATE_URL)).andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
-        assertThrows(AiCommunicationException.class, () -> provider.synthesize(request()));
+        server.expect(requestTo(GENERATE_URL)).andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
+        AiCommunicationException ex = assertThrows(AiCommunicationException.class, () -> provider.synthesize(request()));
+        assertFalse(ex instanceof AiRateLimitedException);
     }
 
     @Test

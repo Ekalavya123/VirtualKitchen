@@ -21,6 +21,20 @@ public class AiRequestProperties {
 
     private long retryBackoffMs = 500;
 
+    /**
+     * Extra retries for a throttled request (429/503, {@code AiRateLimitedException}). These are
+     * separate from {@link #maxRetries} because a per-minute limit needs seconds-to-a-minute of
+     * waiting, not one short pause: a bulk narration of 16 steps otherwise loses every step past the
+     * provider's requests-per-minute limit.
+     */
+    private int rateLimitMaxRetries = 4;
+
+    /** First wait after a throttle when the provider gives no Retry-After; doubles on each retry. */
+    private long rateLimitBackoffMs = 5_000;
+
+    /** Upper bound on any single throttle wait, including one the provider asked for. */
+    private long rateLimitMaxBackoffMs = 45_000;
+
     /** USD -> INR rate used only to show request cost in INR in the logs; costs are always stored in USD. */
     private double usdToInr = 88.0;
 

@@ -133,6 +133,11 @@ ai.models[6].enabled=true
 ai.default-model.TEXT_TO_SPEECH=${AI_TTS_DEFAULT_MODEL:gemini-tts}
 app.queue.ai-tts-max-depth=${AI_TTS_MAX_DEPTH:20}
 app.taskpool.narration.n-threads=${NARRATION_THREADS:2}
+# Gemini TTS is rate limited per minute; a throttled (429/503) request waits Retry-After (else 5s, doubling,
+# capped at 45s) and retries up to 4 times instead of failing the step.
+ai.request.rate-limit-max-retries=4
+ai.request.rate-limit-backoff-ms=5000
+ai.request.rate-limit-max-backoff-ms=45000
 
 # Gemini speech reuses ai.gemini.api-key / base-url / chat-endpoint; only the model and voice are TTS-specific.
 ai.gemini.tts.model=${AI_GEMINI_TTS_MODEL:gemini-2.5-flash-preview-tts}

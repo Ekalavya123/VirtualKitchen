@@ -23,30 +23,38 @@ export default function RecipeReadinessPanel({ readiness, onNavigate, openToken 
   }
 
   const { blockers, warnings, issues } = readiness
-  const summary = blockers.length === 0 && warnings.length === 0
-    ? '✓ Ready to cook'
-    : [blockers.length > 0 ? `✖ ${blockers.length} to fix` : '✓ Ready', warnings.length > 0 ? `⚠ ${warnings.length}` : ''].filter(Boolean).join(' · ')
-  const tone = blockers.length > 0 ? 'var(--flow-danger)' : warnings.length > 0 ? 'var(--flow-text-muted)' : 'var(--flow-success)'
+  // Collapsed, issues are just a small amber ⚠ chip with their count — a nudge, not an alarm; the list opens on click.
+  const label = issues.length === 0
+    ? 'Ready to cook'
+    : [blockers.length > 0 ? `${blockers.length} to fix` : '', warnings.length > 0 ? `${warnings.length} warning${warnings.length === 1 ? '' : 's'}` : ''].filter(Boolean).join(' · ')
 
   return (
     <div className="flex flex-shrink-0 flex-col border-b border-[var(--flow-border)]">
-      <button
-        type="button"
-        onClick={() => setExpanded((current) => !current)}
-        disabled={issues.length === 0}
-        aria-expanded={issues.length > 0 ? expanded : undefined}
-        title={blockers.length > 0
-          ? 'These must be fixed before cooking, ordering or creating visuals for the whole recipe'
-          : 'Cooking, ordering and whole-recipe visuals are available'}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-          padding: '8px 14px', border: 0, background: 'transparent', cursor: issues.length > 0 ? 'pointer' : 'default',
-          fontSize: 11.5, fontWeight: 700, color: tone, textAlign: 'left',
-        }}
-      >
-        <span>{summary}</span>
-        {issues.length > 0 && <span aria-hidden style={{ color: 'var(--flow-text-subtle)' }}>{expanded ? '▾' : '▸'}</span>}
-      </button>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '6px 14px' }}>
+        {issues.length === 0 ? (
+          <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--flow-success)' }}>✓ {label}</span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setExpanded((current) => !current)}
+            aria-expanded={expanded}
+            aria-label={`${label} — ${expanded ? 'hide' : 'show'} details`}
+            title={blockers.length > 0
+              ? `${label}: these must be fixed before cooking, ordering or creating visuals for the whole recipe`
+              : `${label}: cooking, ordering and whole-recipe visuals are available`}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '2px 8px', borderRadius: 999, cursor: 'pointer',
+              border: '1px solid var(--flow-warning-border)', background: 'var(--flow-warning-soft)',
+              fontSize: 11, fontWeight: 700, color: 'var(--flow-warning)',
+            }}
+          >
+            <span aria-hidden>⚠</span>
+            <span aria-hidden>{issues.length}</span>
+            <span aria-hidden style={{ fontSize: 9, color: 'var(--flow-text-subtle)' }}>{expanded ? '▾' : '▸'}</span>
+          </button>
+        )}
+      </div>
       {expanded && issues.length > 0 && (
         <ul style={{ listStyle: 'none', margin: 0, padding: '0 8px 8px', display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 240, overflowY: 'auto' }}>
           {[...blockers, ...warnings].map((issue, index) => (
