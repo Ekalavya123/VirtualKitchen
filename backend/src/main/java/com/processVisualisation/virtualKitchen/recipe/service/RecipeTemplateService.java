@@ -79,11 +79,14 @@ public class RecipeTemplateService {
      * Retrieves a single recipe template by id.
      *
      * @param id the id of the template to fetch
+     * @param requestingUserId the caller (from the verified JWT)
      * @return the matching template
      * @throws java.util.NoSuchElementException if no template exists with the given id
+     * @throws RecipeAccessDeniedException if the template is private and not the caller's
      */
-    public RecipeTemplateResponseDTO get(Long id){
-        return mapper.toDTO(repo.findById(id).orElseThrow());
+    public RecipeTemplateResponseDTO get(Long id, Long requestingUserId){
+        // Same rule as the detail view: the owner always, anyone else only while it is public.
+        return mapper.toDTO(requireAccessible(id, requestingUserId));
     }
 
     /**

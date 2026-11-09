@@ -22,6 +22,9 @@ spring.data.mongodb.gridfs.bucket=${MONGODB_GRIDFS_BUCKET:ai_artifacts}
 app.jwt.secret=${JWT_SECRET:REPLACE_WITH_A_LONG_RANDOM_SECRET}
 app.jwt.expiration-ms=${JWT_EXPIRATION_MS:86400000}
 
+# Swagger UI / OpenAPI docs without signing in. Handy locally; set to false in production.
+app.security.api-docs-public=${API_DOCS_PUBLIC:true}
+
 # OAuth client ID from Google Cloud Console (Credentials > OAuth 2.0 Client IDs > Web application).
 # Must match the frontend's VITE_GOOGLE_CLIENT_ID.
 google.oauth.client-id=${GOOGLE_CLIENT_ID:REPLACE_WITH_GOOGLE_OAUTH_CLIENT_ID}
