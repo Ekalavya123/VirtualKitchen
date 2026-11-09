@@ -59,6 +59,8 @@ type RecipeEditorViewProps = {
   issueFocusRequest?: { issue: ReadinessIssue; token: number } | null
   /** A step to open (from the Recipe Process page): its process is shown with the step selected and centred. */
   stepFocusRequest?: { processId: number; nodeId: string; token: number } | null
+  /** Open AI Recipe Creation right away (a recipe just created with "Describe it for AI"). */
+  openAiCreationOnStart?: boolean
 }
 
 /**
@@ -75,6 +77,7 @@ type RecipeEditorViewProps = {
  */
 export default function RecipeEditorView({
   recipeId, recipeName, isOwner, onMainProcessChanged, preparationNotes = null, onSavePreparationNotes, issueFocusRequest = null, stepFocusRequest = null,
+  openAiCreationOnStart = false,
 }: RecipeEditorViewProps) {
   const { notifyError, notifySuccess } = useNotifications()
   const session = useRecipeSession()
@@ -89,7 +92,7 @@ export default function RecipeEditorView({
   const generationJob = useTrackedJob(generationJobKey(recipeId))
   // AI Recipe Creation (process → review/approval → visuals + narration), followed by the same tracker.
   const workflow = useTrackedJob(workflowJobKey(recipeId))?.job ?? null
-  const [showAiCreation, setShowAiCreation] = useState(false)
+  const [showAiCreation, setShowAiCreation] = useState(openAiCreationOnStart && isOwner)
   // What the AI menu item that opened AI Recipe Creation pre-ticks (undefined: the user's last selection).
   const [aiCreationTasks, setAiCreationTasks] = useState<RecipeAiTaskType[] | undefined>(undefined)
   const openAiCreation = useCallback((tasks?: RecipeAiTaskType[]) => {
@@ -513,8 +516,10 @@ export default function RecipeEditorView({
 
   if (session.loadError) {
     return (
-      <div className="flex h-full w-full items-center justify-center" style={{ color: '#9f1239' }}>
-        {session.loadError}
+      <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-4 text-center" role="alert" style={{ color: 'var(--flow-danger)' }}>
+        <span>{session.loadError}</span>
+        {/* The session loads once per page; reloading the page is the reliable retry. */}
+        <button type="button" className="vk-btn vk-btn-secondary" onClick={() => window.location.reload()}>Try again</button>
       </div>
     )
   }

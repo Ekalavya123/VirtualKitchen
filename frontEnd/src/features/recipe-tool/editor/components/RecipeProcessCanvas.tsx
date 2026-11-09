@@ -83,10 +83,11 @@ import RecipeVisualizationSlideshow from '../../walkthrough/RecipeVisualizationS
 import ExportProcessModal from './ExportProcessModal'
 import { startPanelResize } from './panelResize'
 import { useCanvasShortcuts } from '../hooks/useCanvasShortcuts'
+import EmptyCanvasPrompt from './EmptyCanvasPrompt'
+import ShortcutHelpDialog from './ShortcutHelpDialog'
 import { useProcessVisuals } from '../hooks/useProcessVisuals'
 import { buildCanvasSlideshowSteps } from '../model/canvasSlideshow'
 import { describeNodeDeletion } from '../model/nodeDeletion'
-import { errorMessage } from '../../../../shared/errors'
 import '../../../../styles/flow-ui.css'
 import '../../styles/RecipePropertiesPanel.css'
 import '../styles/RecipeProcessCanvas.css'
@@ -697,8 +698,6 @@ function RecipeProcessCanvasContent({
     else if (selectedEdgeId) deleteEdge(selectedEdgeId)
   }, [selectedNodeId, selectedEdgeId, requestDeleteNode, deleteEdge])
 
-  useCanvasShortcuts({ onDelete: deleteSelected, onUndo: undo, onRedo: redo })
-
   const duplicateNode = useCallback((id: string) => {
     pushHistorySnapshot()
     setNodes((nds) => {
@@ -883,17 +882,17 @@ function RecipeProcessCanvasContent({
     else notifyError(error ?? 'Unable to save this recipe right now')
   }, [session, notifySuccess, notifyError])
 
-  const handleResolveConflict = useCallback(async (choice: 'reload' | 'keepMine') => {
-    if (choice === 'reload' && !(await confirm({
-      eyebrow: 'Discard changes',
-      title: 'Discard your unsaved changes?',
-      message: 'Every change made here since the last save will be lost, and the latest saved version of this recipe is loaded instead. This can\'t be undone.',
-      confirmLabel: 'Discard & reload',
-    }))) return
-    session.resolveConflict(choice).catch((error) => {
-      notifyError(errorMessage(error, 'Unable to resolve the conflict right now'))
-    })
-  }, [session, notifyError, confirm])
+  // Shortcuts only while this canvas is on screen: it stays mounted (hidden) while the Recipe Process tab shows.
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const isCanvasVisible = useCallback(() => bodyRef.current?.offsetParent != null, [])
+  useCanvasShortcuts({
+    onDelete: deleteSelected,
+    onUndo: undo,
+    onRedo: redo,
+    onSave: () => void handleSave(),
+    onShowHelp: () => setShowShortcuts(true),
+    isActive: isCanvasVisible,
+  })
 
   const handleBack = useCallback(() => {
     if (!confirmNavigatingAway()) return
@@ -1062,8 +1061,8 @@ function RecipeProcessCanvasContent({
         onNavigateToAncestor={handleNavigateToAncestor}
         onBack={onBack ? handleBack : undefined}
         onSave={() => void handleSave()}
-        saveState={session.saveState}
-        onResolveConflict={handleResolveConflict}
+        isSaving={session.saveState.status === 'saving'}
+        onShowShortcuts={() => setShowShortcuts(true)}
         onUndo={undo}
         onRedo={redo}
         canUndo={session.canUndo}
@@ -1260,6 +1259,14 @@ function RecipeProcessCanvasContent({
                   )}
                 </ReactFlow>
               </RecipeProcessGraphProvider>
+              {flowReady && nodes.length === 0 && (
+                <EmptyCanvasPrompt
+                  isPreparation={isPreparationProcess}
+                  onAddStep={addStep}
+                  onAddCondition={addCondition}
+                  onGenerateWithAi={aiActions && !isPreparationProcess ? () => aiActions.onOpenAiCreation() : undefined}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -1345,6 +1352,8 @@ function RecipeProcessCanvasContent({
           onClose={() => setExportJson(null)}
         />
       )}
+
+      {showShortcuts && <ShortcutHelpDialog onClose={() => setShowShortcuts(false)} />}
     </div>
   )
 }

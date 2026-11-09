@@ -28,7 +28,6 @@ export interface Recipe {
 export interface RecipeCreateRequest {
   name: string
   description?: string
-  createdBy: number
 }
 
 export interface RecipeUpdateRequest {
@@ -45,7 +44,7 @@ export const RecipeApi = {
   },
 
   /**
-   * Get public recipes owned by other users (Global Recipes)
+   * Get public recipes owned by other users (shown in Discover)
    */
   async getGlobalRecipes(userId: number): Promise<Recipe[]> {
     return apiGet<Recipe[]>(API.recipes.global(userId))
@@ -61,45 +60,43 @@ export const RecipeApi = {
   /**
    * Update a recipe's name/description. Only the owner may update.
    */
-  async updateRecipe(recipeId: number, userId: number, data: RecipeUpdateRequest): Promise<Recipe> {
-    return apiPut<Recipe>(API.recipes.byId(recipeId), data, { params: { userId } })
+  async updateRecipe(recipeId: number, data: RecipeUpdateRequest): Promise<Recipe> {
+    return apiPut<Recipe>(API.recipes.byId(recipeId), data)
   },
 
   /**
    * Publish/unpublish a recipe. Only the owner may change visibility.
    */
-  async updateVisibility(recipeId: number, userId: number, visibility: RecipeVisibility): Promise<Recipe> {
-    return apiPut<Recipe>(API.recipes.visibility(recipeId), undefined, { params: { userId, visibility } })
+  async updateVisibility(recipeId: number, visibility: RecipeVisibility): Promise<Recipe> {
+    return apiPut<Recipe>(API.recipes.visibility(recipeId), undefined, { params: { visibility } })
   },
 
   /**
    * Set the recipe's default preparation guidance; null or blank goes back to the app's default. Only the owner may change it.
    */
-  async updatePreparationNotes(recipeId: number, userId: number, preparationNotes: string | null): Promise<RecipeDetail> {
-    return apiPut<RecipeDetail>(API.recipes.preparationNotes(recipeId), { preparationNotes }, { params: { userId } })
+  async updatePreparationNotes(recipeId: number, preparationNotes: string | null): Promise<RecipeDetail> {
+    return apiPut<RecipeDetail>(API.recipes.preparationNotes(recipeId), { preparationNotes })
   },
 
   /**
    * Copy a public recipe into the current user's My Recipes as an independent recipe.
    */
-  async copyRecipe(recipeId: number, userId: number): Promise<Recipe> {
-    return apiPost<Recipe>(API.recipes.copy(recipeId), undefined, { params: { userId } })
+  async copyRecipe(recipeId: number): Promise<Recipe> {
+    return apiPost<Recipe>(API.recipes.copy(recipeId))
   },
 
   /**
    * Delete a recipe. Only the owner may delete.
    */
-  async deleteRecipe(recipeId: number, userId: number): Promise<void> {
-    return apiDelete<void>(API.recipes.byId(recipeId), { params: { userId } })
+  async deleteRecipe(recipeId: number): Promise<void> {
+    return apiDelete<void>(API.recipes.byId(recipeId))
   },
 }
 
 /**
  * A recipe's ingredients/nutrition/main-process, backed by `/api/v1/recipes/{recipeId}/**`
- * ({@link RecipeApi} above serves the recipe list/create/publish/copy endpoints). The
- * authenticated user is resolved by the backend from the request's JWT, so
- * — unlike {@link RecipeApi}'s mutating methods — none of these take a
- * userId parameter.
+ * ({@link RecipeApi} above serves the recipe list/create/publish/copy endpoints). As everywhere,
+ * the authenticated user is resolved by the backend from the request's JWT.
  */
 export const RecipeDetailApi = {
   /**
