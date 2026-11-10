@@ -133,6 +133,8 @@ export type RunRecord = {
   error?: string
   /** Requested model differed from the one used in some stage. */
   fallback: boolean
+  /** Admin runtime config the combo ran with (e.g. images.sceneAnchor.enabled=false). */
+  adminConfig?: Record<string, Record<string, string>>
   stages: { text?: TextStage; image?: ImageStage; speech?: SpeechStage }
   steps: StepSummary[]
   quality?: Quality

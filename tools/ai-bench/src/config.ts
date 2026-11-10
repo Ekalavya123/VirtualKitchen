@@ -33,6 +33,11 @@ export type Combo = {
   text?: string
   image?: string
   speech?: string
+  /**
+   * Admin runtime config to apply while this combo runs, by section then key, e.g.
+   * {"images": {"sceneAnchor.enabled": "false"}}. Reverted before the next combo and at the end.
+   */
+  adminConfig?: Record<string, Record<string, string>>
 }
 
 export type BenchConfig = {
@@ -84,6 +89,22 @@ const account = (raw: unknown, field: string): AccountRef => {
   return ref
 }
 
+/** {section: {key: value}}; booleans and numbers are accepted and sent as strings (the API's format). */
+const adminConfig = (raw: unknown, field: string): Combo['adminConfig'] => {
+  if (raw === undefined || raw === null) return undefined
+  if (typeof raw !== 'object' || Array.isArray(raw)) return fail(`"${field}" must be an object of sections`)
+  const result: Record<string, Record<string, string>> = {}
+  for (const [section, values] of Object.entries(raw as Record<string, unknown>)) {
+    if (!values || typeof values !== 'object' || Array.isArray(values)) fail(`"${field}.${section}" must be an object of settings`)
+    result[section] = {}
+    for (const [key, value] of Object.entries(values as Record<string, unknown>)) {
+      if (!['string', 'boolean', 'number'].includes(typeof value)) fail(`"${field}.${section}.${key}" must be a string, number or boolean`)
+      result[section][key] = String(value)
+    }
+  }
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
 export function loadConfig(path: string): BenchConfig {
   const file = resolve(path)
   const configDir = dirname(file)
@@ -121,6 +142,7 @@ export function loadConfig(path: string): BenchConfig {
       text: optionalString(entry.text, `combos[${index}].text`),
       image: optionalString(entry.image, `combos[${index}].image`),
       speech: optionalString(entry.speech, `combos[${index}].speech`),
+      adminConfig: adminConfig(entry.adminConfig, `combos[${index}].adminConfig`),
     }
     if (!combo.text) fail(`combos[${index}] ("${combo.name}") needs a "text" model: images and narration are made from the generated process`)
     return combo

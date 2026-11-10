@@ -12,6 +12,8 @@
   "combos": [
     { "name": "deepinfra-all", "text": "deepinfra-deepseek-v4-flash", "image": "deepinfra-flux2-klein", "speech": "deepinfra-mimo-tts" },
     { "name": "gemini-all", "text": "gemini-flash", "image": "gemini-image", "speech": "gemini-tts" },
+    { "name": "gemini-no-anchor", "text": "gemini-flash", "image": "gemini-image",
+      "adminConfig": { "images": { "sceneAnchor.enabled": false } } },
     { "name": "local-text", "text": "ollama-qwen" }
   ],
   "repeats": 1,

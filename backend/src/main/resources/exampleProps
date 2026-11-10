@@ -175,8 +175,10 @@ ai.deepinfra.jsonSchemaEnabled=${DEEPINFRA_JSON_SCHEMA_ENABLED:true}
 # ====================================================================================================
 #ai.gemini.imageModel=gemini-2.5-flash-image
 
-# Scene anchor: one empty-scene image per recipe, sent as a reference image with every step image (default true).
-#ai.visualization.scene-anchor.enabled=true
+# Scene anchor: one empty-scene image per recipe, sent as a reference image with every step image (Gemini only;
+# prompt-only providers get just the dish context line). false = steps use their own prompt alone.
+# Admin-changeable at runtime: Admin > Config > Images > Scene anchor.
+ai.visualization.scene-anchor.enabled=true
 
 # Step image profiles (AI_MODEL_MANAGEMENT_DESIGN.md section 26). Each step's action picks a purpose, through its
 # catalog category or a per-action override, and the purpose's profile sets the image size and inference steps. A

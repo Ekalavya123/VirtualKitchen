@@ -32,7 +32,10 @@ public class VisualizationSceneAnchorService {
 
     private final RecipeProcessVisualizationService visualizationService;
     private final ImageStorageClient imageStorageClient;
-    private final boolean enabled;
+    /** {@code ai.visualization.scene-anchor.enabled}, as configured at startup. */
+    private final boolean baselineEnabled;
+    /** The live switch; an admin override (ImageProfilesConfigSection) changes it without a restart. */
+    private volatile boolean enabled;
 
     private final Map<Long, Object> recipeLocks = new ConcurrentHashMap<>();
 
@@ -43,12 +46,30 @@ public class VisualizationSceneAnchorService {
     ) {
         this.visualizationService = visualizationService;
         this.imageStorageClient = imageStorageClient;
+        this.baselineEnabled = enabled;
         this.enabled = enabled;
     }
 
-    /** False turns scene anchors off entirely: no scene prompt is asked for and step images use their prompt alone. */
+    /**
+     * False turns scene anchors off entirely: no scene prompt is asked for and step images use their prompt alone.
+     * Read at the time of each job, so a change applies to the next visuals job. An anchor a recipe already has is
+     * kept and used again once the switch is back on.
+     */
     public boolean isEnabled() {
         return enabled;
+    }
+
+    /** The configured value, before any admin override. */
+    public boolean isBaselineEnabled() {
+        return baselineEnabled;
+    }
+
+    /** Applies an admin override (or, with the baseline, removes it). */
+    public void setEnabled(boolean enabled) {
+        if (this.enabled != enabled) {
+            log.info("event=visualization_scene_anchor_toggled enabled={}", enabled);
+        }
+        this.enabled = enabled;
     }
 
     /**

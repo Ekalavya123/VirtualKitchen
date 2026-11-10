@@ -147,6 +147,29 @@ class VisualizationPromptBatchServiceTest {
     }
 
     @Test
+    void sceneAnchorSwitchedOffAtRuntime_theNextBatchAsksForNoScene() {
+        // A real anchor service, configured on, then switched off as an admin override would.
+        VisualizationSceneAnchorService anchors = new VisualizationSceneAnchorService(
+                visualizationService, mock(com.processVisualisation.virtualKitchen.ai.provider.ImageStorageClient.class), true);
+        service = new VisualizationPromptBatchService(
+                visualizationService,
+                new RecipeProcessVisualizationPromptBuilder(),
+                queueService,
+                new AiClientResolver(Map.of("testTextClient", aiClient), Map.of()),
+                new AiJsonResponseSupport(mock(AiResponseService.class)),
+                anchors);
+        anchors.setEnabled(false);
+        givenMainWithSteps(1);
+        answerWithPromptsFor("m1");
+
+        service.ensurePrompts(USER, RECIPE, List.of(MAIN));
+
+        String prompt = capturedRequests().get(0).getUserPrompt();
+        assertTrue(!prompt.contains("SCENE:"), prompt);
+        verify(visualizationService, never()).saveScenePrompt(any(), any(), any());
+    }
+
+    @Test
     void existingScenePrompt_isNotAskedForAgain_andLeadsTheStyleReferences() {
         service = batchService(true);
         givenMainWithSteps(1);

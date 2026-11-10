@@ -82,6 +82,39 @@ async function setPreferences(user: ApiClient, combo: Combo, stages: Stage[], ba
   if (mismatched.length > 0) throw new Error(`model preferences did not take effect (${mismatched.join('; ')})`)
 }
 
+const describeAdminConfig = (config: NonNullable<Combo['adminConfig']>) => Object.entries(config)
+  .flatMap(([section, values]) => Object.entries(values).map(([key, value]) => `${section}.${key}=${value}`)).join(', ')
+
+/** Read-only check that every combo's adminConfig names real settings with allowed values. */
+async function checkAdminConfig(combos: Combo[], admin: ApiClient | null): Promise<string[]> {
+  const errors: string[] = []
+  const sections = new Map<string, { key: string; options: string[] }[]>()
+  for (const combo of combos) {
+    for (const [section, values] of Object.entries(combo.adminConfig ?? {})) {
+      if (!admin) { errors.push(`${combo.name}: "adminConfig" needs an admin account`); break }
+      if (!sections.has(section)) {
+        try {
+          sections.set(section, (await admin.get<{ fields: { key: string; options: string[] }[] }>(
+            `/api/v1/admin/config/${encodeURIComponent(section)}`)).fields)
+        } catch (error) {
+          errors.push(`${combo.name}: admin config section "${section}": ${(error as Error).message}`)
+          sections.set(section, [])
+          continue
+        }
+      }
+      const fields = sections.get(section)!
+      for (const [key, value] of Object.entries(values)) {
+        const field = fields.find((entry) => entry.key === key)
+        if (!field) errors.push(`${combo.name}: admin config "${section}" has no setting "${key}"`)
+        else if (field.options.length > 0 && !field.options.includes(value)) {
+          errors.push(`${combo.name}: ${section}.${key} can't be "${value}" (allowed: ${field.options.join(', ')})`)
+        }
+      }
+    }
+  }
+  return errors
+}
+
 /** Runs `tasks` with at most `limit` in flight. */
 async function pool<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
   const results: T[] = []
@@ -114,6 +147,7 @@ async function commandRun(args: Args): Promise<number> {
   if (plan.needOverride.length > 0 && !(config.allowAdminOverrides && admin)) {
     plan.errors.push(`not enabled/user-selectable: ${plan.needOverride.join(', ')} (set "allowAdminOverrides": true and an admin account)`)
   }
+  plan.errors.push(...await checkAdminConfig(config.combos, admin?.api ?? null))
   const total = config.recipes.length * config.combos.length * config.repeats
 
   console.log('\nPlan:')
@@ -123,6 +157,7 @@ async function commandRun(args: Args): Promise<number> {
       return `${stage}=${combo[stage]}${model ? ` (${model.tier}, ${model.creditCost} cr${plan.needOverride.includes(model.key) ? ', needs override' : ''})` : ''}`
     })
     console.log(`  ${combo.name}: ${parts.join('  ')}`)
+    if (combo.adminConfig) console.log(`    admin config while running: ${describeAdminConfig(combo.adminConfig)}`)
   }
   console.log(`  ${config.recipes.length} recipes × ${config.combos.length} combos × ${config.repeats} repeats = ${total} runs, concurrency ${config.concurrency}\n`)
   if (plan.errors.length > 0) {
@@ -166,6 +201,8 @@ async function commandRun(args: Args): Promise<number> {
     let done = 0
     for (const combo of config.combos) {
       if (interrupted) break
+      const adminChanges = await state.applyComboConfig(admin?.api ?? null, combo.adminConfig)
+      if (adminChanges.length > 0) log(`combo ${combo.name}: admin config ${adminChanges.join(', ')}`)
       await setPreferences(user.api, combo, stages, state.data.preferences ?? {})
       log(`combo ${combo.name}: preferences set`)
       const tasks = config.recipes.flatMap((recipe) => Array.from({ length: config.repeats }, (_, index) => async () => {
@@ -173,6 +210,7 @@ async function commandRun(args: Args): Promise<number> {
           runId, outDir, user: user.api, admin: admin?.api ?? null, stages, timeouts: config.timeouts,
           downloadAssets: config.downloadAssets, onRecipeCreated: (id) => state.addRecipe(id), log,
         }, recipe, combo, index + 1)
+        if (combo.adminConfig) record.adminConfig = combo.adminConfig
         appendFileSync(resultsFile, JSON.stringify(record) + '\n')
         log(`(${++done}/${total}) ${recipe.id} × ${combo.name} #${index + 1}: ${record.status}${record.fallback ? ' (fallback)' : ''} in ${(record.totalMs / 1000).toFixed(1)}s`)
         return record

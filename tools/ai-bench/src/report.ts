@@ -43,9 +43,12 @@ export function summarize(records: RunRecord[]): SummaryRow[] {
         .filter(([key]) => belongsTo(stage, key)).map(([, bucket]) => bucket))
       const serverCalls = serverBuckets.reduce((sum, bucket) => sum + bucket.calls, 0)
       const sum = (pick: (bucket: (typeof serverBuckets)[number]) => number) => serverBuckets.reduce((total, bucket) => total + pick(bucket), 0)
+      const config = runs[0]?.adminConfig
       const row: SummaryRow = {
         combo,
         stage,
+        adminConfig: Object.entries(config ?? {})
+          .flatMap(([section, values]) => Object.entries(values).map(([key, value]) => `${section}.${key}=${value}`)).join(' '),
         models: [...new Set(stageRuns.flatMap((value) => value.resolvedModels))].join(' '),
         runs: String(stageRuns.length),
         successRate: round(stageRuns.filter((value) => value.status === 'ok').length / stageRuns.length, 3),
@@ -136,6 +139,12 @@ function renderHtml(records: RunRecord[], summary: SummaryRow[], columns: string
   const recipes = [...new Set(records.map((record) => record.recipe))]
   const combos = [...new Set(records.map((record) => record.combo))]
   const runId = records[0]?.runId ?? ''
+  const comboHeader = (combo: string) => {
+    const config = records.find((record) => record.combo === combo)?.adminConfig
+    const settings = Object.entries(config ?? {})
+      .flatMap(([section, values]) => Object.entries(values).map(([key, value]) => `${section}.${key}=${value}`))
+    return `${escape(combo)}${settings.length ? `<div class="muted" style="font-weight:400;font-size:12px">${escape(settings.join(', '))}</div>` : ''}`
+  }
   const grid = recipes.map((recipe) => `<tr><th class="recipe">${escape(recipe)}</th>${combos.map((combo) => `<td>${
     records.filter((record) => record.recipe === recipe && record.combo === combo).map((record) => renderCell(record, baseUrl)).join('') || '–'
   }</td>`).join('')}</tr>`).join('')
@@ -166,6 +175,6 @@ ol.steps li.condition{opacity:.85;font-style:italic}ol.steps img{width:96px;heig
 ${summary.map((row) => `<tr>${columns.map((column) => `<td>${escape(row[column])}</td>`).join('')}</tr>`).join('')}</table></div>
 <p class="muted">Latency = client wall time per stage (failed runs excluded). Server columns come from AI analytics (need an admin account); the image row includes the text calls that write image prompts.</p>
 <h2>Outputs</h2>
-<div class="scroll"><table class="grid"><tr><th></th>${combos.map((combo) => `<th>${escape(combo)}</th>`).join('')}</tr>${grid}</table></div>
+<div class="scroll"><table class="grid"><tr><th></th>${combos.map((combo) => `<th>${comboHeader(combo)}</th>`).join('')}</tr>${grid}</table></div>
 </body></html>`
 }

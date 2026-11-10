@@ -59,7 +59,8 @@ public class VisualizationPromptBatchService {
     private final AiRequestQueueService queueService;
     private final AiClientResolver clientResolver;
     private final AiJsonResponseSupport responseSupport;
-    private final boolean sceneAnchorEnabled;
+    /** Asked on every batch: an admin can switch scene anchors on or off at runtime. */
+    private final VisualizationSceneAnchorService sceneAnchorService;
     private final Map<String, Object> responseSchema = buildResponseSchema();
 
     private final Map<Long, Object> recipeLocks = new ConcurrentHashMap<>();
@@ -77,7 +78,7 @@ public class VisualizationPromptBatchService {
         this.queueService = queueService;
         this.clientResolver = clientResolver;
         this.responseSupport = responseSupport;
-        this.sceneAnchorEnabled = sceneAnchorService.isEnabled();
+        this.sceneAnchorService = sceneAnchorService;
     }
 
     /** Sampling parameters; admin runtime overrides apply to the next request. Defaults when not injected (tests). */
@@ -139,7 +140,7 @@ public class VisualizationPromptBatchService {
         collect(recipeId, steps, "m", missing, keyById, styleReferences);
 
         // The scene is written once per recipe, and only when some image still has to be drawn against it.
-        boolean sceneNeeded = sceneAnchorEnabled && scenePrompt.isEmpty()
+        boolean sceneNeeded = sceneAnchorService.isEnabled() && scenePrompt.isEmpty()
                 && (!missing.isEmpty() || anyImageMissing(recipeId, flows) || anyImageMissing(recipeId, steps));
         if (missing.isEmpty() && !sceneNeeded) {
             log.debug("event=visualization_prompt_batch_skipped recipeId={} reason=no_missing_prompts", recipeId);

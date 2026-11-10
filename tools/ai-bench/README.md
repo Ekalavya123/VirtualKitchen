@@ -72,7 +72,8 @@ node dist/bench.mjs restore out/<runId> --config bench.json
 |---|---|---|
 | `baseUrl` | `http://localhost:8080` | Backend |
 | `recipes[]` | — | `{id, file}` (relative to the config) or `{id, text}` |
-| `combos[]` | — | `{name, text, image?, speech?}`. `text` is required; a missing modality skips that stage |
+| `combos[]` | — | `{name, text, image?, speech?, adminConfig?}`. `text` is required; a missing modality skips that stage |
+| `combos[].adminConfig` | — | Admin runtime settings to use while this combo runs, by section then key, e.g. `{"images": {"sceneAnchor.enabled": false}}`. Needs an admin account. Checked in the dry run, reverted before the next combo, and restored at the end. Keys are the ones in Admin → Config (`GET /api/v1/admin/config/{section}`) |
 | `repeats` | 1 | Runs per recipe × combo |
 | `concurrency` | 1 | Parallel runs within a combo. Combos always run one after another because they share the user's preferences. Use 1 for clean latency numbers |
 | `grantCredits` | 0 | Credits the admin adds before the run. Not taken back |
@@ -81,6 +82,20 @@ node dist/bench.mjs restore out/<runId> --config bench.json
 | `cleanup` | `keep` | `delete` removes the bench recipes afterwards |
 | `downloadAssets` | true | Save images and audio under `artifacts/` |
 | `timeouts` | text 600, image 1200, speech 600 | Per-stage polling timeout in seconds |
+
+## Comparing a setting, e.g. the scene anchor
+
+To test the same models with a setting on and off, give two combos the same models and different `adminConfig`:
+
+```json
+"combos": [
+  { "name": "gemini-anchor-on",  "text": "gemini-flash", "image": "gemini-image" },
+  { "name": "gemini-anchor-off", "text": "gemini-flash", "image": "gemini-image",
+    "adminConfig": { "images": { "sceneAnchor.enabled": false } } }
+]
+```
+
+A combo without `adminConfig` runs with the settings as they were before the run. The setting is shown under the combo name in `report.html` and in the `adminConfig` column of `summary.csv`. With the anchor off, expect one image call fewer per recipe and less consistency between step images.
 
 ## Notes
 
