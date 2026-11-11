@@ -12,5 +12,5 @@
     "typeRoots": ["../../frontEnd/node_modules/@types", "../../frontEnd/node_modules"],
     "types": ["node", "vite/client"]
   },
-  "include": ["src"]
+  "include": ["src", "tests"]
 }

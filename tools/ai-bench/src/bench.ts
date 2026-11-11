@@ -5,6 +5,7 @@
  *   node dist/bench.mjs run bench.json [--only-combo a,b] [--only-recipe x] [--stages text,image,speech] [--dry-run]
  *   node dist/bench.mjs report out/<runId>
  *   node dist/bench.mjs restore out/<runId> [--config bench.json]
+ *   node dist/bench.mjs import <flow.json> [--config bench.json] [--name "..."]
  *
  * See README.md.
  */
@@ -12,9 +13,12 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { openSession, type ApiClient, type Session } from './api'
-import { ALL_STAGES, CAPABILITY, comboStages, loadConfig, type BenchConfig, type Combo, type Stage } from './config'
+import { ALL_STAGES, CAPABILITY, comboGroups, comboStages, loadConfig, resolveFlowSources, type BenchConfig, type Combo, type Stage } from './config.ts'
+import { createRecipeFromFlow } from './flow'
+import { readFlowDoc } from './flowDoc.ts'
+import { describeSpend, planSpend, total as totalSpend } from './plan.ts'
 import { PREFERENCES, RunState, type PreferencesView } from './state'
-import { runOne } from './run'
+import { GroupShare, runOne } from './run'
 import { writeReports } from './report'
 import type { RunRecord } from './types'
 
@@ -74,11 +78,16 @@ function planModels(config: BenchConfig, models: ModelDTO[], stages: Stage[]) {
 
 async function setPreferences(user: ApiClient, combo: Combo, stages: Stage[], baseline: Record<string, string | null>) {
   const modelKeys: Record<string, string | null> = { ...baseline }
-  for (const stage of comboStages(combo, stages)) modelKeys[CAPABILITY[stage]] = combo[stage]!
+  const wanted = new Map<string, string>()
+  for (const stage of comboStages(combo, stages)) wanted.set(stage, combo[stage]!)
+  // A combo that copies its group's flow still writes its image prompts with a text model: the flow's
+  // own, so every run of the group has its prompts written by the same model.
+  if (!combo.text && combo.flowText && combo.image && stages.includes('image')) wanted.set('text', combo.flowText)
+  wanted.forEach((model, stage) => { modelKeys[CAPABILITY[stage as Stage]] = model })
   const view = await user.put<PreferencesView>(PREFERENCES, { modelKeys })
-  const mismatched = comboStages(combo, stages)
-    .filter((stage) => view.effective[CAPABILITY[stage]] !== combo[stage])
-    .map((stage) => `${stage}: wanted ${combo[stage]}, effective ${view.effective[CAPABILITY[stage]]}`)
+  const mismatched = [...wanted]
+    .filter(([stage, model]) => view.effective[CAPABILITY[stage as Stage]] !== model)
+    .map(([stage, model]) => `${stage}: wanted ${model}, effective ${view.effective[CAPABILITY[stage as Stage]]}`)
   if (mismatched.length > 0) throw new Error(`model preferences did not take effect (${mismatched.join('; ')})`)
 }
 
@@ -138,6 +147,8 @@ async function commandRun(args: Args): Promise<number> {
   if (onlyCombos) config.combos = config.combos.filter((combo) => onlyCombos.includes(combo.name))
   if (onlyRecipes) config.recipes = config.recipes.filter((recipe) => onlyRecipes.includes(recipe.id))
   if (!config.combos.length || !config.recipes.length) throw new Error('nothing to run after --only-* filters')
+  // A filter can remove the combo that generates a group's flow: check again what is left.
+  resolveFlowSources(config.combos, config.recipes)
 
   const { user, admin } = await openSessions(config, args)
   log(`user ${user.user.id} (${user.user.userType ?? 'USER'})${admin ? `, admin ${admin.user.id}` : ', no admin account: no credit grant, overrides or server metrics'}`)
@@ -150,16 +161,25 @@ async function commandRun(args: Args): Promise<number> {
   plan.errors.push(...await checkAdminConfig(config.combos, admin?.api ?? null))
   const total = config.recipes.length * config.combos.length * config.repeats
 
+  const groups = comboGroups(config.combos)
+  const spend = planSpend(config.combos, config.recipes, config.repeats, stages)
   console.log('\nPlan:')
-  for (const combo of config.combos) {
-    const parts = comboStages(combo, stages).map((stage) => {
-      const model = plan.byKey.get(combo[stage]!)
-      return `${stage}=${combo[stage]}${model ? ` (${model.tier}, ${model.creditCost} cr${plan.needOverride.includes(model.key) ? ', needs override' : ''})` : ''}`
-    })
-    console.log(`  ${combo.name}: ${parts.join('  ')}`)
-    if (combo.adminConfig) console.log(`    admin config while running: ${describeAdminConfig(combo.adminConfig)}`)
+  for (const group of groups) {
+    const shared = group[0].shared
+    if (shared) console.log(`  group ${group[0].group + 1} (one flow per recipe, shared by its ${group.length} combos):`)
+    for (const combo of group) {
+      const parts = comboStages(combo, stages).map((stage) => {
+        const model = plan.byKey.get(combo[stage]!)
+        return `${stage}=${combo[stage]}${model ? ` (${model.tier}, ${model.creditCost} cr${plan.needOverride.includes(model.key) ? ', needs override' : ''})` : ''}`
+      })
+      if (!combo.text) parts.unshift(combo.flowText ? `text=flow of ${combo.flowText}` : 'text=flow file')
+      console.log(`  ${shared ? '  ' : ''}${combo.name}: ${parts.join('  ')}`)
+      if (combo.adminConfig) console.log(`  ${shared ? '  ' : ''}  admin config while running: ${describeAdminConfig(combo.adminConfig)}`)
+    }
+    console.log(`  ${shared ? '  ' : ''}-> ${describeSpend(spend.get(group[0].group)!)}`)
   }
-  console.log(`  ${config.recipes.length} recipes × ${config.combos.length} combos × ${config.repeats} repeats = ${total} runs, concurrency ${config.concurrency}\n`)
+  console.log(`  ${config.recipes.length} recipes × ${config.combos.length} combos × ${config.repeats} repeats = ${total} runs, concurrency ${config.concurrency}`)
+  console.log(`  AI work in total: ${describeSpend(totalSpend(spend.values()))}\n`)
   if (plan.errors.length > 0) {
     for (const error of plan.errors) console.error(`  ✗ ${error}`)
     return 2
@@ -199,8 +219,12 @@ async function commandRun(args: Args): Promise<number> {
     }
 
     let done = 0
+    const shares = new Map<number, GroupShare>()
     for (const combo of config.combos) {
       if (interrupted) break
+      // Combos listed together share one flow and one narration per recipe; a combo on its own shares nothing.
+      if (combo.shared && !shares.has(combo.group)) shares.set(combo.group, new GroupShare())
+      const share = combo.shared ? shares.get(combo.group)! : null
       const adminChanges = await state.applyComboConfig(admin?.api ?? null, combo.adminConfig)
       if (adminChanges.length > 0) log(`combo ${combo.name}: admin config ${adminChanges.join(', ')}`)
       await setPreferences(user.api, combo, stages, state.data.preferences ?? {})
@@ -209,8 +233,9 @@ async function commandRun(args: Args): Promise<number> {
         const record = await runOne({
           runId, outDir, user: user.api, admin: admin?.api ?? null, stages, timeouts: config.timeouts,
           downloadAssets: config.downloadAssets, onRecipeCreated: (id) => state.addRecipe(id), log,
-        }, recipe, combo, index + 1)
+        }, recipe, combo, index + 1, share)
         if (combo.adminConfig) record.adminConfig = combo.adminConfig
+        if (combo.shared) record.group = combo.group + 1
         appendFileSync(resultsFile, JSON.stringify(record) + '\n')
         log(`(${++done}/${total}) ${recipe.id} × ${combo.name} #${index + 1}: ${record.status}${record.fallback ? ' (fallback)' : ''} in ${(record.totalMs / 1000).toFixed(1)}s`)
         return record
@@ -264,14 +289,33 @@ async function commandRestore(args: Args): Promise<number> {
   return 0
 }
 
+/** Builds a recipe in the app from a flow file: no AI call. */
+async function commandImport(args: Args): Promise<number> {
+  const file = args.positional[0]
+  if (!file) throw new Error('import needs a flow file: import <flow.json> [--config bench.json] [--name "..."]')
+  const flow = readFlowDoc(resolve(file))
+  const configFlag = args.flags.get('config')
+  const config = loadConfig(typeof configFlag === 'string' ? configFlag : 'bench.json')
+  const user = await openSession(config.baseUrl, config.auth.user,
+    typeof args.flags.get('token') === 'string' ? args.flags.get('token') as string : undefined)
+  const nameFlag = args.flags.get('name')
+  const name = typeof nameFlag === 'string' ? nameFlag : `${flow.recipe || 'recipe'} (imported flow)`
+  const { recipeId, processes } = await createRecipeFromFlow(user.api, flow, name)
+  const steps = processes.reduce((count, process) => count + process.nodes.length, 0)
+  log(`recipe ${recipeId} "${name}" created from ${file}: ${processes.length} processes, ${steps} nodes, no images or audio`)
+  console.log(recipeId)
+  return 0
+}
+
 const HELP = `AI Bench
   run <bench.json> [--only-combo a,b] [--only-recipe x,y] [--stages text,image,speech] [--dry-run] [--out dir] [--token JWT] [--admin-token JWT]
   report <outDir>                       re-render summary.csv and report.html from results.jsonl
-  restore <outDir> [--config bench.json] put back model preferences / admin overrides after a killed run`
+  restore <outDir> [--config bench.json] put back model preferences / admin overrides after a killed run
+  import <flow.json> [--config bench.json] [--name "..."]  build a recipe from a saved flow, with no AI call`
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
-  const commands: Record<string, (args: Args) => Promise<number>> = { run: commandRun, report: commandReport, restore: commandRestore }
+  const commands: Record<string, (args: Args) => Promise<number>> = { run: commandRun, report: commandReport, restore: commandRestore, import: commandImport }
   const command = commands[args.command]
   if (!command) {
     console.log(HELP)

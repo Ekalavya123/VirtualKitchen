@@ -7,13 +7,23 @@
   "recipes": [
     { "id": "pancakes", "file": "recipes/pancakes.txt" },
     { "id": "tomato-soup", "file": "recipes/tomato-soup.txt" },
+    { "id": "tomato-masala", "file": "recipes/tomato-masala.txt" },
     { "id": "chicken-curry", "file": "recipes/chicken-curry.txt" }
   ],
   "combos": [
+    [
+      { "name": "prompt", "text": "gemini-flash", "image": "gemini-image", "speech": "gemini-tts",
+        "focusedView": true, "anchor": false, "reference": false },
+      { "name": "anchor", "image": "gemini-image", "speech": "gemini-tts",
+        "focusedView": true, "anchor": true, "reference": false },
+      { "name": "reference", "image": "gemini-image", "speech": "gemini-tts",
+        "focusedView": true, "anchor": false, "reference": true },
+      { "name": "anchor+reference", "image": "gemini-image", "speech": "gemini-tts",
+        "focusedView": true, "anchor": true, "reference": true },
+      { "name": "before", "image": "gemini-image", "speech": null,
+        "focusedView": false, "anchor": true }
+    ],
     { "name": "deepinfra-all", "text": "deepinfra-deepseek-v4-flash", "image": "deepinfra-flux2-klein", "speech": "deepinfra-mimo-tts" },
-    { "name": "gemini-all", "text": "gemini-flash", "image": "gemini-image", "speech": "gemini-tts" },
-    { "name": "gemini-no-anchor", "text": "gemini-flash", "image": "gemini-image",
-      "adminConfig": { "images": { "sceneAnchor.enabled": false } } },
     { "name": "local-text", "text": "ollama-qwen" }
   ],
   "repeats": 1,

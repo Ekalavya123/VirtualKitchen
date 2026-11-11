@@ -6,6 +6,7 @@
 
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { readFlowDoc, type FlowDoc } from './flowDoc.ts'
 
 export type Stage = 'text' | 'image' | 'speech'
 export const ALL_STAGES: Stage[] = ['text', 'image', 'speech']
@@ -26,13 +27,45 @@ export type AccountRef = {
   tokenEnv?: string
 }
 
-export type RecipeInput = { id: string; text: string; source: string }
+export type RecipeInput = {
+  id: string
+  text: string
+  source: string
+  /** A saved flow to build the recipe from instead of generating one: no text model is ever called for it. */
+  flow?: FlowDoc
+}
+
+/**
+ * Image settings a combo can name directly; each is an admin setting of the "images" section, applied
+ * while the combo runs. Omitted = whatever the server has.
+ */
+export const IMAGE_SETTINGS = {
+  /** One empty-scene image per recipe, sent as a reference with the cooking steps. */
+  anchor: 'sceneAnchor.enabled',
+  /** Each cooking step drawn against the previous step's image. Part of the focused view. */
+  reference: 'referenceChain.enabled',
+  /** The Focused Cooking View; false makes images as they were before it existed. */
+  focusedView: 'focusedView.enabled',
+} as const
+export const IMAGE_SECTION = 'images'
 
 export type Combo = {
   name: string
+  /** Generates the flow. Omitted/null in a group: the combo reuses the group's flow. */
   text?: string
+  /** Omitted/null: no images. */
   image?: string
+  /** Omitted/null: no narration. */
   speech?: string
+  /** Index of the combo's group in bench.json's "combos". */
+  group: number
+  /**
+   * True for combos listed together in an inner list: they share one flow per recipe and text model,
+   * and one narration per flow and speech model. A combo on its own regenerates for every run.
+   */
+  shared: boolean
+  /** The text model whose flow this combo runs on: its own, else the first one named in its group. */
+  flowText?: string
   /**
    * Admin runtime config to apply while this combo runs, by section then key, e.g.
    * {"images": {"sceneAnchor.enabled": "false"}}. Reverted before the next combo and at the end.
@@ -44,6 +77,7 @@ export type BenchConfig = {
   baseUrl: string
   auth: { user: AccountRef; admin?: AccountRef }
   recipes: RecipeInput[]
+  /** Every combo, in running order (the groups flattened). */
   combos: Combo[]
   repeats: number
   /** Parallel runs inside one combo (combos always run one after another: they share the user's model preferences). */
@@ -105,6 +139,45 @@ const adminConfig = (raw: unknown, field: string): Combo['adminConfig'] => {
   return Object.keys(result).length > 0 ? result : undefined
 }
 
+/**
+ * Folds a combo's image booleans (anchor, reference, focusedView) into its adminConfig. Naming the same
+ * setting both ways is an error rather than a silent winner.
+ */
+const withImageSettings = (value: Record<string, unknown>, config: Combo['adminConfig'], field: string): Combo['adminConfig'] => {
+  const images: Record<string, string> = { ...(config?.[IMAGE_SECTION] ?? {}) }
+  let any = false
+  for (const [name, key] of Object.entries(IMAGE_SETTINGS)) {
+    const setting = value[name]
+    if (setting === undefined || setting === null) continue
+    if (typeof setting !== 'boolean') fail(`"${field}.${name}" must be true or false`)
+    if (key in images) fail(`"${field}" sets ${IMAGE_SECTION}.${key} twice: as "${name}" and in "adminConfig"`)
+    images[key] = String(setting)
+    any = true
+  }
+  if (images[IMAGE_SETTINGS.reference] === 'true' && images[IMAGE_SETTINGS.focusedView] === 'false') {
+    fail(`"${field}" has "reference": true with "focusedView": false: drawing against the previous step is part of the focused view, so it would not happen`)
+  }
+  return any ? { ...config, [IMAGE_SECTION]: images } : config
+}
+
+/**
+ * Works out which flow each combo runs on, and fails when one would have none: a combo without a
+ * "text" model needs either an earlier combo in its group that generates the flow, or recipes that
+ * all come from flow files. Call again after filtering combos or recipes.
+ */
+export function resolveFlowSources(combos: Combo[], recipes: RecipeInput[]): void {
+  const needsGeneration = recipes.some((recipe) => !recipe.flow)
+  const groupText = new Map<number, string>()
+  for (const combo of combos) {
+    if (combo.text && combo.shared && !groupText.has(combo.group)) groupText.set(combo.group, combo.text)
+    combo.flowText = combo.text ?? (combo.shared ? groupText.get(combo.group) : undefined)
+    if (combo.flowText || !needsGeneration) continue
+    fail(combo.shared
+      ? `combo "${combo.name}" has no "text" model and no combo before it in its group generates the flow: put a combo with "text" first, or give every recipe a "flow" file`
+      : `combo "${combo.name}" needs a "text" model (or put it in a group after a combo that has one, or give every recipe a "flow" file)`)
+  }
+}
+
 export function loadConfig(path: string): BenchConfig {
   const file = resolve(path)
   const configDir = dirname(file)
@@ -120,6 +193,11 @@ export function loadConfig(path: string): BenchConfig {
   if (!Array.isArray(recipesRaw) || recipesRaw.length === 0) fail('"recipes" must be a non-empty array')
   const recipes = (recipesRaw as Record<string, unknown>[]).map((entry, index): RecipeInput => {
     const id = asString(entry.id, `recipes[${index}].id`)
+    if (entry.flow) {
+      const source = resolve(configDir, asString(entry.flow, `recipes[${index}].flow`))
+      const flow = readFlowDoc(source)
+      return { id, text: flow.recipeText, source, flow }
+    }
     if (entry.file) {
       const source = resolve(configDir, asString(entry.file, `recipes[${index}].file`))
       const text = readFileSync(source, 'utf8').trim()
@@ -136,22 +214,31 @@ export function loadConfig(path: string): BenchConfig {
 
   const combosRaw = raw.combos
   if (!Array.isArray(combosRaw) || combosRaw.length === 0) fail('"combos" must be a non-empty array')
-  const combos = (combosRaw as Record<string, unknown>[]).map((entry, index): Combo => {
-    const combo: Combo = {
-      name: asString(entry.name, `combos[${index}].name`),
-      text: optionalString(entry.text, `combos[${index}].text`),
-      image: optionalString(entry.image, `combos[${index}].image`),
-      speech: optionalString(entry.speech, `combos[${index}].speech`),
-      adminConfig: adminConfig(entry.adminConfig, `combos[${index}].adminConfig`),
-    }
-    if (!combo.text) fail(`combos[${index}] ("${combo.name}") needs a "text" model: images and narration are made from the generated process`)
-    return combo
+  // An inner list is a group of combos that share a flow; a combo on its own is a group of one.
+  const combos = (combosRaw as unknown[]).flatMap((entry, group): Combo[] => {
+    const members = Array.isArray(entry) ? entry : [entry]
+    if (members.length === 0) fail(`combos[${group}] is an empty group`)
+    return members.map((member, index): Combo => {
+      const field = Array.isArray(entry) ? `combos[${group}][${index}]` : `combos[${group}]`
+      if (!member || typeof member !== 'object' || Array.isArray(member)) fail(`"${field}" must be a combo object`)
+      const value = member as Record<string, unknown>
+      return {
+        name: asString(value.name, `${field}.name`),
+        text: optionalString(value.text, `${field}.text`),
+        image: optionalString(value.image, `${field}.image`),
+        speech: optionalString(value.speech, `${field}.speech`),
+        group,
+        shared: Array.isArray(entry) && members.length > 1,
+        adminConfig: withImageSettings(value, adminConfig(value.adminConfig, `${field}.adminConfig`), field),
+      }
+    })
   })
   const comboNames = new Set<string>()
   for (const combo of combos) {
     if (comboNames.has(combo.name)) fail(`duplicate combo name "${combo.name}"`)
     comboNames.add(combo.name)
   }
+  resolveFlowSources(combos, recipes)
 
   const int = (value: unknown, field: string, fallback: number, min: number) => {
     if (value === undefined) return fallback
@@ -185,6 +272,13 @@ export function loadConfig(path: string): BenchConfig {
     },
     configDir,
   }
+}
+
+/** The combos of each group, in bench.json order. */
+export const comboGroups = (combos: Combo[]): Combo[][] => {
+  const groups = new Map<number, Combo[]>()
+  for (const combo of combos) groups.set(combo.group, [...(groups.get(combo.group) ?? []), combo])
+  return [...groups.values()]
 }
 
 /** The stages a combo runs, limited by --stages. */

@@ -71,6 +71,17 @@ export async function runGeneration(
 
 type RecipeDetail = { processRevision?: number | null; mainProcessId?: number | null }
 
+/** The editor's save calls for one recipe, as `persistSnapshot` needs them. */
+export const persistenceApi = (api: ApiClient, recipeId: number): PersistenceApi => {
+  const processesPath = `/api/v1/recipes/${recipeId}/processes`
+  return {
+    createMainProcess: () => api.post<Process>(`/api/v1/recipes/${recipeId}/main-process`),
+    createProcess: (request) => api.post<Process>(processesPath, request),
+    updateAll: (items, baseRevision) => api.put<{ revision: number }>(processesPath, { processes: items, baseRevision }),
+    deleteProcess: (processId) => api.delete<void>(`${processesPath}/${processId}`),
+  }
+}
+
 /**
  * Converts the generation result and saves it as the recipe's processes, the way the editor's
  * autosave would. Returns the saved processes (real ids) and the converter's problems.
@@ -89,15 +100,9 @@ export async function saveGeneratedProcesses(
   stage.convertMs = Date.now() - convertStarted
   if (converted.problems.length > 0) return { processes: [], problems: converted.problems }
 
-  const persistence: PersistenceApi = {
-    createMainProcess: () => api.post<Process>(`/api/v1/recipes/${recipeId}/main-process`),
-    createProcess: (request) => api.post<Process>(processesPath, request),
-    updateAll: (items, baseRevision) => api.put<{ revision: number }>(processesPath, { processes: items, baseRevision }),
-    deleteProcess: (processId) => api.delete<void>(`${processesPath}/${processId}`),
-  }
   const saveStarted = Date.now()
   const state = createPersistedState(existing, detail.processRevision ?? 0)
-  await persistSnapshot(converted.processes, state, persistence, remapActionOnProcessRefs, () => {})
+  await persistSnapshot(converted.processes, state, persistenceApi(api, recipeId), remapActionOnProcessRefs, () => {})
   await api.post<void>(`/api/v1/recipes/${recipeId}/processes/generate/jobs/${jobId}/applied`)
   stage.saveMs = Date.now() - saveStarted
 
