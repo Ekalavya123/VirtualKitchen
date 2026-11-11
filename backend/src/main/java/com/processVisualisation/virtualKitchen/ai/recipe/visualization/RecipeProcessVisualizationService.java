@@ -141,7 +141,7 @@ public class RecipeProcessVisualizationService {
      */
     public VisualizationAsset resolveVisualizationAsset(Long userId, Long recipeId, String stepId, RecipeProcessVisualizationInput input) {
         return resolveAsset(userId, VisualizationKeyBuilder.build(String.valueOf(recipeId), stepId),
-                () -> promptBuilder.buildUserPrompt(input), null,
+                () -> promptBuilder.buildUserPrompt(input), null, null, null,
                 imageProfiles.settingsFor(input == null ? null : input.actionId()));
     }
 
@@ -160,11 +160,77 @@ public class RecipeProcessVisualizationService {
      * @param scene the recipe's scene anchor, or null to generate from the prompt alone
      */
     public VisualizationAsset resolveTarget(Long userId, Long recipeId, VisualTarget target, SceneReference scene) {
-        Supplier<String> userPrompt = target.flow() == null
-                ? () -> promptBuilder.buildUserPrompt(target.step())
-                : () -> promptBuilder.buildFlowUserPrompt(target.flow().outputName(), target.flow().steps());
-        return resolveAsset(userId, visualizationKey(recipeId, target), userPrompt, scene,
+        return resolveTarget(userId, recipeId, target, scene, null);
+    }
+
+    /**
+     * Same as {@link #resolveTarget(Long, Long, VisualTarget, SceneReference)}, also drawing a focused image against
+     * the previous image of its chain where the provider takes reference images.
+     *
+     * @param previous the previous step's image, or null when this image starts a chain or stands alone
+     */
+    public VisualizationAsset resolveTarget(Long userId, Long recipeId, VisualTarget target, SceneReference scene,
+                                            PreviousStep previous) {
+        // A prompt this step has to write for itself is a focused one only while the focused view is on.
+        VisualFocus fallbackFocus = focusedViewEnabled() ? defaultFocus(target) : null;
+        Supplier<String> userPrompt;
+        if (target.flow() == null) {
+            userPrompt = fallbackFocus == null
+                    ? () -> promptBuilder.buildUserPrompt(target.step())
+                    : () -> promptBuilder.buildFocusedUserPrompt(target.step());
+        } else {
+            userPrompt = fallbackFocus == null
+                    ? () -> promptBuilder.buildFlowUserPrompt(target.flow().outputName(), target.flow().steps())
+                    : () -> promptBuilder.buildFocusedFlowUserPrompt(target.flow().outputName(), target.flow().steps());
+        }
+        return resolveAsset(userId, visualizationKey(recipeId, target), userPrompt, fallbackFocus, scene, previous,
                 imageProfiles.settingsFor(profileActionId(target)));
+    }
+
+    /** Whether new prompts are written for the Focused Cooking View (an admin can switch it off at runtime). */
+    public boolean focusedViewEnabled() {
+        return imageProfiles.focusedViewEnabled();
+    }
+
+    /** Whether focused main steps are drawn against the previous image of the same focus. */
+    public boolean referenceChainEnabled() {
+        return imageProfiles.referenceChainEnabled();
+    }
+
+    /**
+     * What a focused image of this target centres on unless the prompt writer says otherwise: a step's action
+     * decides; a multi-step preparation is a storyboard.
+     */
+    public VisualFocus defaultFocus(VisualTarget target) {
+        if (target.flow() != null && target.flow().steps() != null && target.flow().steps().size() > 1) {
+            return VisualFocus.STORYBOARD;
+        }
+        return imageProfiles.focusFor(profileActionId(target));
+    }
+
+    /**
+     * The focus a main step's image continues its chain with: the focus stored with its prompt, or (when the step
+     * will still write its own prompt) its default focus. Empty for preparation flows, for prompts written before
+     * the focused view, and whenever the focused view is off for a step without a prompt.
+     */
+    public Optional<VisualFocus> chainFocus(Long recipeId, VisualTarget target) {
+        if (target.flow() != null) {
+            return Optional.empty();
+        }
+        Optional<VisualizationAsset> asset = assetRepository.findByVisualizationKey(visualizationKey(recipeId, target))
+                .filter(found -> StringUtils.hasText(found.getImagePrompt()));
+        VisualFocus focus = asset.isPresent()
+                ? asset.get().getFocus()
+                : (focusedViewEnabled() ? defaultFocus(target) : null);
+        return Optional.ofNullable(focus).filter(VisualFocus::chains);
+    }
+
+    /**
+     * The previous image of a chain, as the next step's reference.
+     *
+     * @param key identifies the image ({@code assetId:imageUrl}); part of the next image's artifact key
+     */
+    public record PreviousStep(String key, ImageGenerationClient.ReferenceImage image) {
     }
 
     /**
@@ -186,8 +252,15 @@ public class RecipeProcessVisualizationService {
      *                  so an image drawn against an older anchor is never reused for a new one. Null without an image.
      * @param dishContext the one-line dish context sent with every step image, or null
      * @param image the empty-scene image sent as a reference, or null when there is none
+     * @param sceneContext the recipe's equipment for focused images, or null to use the configured defaults
      */
-    public record SceneReference(String anchorKey, String dishContext, ImageGenerationClient.ReferenceImage image) {
+    public record SceneReference(String anchorKey, String dishContext, ImageGenerationClient.ReferenceImage image,
+                                 SceneContext sceneContext) {
+
+        /** A scene written before the focused view: no equipment of its own. */
+        public SceneReference(String anchorKey, String dishContext, ImageGenerationClient.ReferenceImage image) {
+            this(anchorKey, dishContext, image, null);
+        }
     }
 
     /** The recipe's scene anchor asset, if one exists (it may still lack a prompt or an image). */
@@ -211,11 +284,33 @@ public class RecipeProcessVisualizationService {
     }
 
     /**
+     * Stores the recipe's equipment for focused images, with its dish context. A recipe without a scene gets one
+     * whose prompt is the empty focused setup ({@link RecipeProcessVisualizationPromptBuilder#buildFocusedScenePrompt});
+     * an existing scene keeps its prompt and image and only gains what it lacks.
+     */
+    public VisualizationAsset saveSceneContext(Long recipeId, SceneContext sceneContext, String dishContext) {
+        VisualizationImageProperties.Scene style = imageProfiles.scene();
+        SceneContext equipment = SceneContext.orDefaults(sceneContext, style.equipment());
+        VisualizationAsset scene = saveScenePrompt(recipeId,
+                promptBuilder.buildFocusedScenePrompt(equipment, style), dishContext);
+        boolean changed = false;
+        if (scene.getSceneContext() == null) {
+            scene.setSceneContext(equipment);
+            changed = true;
+        }
+        if (!StringUtils.hasText(scene.getDishContext()) && StringUtils.hasText(dishContext)) {
+            scene.setDishContext(dishContext.trim());
+            changed = true;
+        }
+        return changed ? assetRepository.save(scene) : scene;
+    }
+
+    /**
      * Generates the scene anchor's image from its prompt (no reference of its own) and stores it, like a step image.
      * Returns the asset with {@code imageUrl} set, or null when generation or upload failed.
      */
     public VisualizationAsset generateSceneImage(Long userId, VisualizationAsset scene) {
-        VisualizationAsset generated = generateImage(userId, scene, null, SCENE_CORRELATION_TYPE,
+        VisualizationAsset generated = generateImage(userId, scene, null, null, SCENE_CORRELATION_TYPE,
                 ImageGenerationClient.ImageGenerationSettings.NONE);
         return StringUtils.hasText(generated.getImageUrl()) ? generated : null;
     }
@@ -250,6 +345,14 @@ public class RecipeProcessVisualizationService {
      * generates the image. An asset that already has a prompt is left unchanged.
      */
     public VisualizationAsset savePrompt(String visualizationKey, String imagePrompt) {
+        return savePrompt(visualizationKey, imagePrompt, null);
+    }
+
+    /**
+     * Same as {@link #savePrompt(String, String)} for a focused image: {@code imagePrompt} is the step's own text and
+     * {@code focus} what the image centres on. A null focus stores a self-contained prompt, as before.
+     */
+    public VisualizationAsset savePrompt(String visualizationKey, String imagePrompt, VisualFocus focus) {
         Optional<VisualizationAsset> existing = assetRepository.findByVisualizationKey(visualizationKey);
         if (existing.isPresent() && StringUtils.hasText(existing.get().getImagePrompt())) {
             return existing.get();
@@ -262,28 +365,33 @@ public class RecipeProcessVisualizationService {
             return created;
         });
         asset.setImagePrompt(imagePrompt);
+        asset.setFocus(focus);
         asset.setVideoPrompt(null);
         asset.setVideoUrl(null);
         return assetRepository.save(asset);
     }
 
-    private VisualizationAsset resolveAsset(Long userId, String visualizationKey, Supplier<String> userPrompt, SceneReference scene,
+    /**
+     * @param fallbackFocus the focus of a prompt this call has to write itself, or null to write a self-contained one
+     */
+    private VisualizationAsset resolveAsset(Long userId, String visualizationKey, Supplier<String> userPrompt,
+                                            VisualFocus fallbackFocus, SceneReference scene, PreviousStep previous,
                                             ImageGenerationClient.ImageGenerationSettings settings) {
         Optional<VisualizationAsset> existingAsset = assetRepository.findByVisualizationKey(visualizationKey);
         VisualizationAsset asset;
         if (existingAsset.isPresent()) {
             asset = existingAsset.get();
             if (asset.getImagePrompt() == null || asset.getImagePrompt().isEmpty()) {
-                asset = generatePrompt(userId, visualizationKey, userPrompt);
+                asset = generatePrompt(userId, visualizationKey, userPrompt, fallbackFocus);
             }
             requirePrompted(asset, visualizationKey);
             if (asset.getImageUrl() == null || asset.getImageUrl().isEmpty()) {
-                asset = generateImage(userId, asset, scene, STEP_IMAGE_CORRELATION_TYPE, settings);
+                asset = generateImage(userId, asset, scene, previous, STEP_IMAGE_CORRELATION_TYPE, settings);
             }
         } else {
-            asset = generatePrompt(userId, visualizationKey, userPrompt);
+            asset = generatePrompt(userId, visualizationKey, userPrompt, fallbackFocus);
             requirePrompted(asset, visualizationKey);
-            asset = generateImage(userId, asset, scene, STEP_IMAGE_CORRELATION_TYPE, settings);
+            asset = generateImage(userId, asset, scene, previous, STEP_IMAGE_CORRELATION_TYPE, settings);
         }
         return asset;
     }
@@ -371,7 +479,8 @@ public class RecipeProcessVisualizationService {
     public record ProcessStepPreparation(Process process, List<StepContext> steps) {
     }
 
-    private VisualizationAsset generatePrompt(Long userId, String visualizationKey, Supplier<String> userPrompt) {
+    private VisualizationAsset generatePrompt(Long userId, String visualizationKey, Supplier<String> userPrompt,
+                                              VisualFocus focus) {
         try {
             AiRequestOutcome<String> outcome = queueService.executeInline(
                     userId,
@@ -400,6 +509,8 @@ public class RecipeProcessVisualizationService {
             asset.setVisualizationKey(visualizationKey);
             asset.setType(VisualizationAssetType.ATOMIC);
             asset.setImagePrompt(outcome.value());
+            // Only a prompt that was actually written is a focused one; an empty answer stays unmarked.
+            asset.setFocus(StringUtils.hasText(outcome.value()) ? focus : null);
             asset.setVideoPrompt(null);
             asset.setVideoUrl(null);
             return assetRepository.save(asset);
@@ -417,52 +528,17 @@ public class RecipeProcessVisualizationService {
      * of paying for a new one. Reuses {@link VisualizationImageArtifactConsumer} unchanged, since it
      * only depends on the (generic) {@code visualizationKey}, not on which model produced the asset.
      */
-    private VisualizationAsset generateImage(Long userId, VisualizationAsset asset, SceneReference scene, String correlationType,
-                                             ImageGenerationClient.ImageGenerationSettings settings) {
+    private VisualizationAsset generateImage(Long userId, VisualizationAsset asset, SceneReference scene, PreviousStep previous,
+                                             String correlationType, ImageGenerationClient.ImageGenerationSettings settings) {
         String visualizationKey = asset.getVisualizationKey();
-        String dishContext = scene == null ? null : scene.dishContext();
-        ImageGenerationClient.ReferenceImage reference = scene == null ? null : scene.image();
         ImageGenerationClient.ImageGenerationSettings requested =
                 settings == null ? ImageGenerationClient.ImageGenerationSettings.NONE : settings;
         try {
-            // Without a scene the key is exactly as before, so payloads retained before scene anchors stay reusable.
-            List<String> keyInputs = new ArrayList<>();
-            keyInputs.add(asset.getImagePrompt());
-            if (scene != null) {
-                keyInputs.add(orBlank(dishContext));
-                keyInputs.add(orBlank(scene.anchorKey()));
-            }
-            // Likewise only profiled images carry their settings, so an image of another size is never reused.
-            if (!requested.isNone()) {
-                keyInputs.add("image:" + requested.width() + "x" + requested.height() + ";steps=" + requested.steps());
-            }
-            AiArtifactSpec<ImageGenerationClient.GeneratedImage> artifactSpec = AiArtifactSpec.of(
-                    AiArtifactKeyBuilder.build(
-                            AiCapability.TEXT_TO_IMAGE,
-                            correlationType,
-                            visualizationKey,
-                            keyInputs.toArray(String[]::new)),
-                    generatedImageCodec,
-                    VisualizationImageArtifactConsumer.CONSUMER_ID
-            );
-
-            AiRequestOutcome<ImageGenerationClient.GeneratedImage> outcome = queueService.executeInline(
-                    userId,
-                    AiCapability.TEXT_TO_IMAGE,
-                    null,
-                    null,
-                    correlationType,
-                    visualizationKey,
-                    artifactSpec,
-                    selection -> {
-                        ImageGenerationClient client = clientResolver.resolveImageClient(selection.model());
-                        // Only a provider that really sends the reference is told about it.
-                        boolean withReference = reference != null && client.supportsReferenceImages();
-                        String text = promptBuilder.buildImageRequestText(asset.getImagePrompt(), dishContext, withReference);
-                        return client.generate(text, withReference ? List.of(reference) : List.of(),
-                                requested.withModel(selection.model().getProviderModelId()));
-                    }
-            );
+            // A prompt without a focus is self-contained (written before the focused view, or with it off) and is
+            // requested exactly as it always was.
+            AiRequestOutcome<ImageGenerationClient.GeneratedImage> outcome = asset.getFocus() == null
+                    ? requestImage(userId, asset, scene, correlationType, requested)
+                    : requestFocusedImage(userId, asset, scene, previous, correlationType, requested);
 
             // The payload is durable from here on, whether it was just generated or reused.
             AiArtifact artifact = artifactOrTransient(outcome, visualizationKey, correlationType);
@@ -484,6 +560,147 @@ public class RecipeProcessVisualizationService {
         }
         asset.setVideoUrl(null);
         return assetRepository.save(asset);
+    }
+
+    /** The request of a self-contained prompt: the dish context line, the scene anchor as a reference, the prompt. */
+    private AiRequestOutcome<ImageGenerationClient.GeneratedImage> requestImage(
+            Long userId, VisualizationAsset asset, SceneReference scene, String correlationType,
+            ImageGenerationClient.ImageGenerationSettings requested) {
+        String visualizationKey = asset.getVisualizationKey();
+        String dishContext = scene == null ? null : scene.dishContext();
+        ImageGenerationClient.ReferenceImage reference = scene == null ? null : scene.image();
+        // Without a scene the key is exactly as before, so payloads retained before scene anchors stay reusable.
+        List<String> keyInputs = new ArrayList<>();
+        keyInputs.add(asset.getImagePrompt());
+        if (scene != null) {
+            keyInputs.add(orBlank(dishContext));
+            keyInputs.add(orBlank(scene.anchorKey()));
+        }
+        // Likewise only profiled images carry their settings, so an image of another size is never reused.
+        if (!requested.isNone()) {
+            keyInputs.add("image:" + requested.width() + "x" + requested.height() + ";steps=" + requested.steps());
+        }
+        return queueService.executeInline(
+                userId,
+                AiCapability.TEXT_TO_IMAGE,
+                null,
+                null,
+                correlationType,
+                visualizationKey,
+                imageArtifactSpec(correlationType, visualizationKey, keyInputs),
+                selection -> {
+                    ImageGenerationClient client = clientResolver.resolveImageClient(selection.model());
+                    // Only a provider that really sends the reference is told about it.
+                    boolean withReference = reference != null && client.supportsReferenceImages();
+                    String text = promptBuilder.buildImageRequestText(asset.getImagePrompt(), dishContext, withReference);
+                    return client.generate(text, withReference ? List.of(reference) : List.of(),
+                            requested.withModel(selection.model().getProviderModelId()));
+                }
+        );
+    }
+
+    /**
+     * The request of a focused image: the scene is written around the step's own text, and the image is drawn
+     * against the scene anchor (for a focus the anchor shows) and the previous image of its chain. When a request
+     * with references fails, the image is requested once more from its prompt alone, so a reference the provider
+     * cannot use never costs the step its image.
+     */
+    private AiRequestOutcome<ImageGenerationClient.GeneratedImage> requestFocusedImage(
+            Long userId, VisualizationAsset asset, SceneReference scene, PreviousStep previous, String correlationType,
+            ImageGenerationClient.ImageGenerationSettings requested) {
+        boolean withAnchor = scene != null && scene.image() != null && asset.getFocus().usesSceneAnchor();
+        boolean withPrevious = previous != null && previous.image() != null;
+        if (withAnchor || withPrevious) {
+            try {
+                return requestFocusedImage(userId, asset, scene, correlationType, requested,
+                        withAnchor ? scene : null, withPrevious ? previous : null);
+            } catch (Exception e) {
+                FailureLogger.logFailure(logger, "visualization_image_reference_failed", e,
+                        "visualizationKey=" + asset.getVisualizationKey() + " fallback=prompt_only");
+            }
+        }
+        return requestFocusedImage(userId, asset, scene, correlationType, requested, null, null);
+    }
+
+    private AiRequestOutcome<ImageGenerationClient.GeneratedImage> requestFocusedImage(
+            Long userId, VisualizationAsset asset, SceneReference scene, String correlationType,
+            ImageGenerationClient.ImageGenerationSettings requested, SceneReference anchor, PreviousStep previous) {
+        String visualizationKey = asset.getVisualizationKey();
+        VisualFocus focus = asset.getFocus();
+        VisualizationImageProperties.Scene style = imageProfiles.scene();
+        // The equipment is part of the prompt, not of the anchor: it is used with scene anchors switched off too.
+        SceneContext equipment = SceneContext.orDefaults(
+                scene != null ? scene.sceneContext() : storedSceneContext(visualizationKey), style.equipment());
+        String dishContext = scene == null ? null : scene.dishContext();
+
+        // The whole assembled text is part of the key: a changed scene or framing never reuses an older image.
+        List<String> keyInputs = new ArrayList<>();
+        keyInputs.add(promptBuilder.buildFocusedImageRequestText(asset.getImagePrompt(), focus, equipment, style,
+                dishContext, RecipeProcessVisualizationPromptBuilder.References.NONE));
+        keyInputs.add(anchor == null ? "" : orBlank(anchor.anchorKey()));
+        keyInputs.add(previous == null ? "" : orBlank(previous.key()));
+        if (!requested.isNone()) {
+            keyInputs.add("image:" + requested.width() + "x" + requested.height() + ";steps=" + requested.steps());
+        }
+        // One seed per recipe: a small aid for providers that take one, never the consistency mechanism itself.
+        ImageGenerationClient.ImageGenerationSettings seeded = requested.withSeed(recipeSeed(visualizationKey));
+        return queueService.executeInline(
+                userId,
+                AiCapability.TEXT_TO_IMAGE,
+                null,
+                null,
+                correlationType,
+                visualizationKey,
+                imageArtifactSpec(correlationType, visualizationKey, keyInputs),
+                selection -> {
+                    ImageGenerationClient client = clientResolver.resolveImageClient(selection.model());
+                    List<ImageGenerationClient.ReferenceImage> references = new ArrayList<>();
+                    boolean sendPrevious = false;
+                    boolean sendAnchor = false;
+                    if (client.supportsReferenceImages()) {
+                        // The previous step already shows the equipment, so it wins when only one image fits.
+                        sendPrevious = previous != null;
+                        sendAnchor = anchor != null && (!sendPrevious || client.maxReferenceImages() >= 2);
+                        if (sendAnchor) references.add(anchor.image());
+                        if (sendPrevious) references.add(previous.image());
+                    }
+                    String text = promptBuilder.buildFocusedImageRequestText(asset.getImagePrompt(), focus, equipment,
+                            style, dishContext,
+                            new RecipeProcessVisualizationPromptBuilder.References(sendAnchor, sendPrevious));
+                    return client.generate(text, references, seeded.withModel(selection.model().getProviderModelId()));
+                }
+        );
+    }
+
+    private AiArtifactSpec<ImageGenerationClient.GeneratedImage> imageArtifactSpec(
+            String correlationType, String visualizationKey, List<String> keyInputs) {
+        return AiArtifactSpec.of(
+                AiArtifactKeyBuilder.build(
+                        AiCapability.TEXT_TO_IMAGE,
+                        correlationType,
+                        visualizationKey,
+                        keyInputs.toArray(String[]::new)),
+                generatedImageCodec,
+                VisualizationImageArtifactConsumer.CONSUMER_ID
+        );
+    }
+
+    /** The equipment stored on the recipe's scene asset, or null when it has none (the defaults then apply). */
+    private SceneContext storedSceneContext(String visualizationKey) {
+        int separator = visualizationKey.indexOf("::");
+        if (separator < 0) {
+            return null;
+        }
+        return assetRepository.findByVisualizationKey(VisualizationKeyBuilder.buildScene(visualizationKey.substring(0, separator)))
+                .map(VisualizationAsset::getSceneContext)
+                .orElse(null);
+    }
+
+    /** A stable seed for every image of one recipe, from the recipe part of the key ({@code recipeId::...}). */
+    static long recipeSeed(String visualizationKey) {
+        int separator = visualizationKey.indexOf("::");
+        String recipe = separator < 0 ? visualizationKey : visualizationKey.substring(0, separator);
+        return Integer.toUnsignedLong(recipe.hashCode());
     }
 
     private AiArtifact artifactOrTransient(

@@ -93,6 +93,26 @@ public class VisualizationSceneAnchorService {
         }
     }
 
+    /**
+     * A generated step image as the reference for the next step of its chain, read back from storage. Never throws:
+     * empty when the step has no image or it cannot be read, and the next step is then drawn without it.
+     */
+    public Optional<RecipeProcessVisualizationService.PreviousStep> readStepImage(VisualizationAsset asset) {
+        if (asset == null || !StringUtils.hasText(asset.getImageUrl())) {
+            return Optional.empty();
+        }
+        try {
+            ImageStorageClient.StoredImage stored = imageStorageClient.download(asset.getImageUrl());
+            return Optional.of(new RecipeProcessVisualizationService.PreviousStep(
+                    asset.getId() + ":" + asset.getImageUrl(),
+                    new ImageGenerationClient.ReferenceImage(stored.mimeType(), stored.data())));
+        } catch (RuntimeException e) {
+            FailureLogger.logFailure(log, "visualization_previous_step_unreadable", e,
+                    "visualizationKey=" + asset.getVisualizationKey() + " fallback=no_previous_reference");
+            return Optional.empty();
+        }
+    }
+
     private Optional<SceneReference> resolve(Long userId, Long recipeId) {
         Optional<VisualizationAsset> found = visualizationService.findScene(recipeId);
         if (found.isEmpty() || !StringUtils.hasText(found.get().getImagePrompt())) {
@@ -106,7 +126,7 @@ public class VisualizationSceneAnchorService {
             VisualizationAsset generated = visualizationService.generateSceneImage(userId, scene);
             if (generated == null) {
                 log.warn("event=visualization_scene_anchor_unavailable recipeId={} reason=generation_failed fallback=dish_context_only", recipeId);
-                return Optional.of(new SceneReference(null, dishContext, null));
+                return Optional.of(new SceneReference(null, dishContext, null, scene.getSceneContext()));
             }
             scene = generated;
             log.info("event=visualization_scene_anchor_generated recipeId={} assetId={}", recipeId, scene.getId());
@@ -115,11 +135,12 @@ public class VisualizationSceneAnchorService {
         try {
             ImageStorageClient.StoredImage stored = imageStorageClient.download(scene.getImageUrl());
             ImageGenerationClient.ReferenceImage image = new ImageGenerationClient.ReferenceImage(stored.mimeType(), stored.data());
-            return Optional.of(new SceneReference(scene.getId() + ":" + scene.getImageUrl(), dishContext, image));
+            return Optional.of(new SceneReference(scene.getId() + ":" + scene.getImageUrl(), dishContext, image,
+                    scene.getSceneContext()));
         } catch (RuntimeException e) {
             FailureLogger.logFailure(log, "visualization_scene_anchor_unreadable", e,
                     "recipeId=" + recipeId + " fallback=dish_context_only");
-            return Optional.of(new SceneReference(null, dishContext, null));
+            return Optional.of(new SceneReference(null, dishContext, null, scene.getSceneContext()));
         }
     }
 }

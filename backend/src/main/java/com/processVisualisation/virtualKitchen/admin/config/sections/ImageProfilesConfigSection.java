@@ -18,6 +18,9 @@ import java.util.Map;
  * <ul>
  *   <li>the scene anchor switch ({@code ai.visualization.scene-anchor.enabled}), applied to
  *       {@link VisualizationSceneAnchorService} and read by every new visuals job;</li>
+ *   <li>the Focused Cooking View switch and its reference-chain switch, applied to
+ *       {@link VisualizationImageProperties} and read by every new visuals job. With the focused view off, images
+ *       are made exactly as before it existed;</li>
  *   <li>image profiles: width, height and steps for each image purpose, plus the default profile. Applied to
  *       {@link VisualizationImageProperties}, which {@code VisualizationImageProfiles} reads for every image.</li>
  * </ul>
@@ -44,15 +47,22 @@ public class ImageProfilesConfigSection implements ConfigSection {
     }
 
     static final String SCENE_ANCHOR_ENABLED = "sceneAnchor.enabled";
+    static final String FOCUSED_VIEW_ENABLED = "focusedView.enabled";
+    static final String REFERENCE_CHAIN_ENABLED = "referenceChain.enabled";
 
     private final VisualizationImageProperties properties;
     private final VisualizationSceneAnchorService sceneAnchorService;
     private final Map<String, Profile> baseline = new LinkedHashMap<>();
+    /** The configured switches, before any admin override. */
+    private final boolean baselineFocusedView;
+    private final boolean baselineReferenceChain;
 
     public ImageProfilesConfigSection(VisualizationImageProperties properties,
                                       VisualizationSceneAnchorService sceneAnchorService) {
         this.properties = properties;
         this.sceneAnchorService = sceneAnchorService;
+        this.baselineFocusedView = properties.isFocusedViewEnabled();
+        this.baselineReferenceChain = properties.isReferenceChainEnabled();
         PURPOSES.keySet().forEach(purpose -> baseline.put(purpose, copy(profile(purpose))));
     }
 
@@ -68,13 +78,24 @@ public class ImageProfilesConfigSection implements ConfigSection {
 
     @Override
     public String description() {
-        return "How new step images are made: the scene anchor, and the size and steps per kind of step. Empty "
+        return "How new step images are made: the focused cooking view, the scene anchor, and the size and steps per kind of step. Empty "
                 + "sizes use the default profile, then the provider's own setting. Bigger images cost more time and money.";
     }
 
     @Override
     public List<ConfigField> fields(Map<String, String> overrides) {
         List<ConfigField> fields = new ArrayList<>();
+        fields.add(Fields.toggle(FOCUSED_VIEW_ENABLED, "Use the focused cooking view", "Focused cooking view",
+                baselineFocusedView, overrides,
+                "Close-up step images that centre on the pan, cutting board, bowl or plate the step's action needs, "
+                        + "with the same equipment, camera angle, lighting and style written into every image of a "
+                        + "recipe. Off: images are made exactly as before (full-kitchen prompts, all steps at once). "
+                        + "Applies to the next visuals job; images already made are unchanged."));
+        fields.add(Fields.toggle(REFERENCE_CHAIN_ENABLED, "Continue from the previous step's image",
+                "Focused cooking view", baselineReferenceChain, overrides,
+                "Needs the focused cooking view. Each cooking step is drawn against the previous image with the same "
+                        + "focus, so the pan and the food in it carry over. Those steps are generated one after "
+                        + "another, which is slower. Only image models that take reference images use it."));
         fields.add(Fields.toggle(SCENE_ANCHOR_ENABLED, "Use a scene anchor", "Scene anchor",
                 sceneAnchorService.isBaselineEnabled(), overrides,
                 "One empty-scene image per recipe that every step image is drawn against, for a consistent pan, "
@@ -106,8 +127,17 @@ public class ImageProfilesConfigSection implements ConfigSection {
                 ? Boolean.parseBoolean(overrides.get(SCENE_ANCHOR_ENABLED))
                 : sceneAnchorService.isBaselineEnabled();
 
+        boolean focusedViewEnabled = overrides.containsKey(FOCUSED_VIEW_ENABLED)
+                ? Boolean.parseBoolean(overrides.get(FOCUSED_VIEW_ENABLED))
+                : baselineFocusedView;
+        boolean referenceChainEnabled = overrides.containsKey(REFERENCE_CHAIN_ENABLED)
+                ? Boolean.parseBoolean(overrides.get(REFERENCE_CHAIN_ENABLED))
+                : baselineReferenceChain;
+
         // Everything is parsed above, so nothing below can fail halfway through.
         sceneAnchorService.setEnabled(sceneAnchorEnabled);
+        properties.setFocusedViewEnabled(focusedViewEnabled);
+        properties.setReferenceChainEnabled(referenceChainEnabled);
         properties.setDefaultProfile(next.remove(DEFAULT));
         Map<String, Profile> profiles = new LinkedHashMap<>(properties.getProfiles());
         next.forEach((purpose, profile) -> {

@@ -20,12 +20,50 @@ class ImageProfilesConfigSectionTest {
 
     private VisualizationSceneAnchorService sceneAnchors;
     private ImageProfilesConfigSection section;
+    private VisualizationImageProperties properties;
 
     @BeforeEach
     void setUp() {
         sceneAnchors = new VisualizationSceneAnchorService(
                 mock(RecipeProcessVisualizationService.class), mock(ImageStorageClient.class), true);
-        section = new ImageProfilesConfigSection(new VisualizationImageProperties(), sceneAnchors);
+        properties = new VisualizationImageProperties();
+        section = new ImageProfilesConfigSection(properties, sceneAnchors);
+    }
+
+    @Test
+    void theFocusedView_andItsReferenceChain_areOnByDefaultAndSwitchableAtRuntime() {
+        assertTrue(properties.isFocusedViewEnabled());
+        assertTrue(properties.isReferenceChainEnabled());
+
+        section.apply(Map.of(ImageProfilesConfigSection.FOCUSED_VIEW_ENABLED, "false"));
+        assertFalse(properties.isFocusedViewEnabled(), "off = images are made as before the focused view");
+        assertTrue(properties.isReferenceChainEnabled());
+        assertTrue(sceneAnchors.isEnabled(), "the scene anchor is a separate switch");
+
+        section.apply(Map.of(ImageProfilesConfigSection.REFERENCE_CHAIN_ENABLED, "false"));
+        assertTrue(properties.isFocusedViewEnabled(), "no override = back to the configured value");
+        assertFalse(properties.isReferenceChainEnabled());
+
+        section.apply(Map.of());
+        assertTrue(properties.isFocusedViewEnabled());
+        assertTrue(properties.isReferenceChainEnabled());
+    }
+
+    @Test
+    void theFocusedViewToggles_followTheConfiguredValues() {
+        VisualizationImageProperties configuredOff = new VisualizationImageProperties();
+        configuredOff.setFocusedViewEnabled(false);
+        ImageProfilesConfigSection offByConfig = new ImageProfilesConfigSection(configuredOff, sceneAnchors);
+
+        ConfigField field = offByConfig.fields(Map.of()).stream()
+                .filter(f -> f.key().equals(ImageProfilesConfigSection.FOCUSED_VIEW_ENABLED)).findFirst().orElseThrow();
+        assertEquals(ConfigField.Type.TOGGLE, field.type());
+        assertEquals("false", field.baseline());
+
+        offByConfig.apply(Map.of(ImageProfilesConfigSection.FOCUSED_VIEW_ENABLED, "true"));
+        assertTrue(configuredOff.isFocusedViewEnabled());
+        offByConfig.apply(Map.of());
+        assertFalse(configuredOff.isFocusedViewEnabled());
     }
 
     @Test

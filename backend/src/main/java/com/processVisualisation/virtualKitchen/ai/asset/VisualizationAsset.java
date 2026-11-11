@@ -1,6 +1,8 @@
 package com.processVisualisation.virtualKitchen.ai.asset;
 
 import com.processVisualisation.virtualKitchen.ai.platform.registry.ModelTier;
+import com.processVisualisation.virtualKitchen.ai.recipe.visualization.SceneContext;
+import com.processVisualisation.virtualKitchen.ai.recipe.visualization.VisualFocus;
 import lombok.Data;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.Id;
@@ -37,6 +39,17 @@ public class VisualizationAsset {
      * Indian home-style dish"), sent with every step image of the recipe. Null on every other asset.
      */
     private String dishContext;
+
+    /**
+     * Set on images written for the Focused Cooking View: what the image centres on. {@link #imagePrompt} then holds
+     * only the step's own text (what is in the frame and what is being done) and the scene is added when the image is
+     * requested. Null on every asset written before the focused view, or with it switched off: those prompts are
+     * self-contained and are sent as they are.
+     */
+    private VisualFocus focus;
+
+    /** Scene asset only ({@code recipeId::scene}): the recipe's equipment for focused images. Null otherwise. */
+    private SceneContext sceneContext;
 
     private String imageUrl;
 

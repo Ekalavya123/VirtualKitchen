@@ -212,6 +212,214 @@ public class RecipeProcessVisualizationPromptBuilder {
         return text.append(imagePrompt).toString();
     }
 
+    // ---------------------------------------------------------------------------------------------------------
+    // Focused Cooking View: the text model describes only the food and the action; the scene (equipment, camera,
+    // lighting, style) and the framing are written here, identically for every image of a recipe.
+    // ---------------------------------------------------------------------------------------------------------
+
+    /** Version of the focused batch prompt; logged with every batch like {@link #BATCH_PROMPT_VERSION}. */
+    public static final String FOCUSED_BATCH_PROMPT_VERSION = "4";
+
+    /** System prompt of the focused batch call: one {@link ActionContext} per image, and the recipe's equipment. */
+    public String buildFocusedBatchSystemPrompt() {
+        return """
+                You are a culinary visualization writer. You describe every image of one recipe at once. The kitchen, \
+                cookware, camera, lighting and photographic style are added to each image by the system, so you never \
+                describe them: you describe only the food and the action.
+
+                Return strict JSON only: {"dishContext": "...", "scene": {"vessel": "...", "stove": "...", \
+                "surface": "...", "cuttingBoard": "...", "prepBowl": "...", "servingDish": "..."}, \
+                "prompts": [{"id": "...", "focus": "...", "state": "...", "action": "..."}]}.
+                No markdown, prose, or code fences.
+
+                - When asked for a SCENE, also write:
+                  - dishContext: one line naming the dish, its cuisine and style (e.g. "Part of making Chicken \
+                Curry, a North Indian home-style dish"). No steps, ingredients or quantities.
+                  - scene: the equipment this recipe is cooked with, each a short noun phrase with its article, colour \
+                and material (e.g. "a black round frying pan", "a black gas stove", "a light grey stone countertop", \
+                "a wooden cutting board", "a plain steel mixing bowl", "a plain white plate"). vessel is the ONE main \
+                pan or pot of the main cooking steps: pick what the recipe needs (frying pan, kadai, saucepan, pot). \
+                Keep everything plain: no brands, no decoration.
+                  Otherwise omit both.
+                - Write exactly one entry per listed id, using that id.
+                - focus: where the camera looks. CUTTING_BOARD (cutting, peeling, cleaning on the board), \
+                COOKING_VESSEL (anything in the main pan or pot), PREP_BOWL (mixing, marinating or coating in a bowl), \
+                PLATE (plating, serving). Each id lists its default focus; keep it unless the step clearly happens \
+                somewhere else.
+                - state: what is visible in the focus at this step, in one or two sentences. Read the whole recipe \
+                first. For a COOKING_VESSEL step, work out from the earlier MAIN steps everything already in the \
+                vessel and describe it in its current form (e.g. "softened translucent chopped onions in shimmering \
+                oil"): every ingredient added earlier is still there unless a step removed it, and it changes form as \
+                it cooks. Then name what this step adds, in its prepared form and visible amount.
+                - action: what is being done right now, with the utensil or hand doing it (e.g. "chopped red tomatoes \
+                being tipped in from a small bowl", "a wooden spatula stirring the mixture"). For a step that only \
+                cooks or waits, describe what the cooking looks like (bubbling, steam, colour).
+                - Never show the future: no ingredient a later step adds, no finished dish before the last step, \
+                nothing cooked further than this step's expected result.
+                - Never show extras: only the ingredients and utensils this step needs.
+                - Name ingredients by what they look like (colour, cut, raw or cooked) and keep quantities faithful to \
+                the step.
+                - Do not describe the kitchen, cookware, stove, countertop, camera, lighting or style; refer to the \
+                equipment only as "the pan", "the pot", "the board", "the bowl" or "the plate". Never write "as \
+                before", "the previous image" or another id: each entry must read on its own.
+                - Each Preparation is its own flow: do not carry state between preparations or from the main steps. \
+                A MAIN step that uses a prepared component shows it by name.
+                - A Preparation listed with focus STORYBOARD: state lists its panels in order, one short clause each, \
+                ending with the finished component; action stays empty.
+                - No text, labels, captions or watermarks.
+                """;
+    }
+
+    /**
+     * The whole recipe for the focused batch call, as in {@link #buildBatchUserPrompt}, with each image's default
+     * focus.
+     *
+     * @param focusById the default {@link VisualFocus} of every target id
+     * @param sceneNeeded whether to ask for the recipe's dishContext and equipment
+     */
+    public String buildFocusedBatchUserPrompt(List<BatchTarget> targets, java.util.Map<String, VisualFocus> focusById,
+                                              String dishName, boolean sceneNeeded) {
+        StringBuilder prompt = new StringBuilder();
+        if (StringUtils.hasText(dishName)) {
+            prompt.append("DISH: ").append(dishName.trim()).append("\n\n");
+        }
+        List<BatchTarget> flows = targets.stream().filter(target -> target.target().flow() != null).toList();
+        List<BatchTarget> steps = targets.stream().filter(target -> target.target().flow() == null).toList();
+
+        if (!flows.isEmpty()) {
+            prompt.append("PREPARATIONS (one image each, made before or alongside cooking):\n");
+            for (BatchTarget target : flows) {
+                RecipeProcessVisualizationService.FlowContext flow = target.target().flow();
+                String output = StringUtils.hasText(flow.outputName()) ? flow.outputName().trim() : "the prepared component";
+                prompt.append(target.id()).append(": making ").append(output).append('\n');
+                for (int i = 0; i < flow.steps().size(); i++) {
+                    prompt.append("  ").append(i + 1).append(". ").append(describeStep(flow.steps().get(i))).append('\n');
+                }
+                VisualFocus focus = focusById.get(target.id());
+                if (focus == VisualFocus.STORYBOARD) {
+                    prompt.append("  Image: ").append(storyboardInstruction(output, flow.steps().size())).append('\n');
+                    prompt.append("  Focus: STORYBOARD\n");
+                } else {
+                    prompt.append("  Image: a single close-up still frame of this preparation and the finished ")
+                            .append(output).append(".\n");
+                    prompt.append("  Default focus: ").append(focus).append('\n');
+                }
+            }
+            prompt.append('\n');
+        }
+
+        if (!steps.isEmpty()) {
+            prompt.append("MAIN COOKING STEPS (one image each, a single close-up still frame of the step):\n");
+            for (BatchTarget target : steps) {
+                RecipeProcessVisualizationInput step = target.target().step();
+                prompt.append(target.id()).append(": ").append(describeStep(step)).append('\n');
+                if (StringUtils.hasText(step.previousExpectedOutput())) {
+                    prompt.append("  Continues from: ").append(step.previousExpectedOutput()).append('\n');
+                }
+                prompt.append("  Default focus: ").append(focusById.get(target.id())).append('\n');
+            }
+            prompt.append('\n');
+        }
+
+        if (sceneNeeded) {
+            prompt.append("SCENE: also write dishContext and scene for this recipe.\n\n");
+        }
+        if (targets.isEmpty()) {
+            prompt.append("Return dishContext and scene; prompts is an empty list.");
+        } else {
+            prompt.append("Return one entry for each of these ids: ")
+                    .append(targets.stream().map(BatchTarget::id).collect(java.util.stream.Collectors.joining(", ")))
+                    .append('.');
+        }
+        return prompt.toString();
+    }
+
+    /** Added to the per-step fallback prompts when the focused view is on: the answer is the step's own text only. */
+    static final String FOCUSED_FALLBACK_INSTRUCTION = "\n\nThe kitchen, cookware, camera, lighting and style are "
+            + "added by the system: describe ONLY the food that is visible at this step and what is being done to it, "
+            + "with the utensil or hand doing it. Show nothing a later step adds and nothing the step does not need.";
+
+    /** {@link #buildUserPrompt} for a focused image: the same step, answered with the food and the action only. */
+    public String buildFocusedUserPrompt(RecipeProcessVisualizationInput current) {
+        return buildUserPrompt(current) + FOCUSED_FALLBACK_INSTRUCTION;
+    }
+
+    /** {@link #buildFlowUserPrompt} for a focused image. */
+    public String buildFocusedFlowUserPrompt(String outputName, List<RecipeProcessVisualizationInput> steps) {
+        return buildFlowUserPrompt(outputName, steps) + FOCUSED_FALLBACK_INSTRUCTION;
+    }
+
+    /** Which reference images go with a focused image request. */
+    public record References(boolean sceneAnchor, boolean previousStep) {
+
+        public static final References NONE = new References(false, false);
+
+        public int count() {
+            return (sceneAnchor ? 1 : 0) + (previousStep ? 1 : 0);
+        }
+    }
+
+    static final String ANCHOR_AND_PREVIOUS_INSTRUCTION = "The first reference image is the empty setup and the second "
+            + "is the previous step. Continue from the second image: keep the same cookware, stove, countertop, "
+            + "lighting and camera, and change only what this step does.";
+
+    static final String PREVIOUS_INSTRUCTION = "The reference image is the previous step. Continue from it: keep the "
+            + "same equipment, surface, lighting and camera, and change only what this step does.";
+
+    static final String FOCUSED_GUARDRAIL = "Show only what is described: no other ingredients, dishes or utensils, "
+            + "no text or labels.";
+
+    /**
+     * The text sent to the image model for one focused image, assembled from fixed parts so every image of a recipe
+     * describes its scene in the same words: camera and framing (from the focus and the recipe's equipment), the
+     * step's own text, lighting and style, the guardrail, the dish context, then how to use the reference images.
+     *
+     * @param stepText the asset's stored prompt: what is in the frame and what is being done
+     * @param scene the recipe's equipment, already completed with the configured defaults
+     */
+    public String buildFocusedImageRequestText(String stepText, VisualFocus focus, SceneContext scene,
+                                               VisualizationImageProperties.Scene style, String dishContext,
+                                               References references) {
+        StringBuilder text = new StringBuilder();
+        text.append(cameraLine(focus, style)).append(' ').append(focus.framing(scene)).append('\n');
+        text.append(stepText.trim()).append('\n');
+        text.append(styleLine(style)).append('\n');
+        text.append(FOCUSED_GUARDRAIL);
+        if (StringUtils.hasText(dishContext)) text.append("\nContext: ").append(dishContext.trim());
+        if (references.sceneAnchor() && references.previousStep()) {
+            text.append('\n').append(ANCHOR_AND_PREVIOUS_INSTRUCTION);
+        } else if (references.previousStep()) {
+            text.append('\n').append(PREVIOUS_INSTRUCTION);
+        } else if (references.sceneAnchor()) {
+            text.append('\n').append(REFERENCE_INSTRUCTION);
+        }
+        return text.toString();
+    }
+
+    /**
+     * The prompt of a recipe's scene anchor for focused images: the empty main vessel on the stove, framed exactly
+     * like a cooking step, so it can be the reference every cooking step is drawn against.
+     */
+    public String buildFocusedScenePrompt(SceneContext scene, VisualizationImageProperties.Scene style) {
+        return cameraLine(VisualFocus.COOKING_VESSEL, style) + ' ' + VisualFocus.COOKING_VESSEL.framing(scene) + '\n'
+                + "The cookware is empty and clean: absolutely no food, no ingredients, no utensils, no hands.\n"
+                + styleLine(style) + '\n'
+                + "No text or labels.";
+    }
+
+    private static String cameraLine(VisualFocus focus, VisualizationImageProperties.Scene style) {
+        String camera = "camera about " + style.getCameraAngle() + " degrees above the counter looking down";
+        return focus == VisualFocus.STORYBOARD
+                ? "One image laid out as a storyboard of small close-up panels in a clean grid, read left to right and "
+                + "top to bottom, " + camera + " in every panel."
+                : "Close-up photo, " + camera + ".";
+    }
+
+    private static String styleLine(VisualizationImageProperties.Scene style) {
+        String line = style.getLighting() + ", " + style.getStyle() + ", " + style.getEnvironment() + ".";
+        return Character.toUpperCase(line.charAt(0)) + line.substring(1);
+    }
+
     /** The storyboard layout for a multi-step preparation flow's single image. */
     private static String storyboardInstruction(String output, int stepCount) {
         int panels = Math.min(stepCount, MAX_FLOW_PANELS) + 1;
