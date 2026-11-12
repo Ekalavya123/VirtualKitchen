@@ -224,6 +224,19 @@ export interface RecipeIngredient {
   preparation?: string
 }
 
+/** One image or audio file a recipe file links to, for one step of the recipe being imported (RecipeAssetImportDTO). */
+export type RecipeAssetRef = { processId: number; stepId: string; url: string; prompt?: string }
+
+export type RecipeAssetImportRequest = { images: RecipeAssetRef[]; audio: RecipeAssetRef[] }
+
+/** How many files of a kind were copied into the recipe, and which were not (with a reason to show). */
+export type RecipeAssetImportOutcome = {
+  copied: number
+  failed: { processId: number | null; stepId: string | null; reason: string }[]
+}
+
+export type RecipeAssetImportResponse = { images: RecipeAssetImportOutcome; audio: RecipeAssetImportOutcome }
+
 export interface NutritionInfo {
   calories?: number
   proteinGrams?: number

@@ -7,6 +7,7 @@
 import { apiGet, apiPost, apiDelete, apiPut } from './client'
 import { API } from './endpoints'
 import type { Process, ProcessBatchUpdateItem, ProcessBatchUpdateResult, ProcessCreateRequest, ProcessUpdateRequest } from '../types/process'
+import type { RecipeAssetImportRequest, RecipeAssetImportResponse } from '../types/recipe'
 import type { NutritionInfo, RecipeActiveJobsResponse, RecipeProcessGenerationJobResponse, RecipeProcessGenerationRequest, RecipeProcessVisualizationJobResponse, RecipeDetail, RecipeIngredient } from '../types/recipe'
 import type { UnitType } from '../types/kitchen'
 
@@ -118,6 +119,14 @@ export const RecipeDetailApi = {
    */
   async updateNutrition(recipeId: number, nutrition: NutritionInfo): Promise<RecipeDetail> {
     return apiPut<RecipeDetail>(API.recipeDetail.nutrition(recipeId), nutrition)
+  },
+
+  /**
+   * Copies the images and narration audio a recipe file links to into this recipe, as its own files. Each
+   * file is copied or reported alone; the call only fails as a whole when the recipe isn't the caller's.
+   */
+  async importAssets(recipeId: number, request: RecipeAssetImportRequest): Promise<RecipeAssetImportResponse> {
+    return apiPost<RecipeAssetImportResponse>(API.recipeDetail.importAssets(recipeId), request)
   },
 
   /**

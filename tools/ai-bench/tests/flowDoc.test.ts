@@ -47,8 +47,8 @@ test('a flow file is read with its images dropped and missing extras defaulted',
 })
 
 test('an unusable flow file is rejected with its name', () => {
-  assert.throws(() => parseFlowDoc([], 'x.flow.json'), /flow file x\.flow\.json: is not a JSON object/)
-  assert.throws(() => parseFlowDoc({ ...valid(), version: 2 }, 'x'), /has version 2, this bench reads version 1/)
+  assert.throws(() => parseFlowDoc([], 'x.flow.json'), /x\.flow\.json: is not a recipe file \(not a JSON object\)/)
+  assert.throws(() => parseFlowDoc({ ...valid(), version: 2 }, 'x'), /has version 2; this app reads version 1/)
   assert.throws(() => parseFlowDoc({ ...valid(), processes: [] }, 'x'), /has no "processes"/)
   assert.throws(() => parseFlowDoc({ ...valid(), processes: [valid().processes[1]] }, 'x'), /exactly one MAIN/)
   assert.throws(() => parseFlowDoc({ ...valid(), processes: [{ id: 1, type: 'MAIN' }] }, 'x'), /needs "nodes" and "edges"/)

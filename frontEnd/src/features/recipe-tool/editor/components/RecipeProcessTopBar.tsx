@@ -244,7 +244,7 @@ export default function RecipeProcessTopBar({
             )}
 
             {onExport && (
-              <button type="button" onClick={onExport} className="recipe-topbar-button" aria-label="Export" title="Export this process as JSON">
+              <button type="button" onClick={onExport} className="recipe-topbar-button" aria-label="Export recipe" title="Export the whole recipe as a file that can be imported from New recipe">
                 ⤓ <span className="hidden @6xl:inline">Export</span>
               </button>
             )}

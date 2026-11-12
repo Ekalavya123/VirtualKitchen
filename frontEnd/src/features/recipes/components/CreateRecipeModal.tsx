@@ -2,6 +2,13 @@ import { useEffect, useId } from 'react'
 import DraftRestoredNote from '../../../shared/drafts/DraftRestoredNote'
 import type { CreateRecipeDraft, CreateRecipeMode } from './createRecipeDraft'
 
+/** The recipe file chosen for an import: its name and what it holds, or why it can't be used. */
+export type ChosenRecipeFile =
+  | { fileName: string; error: string }
+  | { fileName: string; error?: undefined; steps: number; processes: number; images: number; audio: number }
+
+const plural = (count: number, noun: string, many = `${noun}s`) => `${count} ${count === 1 ? noun : many}`
+
 type CreateRecipeModalProps = {
   open: boolean
   draft: CreateRecipeDraft
@@ -13,11 +20,15 @@ type CreateRecipeModalProps = {
   /** The fields were refilled from an unfinished earlier attempt; `onClearDraft` starts over. */
   draftRestored: boolean
   onClearDraft: () => void
+  /** "Import from file": the file picked so far, and picking one. */
+  chosenFile: ChosenRecipeFile | null
+  onChooseFile: (file: File) => void
 }
 
 const MODES: Array<{ value: CreateRecipeMode; icon: string; title: string; text: string }> = [
   { value: 'ai', icon: '✨', title: 'Describe it for AI', text: 'Tell us the dish; AI drafts the steps for you to review.' },
   { value: 'blank', icon: '🧩', title: 'Start from scratch', text: 'Build the steps yourself in the editor.' },
+  { value: 'import', icon: '📥', title: 'Import from file', text: 'Create it from a recipe file someone exported.' },
 ]
 
 export default function CreateRecipeModal({
@@ -30,6 +41,8 @@ export default function CreateRecipeModal({
   onClose,
   draftRestored,
   onClearDraft,
+  chosenFile,
+  onChooseFile,
 }: CreateRecipeModalProps) {
   const id = useId()
   // Escape closes the dialog wherever focus is (it may have left the dialog after a click).
@@ -173,6 +186,40 @@ export default function CreateRecipeModal({
             </label>
           )}
 
+          {mode === 'import' && (
+            <div className="mt-4">
+              <div className="mb-1.5 text-xs font-bold text-[var(--flow-text)]">Recipe file</div>
+              <input
+                type="file"
+                accept=".json,application/json"
+                aria-label="Recipe file"
+                className="flow-editor-input"
+                disabled={loading}
+                onChange={e => {
+                  const file = e.target.files?.[0]
+                  if (file) onChooseFile(file)
+                }}
+              />
+              {chosenFile?.error && (
+                <div className="recipe-form-error" role="alert">
+                  This file can’t be imported: {chosenFile.error}
+                </div>
+              )}
+              {chosenFile && 'steps' in chosenFile && (
+                <span className="mt-1 block text-[0.72rem] text-[var(--flow-text-muted)]" role="status">
+                  {chosenFile.fileName}: {plural(chosenFile.steps, 'step')} in {plural(chosenFile.processes, 'process', 'processes')}
+                  , {plural(chosenFile.images, 'image')} and {plural(chosenFile.audio, 'narration')}.
+                  The steps are created as they are, with no AI. Images and narration are copied into your own recipe.
+                </span>
+              )}
+              {!chosenFile && (
+                <span className="mt-1 block text-[0.72rem] text-[var(--flow-text-muted)]">
+                  Choose a <code>.recipe.json</code> file exported from the recipe editor (Export, or ⋯ → Export recipe).
+                </span>
+              )}
+            </div>
+          )}
+
           {error && (
             <div className="recipe-form-error" role="alert">
               {error}
@@ -199,7 +246,7 @@ export default function CreateRecipeModal({
             disabled={loading}
             className="recipe-primary-button"
           >
-            {loading ? 'Creating...' : mode === 'ai' ? 'Create & open AI' : 'Create & open editor'}
+            {loading ? (mode === 'import' ? 'Importing...' : 'Creating...') : mode === 'ai' ? 'Create & open AI' : mode === 'import' ? 'Import & open editor' : 'Create & open editor'}
             {!loading && <span aria-hidden="true">→</span>}
           </button>
         </div>

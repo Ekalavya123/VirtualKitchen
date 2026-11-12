@@ -81,6 +81,8 @@ import type { RecipeAiActions } from './AiActionsMenu'
 import { ProcessSidebarActionsProvider, type ProcessSidebarActions } from '../context/ProcessSidebarActionsContext'
 import RecipeVisualizationSlideshow from '../../walkthrough/RecipeVisualizationSlideshow'
 import ExportProcessModal from './ExportProcessModal'
+import { exportRecipeFile, type ExportedRecipeFile } from '../../session/recipeFile'
+import { errorMessage } from '../../../../shared/errors'
 import { startPanelResize } from './panelResize'
 import { useCanvasShortcuts } from '../hooks/useCanvasShortcuts'
 import EmptyCanvasPrompt from './EmptyCanvasPrompt'
@@ -286,7 +288,7 @@ function RecipeProcessCanvasContent({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [zoomPercent, setZoomPercent] = useState(Math.round((initialFlowData.viewport?.zoom ?? 1) * 100))
-  const [exportJson, setExportJson] = useState<string | null>(null)
+  const [exportedFile, setExportedFile] = useState<ExportedRecipeFile | null>(null)
   const [showSlideshow, setShowSlideshow] = useState(false)
   // Narration is generated from the *saved* step text, so opening the slideshow first flushes any
   // pending autosave; the slideshow waits on this before asking the backend for narration.
@@ -823,12 +825,16 @@ function RecipeProcessCanvasContent({
     session.updateProcess(processId, { viewport: { x: viewport.x, y: viewport.y, zoom: viewport.zoom } })
   }, [session, processId])
 
-  const handleExport = useCallback(() => {
-    const viewport = currentViewportRef.current ?? reactFlowInstance.current?.getViewport()
-    const flowData = createFlowDataPayload(nodes, edges, viewport ?? undefined)
-    const payload = buildProcessUpdateRequest(process.name, process.description, flowData)
-    setExportJson(JSON.stringify({ recipeId, processId, type: process.type, ...payload }, null, 2))
-  }, [nodes, edges, process, recipeId, processId])
+  // The whole recipe as a file another user can import: saved first, so the file holds what is on screen
+  // and the narration listed for it belongs to the saved steps.
+  const handleExport = useCallback(async () => {
+    try {
+      await session.saveNow()
+      setExportedFile(await exportRecipeFile(recipeId, session.getProcesses()))
+    } catch (error) {
+      notifyError(errorMessage(error, 'Unable to export this recipe right now'))
+    }
+  }, [session, recipeId, notifyError])
 
   const buildSlideshowSteps = () => buildCanvasSlideshowSteps(process, nodes, edges, recipeProcesses, stepOutputGraph)
 
@@ -1075,7 +1081,7 @@ function RecipeProcessCanvasContent({
         onAutoArrange={autoArrange}
         canAutoArrange={nodes.length > 0}
         onPreview={openSlideshow}
-        onExport={handleExport}
+        onExport={() => void handleExport()}
         onGenerateVisuals={() => void visuals.generate()}
         isGeneratingVisuals={visuals.generating}
         visualsProgressLabel={visuals.progressLabel}
@@ -1343,15 +1349,7 @@ function RecipeProcessCanvasContent({
         />
       )}
 
-      {exportJson && (
-        <ExportProcessModal
-          json={exportJson}
-          nodeCount={nodes.length}
-          edgeCount={edges.length}
-          fileName={`process-${processId}.json`}
-          onClose={() => setExportJson(null)}
-        />
-      )}
+      {exportedFile && <ExportProcessModal file={exportedFile} onClose={() => setExportedFile(null)} />}
 
       {showShortcuts && <ShortcutHelpDialog onClose={() => setShowShortcuts(false)} />}
     </div>

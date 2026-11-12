@@ -15,6 +15,9 @@ import RecipeSaveStatus from '../editor/components/RecipeSaveStatus'
 import type { ReadinessIssue } from '../model/recipeReadiness'
 import { readinessChip } from './readinessChip'
 import { useCookMode } from './useCookMode'
+import { downloadTextFile, exportRecipeFile } from '../session/recipeFile'
+import { useNotifications } from '../../../shared/components/notifications/notificationContext'
+import { errorMessage } from '../../../shared/errors'
 
 const TABS: { id: RecipeToolView; label: string; icon: string }[] = [
   { id: 'editor', label: 'Recipe Editor', icon: '🧩' },
@@ -96,9 +99,26 @@ export default function RecipeToolNavbar({
   const readiness = useRecipeReadiness()
   const cookMode = useCookMode(recipe.id)
   const isPublic = recipe.visibility === 'PUBLIC'
+  const session = useRecipeSession()
+  const { notifySuccess, notifyError } = useNotifications()
+
+  // Owners only: the recipe as a file anyone can import from "New recipe". Saved first, so the file holds
+  // what is on screen.
+  const exportRecipe = async () => {
+    if (!session) return
+    try {
+      await session.saveNow()
+      const file = await exportRecipeFile(recipe.id, session.getProcesses())
+      downloadTextFile(file.json, file.fileName)
+      notifySuccess(`Recipe exported as ${file.fileName}. Share it, or import it from New recipe.`)
+    } catch (error) {
+      notifyError(errorMessage(error, 'Unable to export this recipe right now'))
+    }
+  }
 
   const menuItems: ActionMenuItem[] = [
     ...(onEditDetails ? [{ label: '✏️ Edit name & description', onSelect: onEditDetails }] : []),
+    ...(session?.canEdit && !session.loading ? [{ label: '⤓ Export recipe', onSelect: () => void exportRecipe() }] : []),
     ...(onToggleVisibility && isPublic
       ? [{ label: '🔒 Make private', onSelect: () => onToggleVisibility(readiness?.blockers.length ?? 0) }]
       : []),

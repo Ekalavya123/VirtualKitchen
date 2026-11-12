@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Recipe } from '../../api'
-import { EditRecipeDetailsModal } from '../recipe-tool'
+import { createRecipeFromFile, describeMissingAssets, EditRecipeDetailsModal, parseRecipeFile, summarizeRecipeFile, type RecipeFile } from '../recipe-tool'
+import { useNotifications } from '../../shared/components/notifications/notificationContext'
 import ListEnd from '../../shared/components/ListEnd'
 import { EmptyState, ErrorState, PageHeader, SkeletonGrid } from '../../shared/components/page'
 import { draftKeys } from '../../shared/drafts/draftStore'
@@ -10,7 +11,7 @@ import { errorMessage } from '../../shared/errors'
 import { useIncrementalReveal } from '../../shared/hooks/useIncrementalReveal'
 import '../../styles/flow-ui.css'
 import ConfirmVisibilityModal from './components/ConfirmVisibilityModal'
-import CreateRecipeModal from './components/CreateRecipeModal'
+import CreateRecipeModal, { type ChosenRecipeFile } from './components/CreateRecipeModal'
 import { EMPTY_CREATE_RECIPE_DRAFT, type CreateRecipeDraft, type CreateRecipeMode } from './components/createRecipeDraft'
 import RecipeCard from './components/RecipeCard'
 import RecipeToolbar from './components/RecipeToolbar'
@@ -72,6 +73,10 @@ export default function RecipeLibraryPage({
   const [createModalOpen, setCreateModalOpen] = useState(createRequestKey != null && scope === 'mine')
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  // "Import from file": the parsed file is kept here, not in the saved draft (it can be large, and a file
+  // has to be picked again after a reload anyway).
+  const [recipeFile, setRecipeFile] = useState<{ chosen: ChosenRecipeFile; doc: RecipeFile | null } | null>(null)
+  const { notifySuccess, notifyInfo } = useNotifications()
   if (createRequestKey !== seenCreateRequest) {
     setSeenCreateRequest(createRequestKey)
     if (createRequestKey != null && scope === 'mine') {
@@ -122,9 +127,55 @@ export default function RecipeLibraryPage({
     setCreateError(null)
   }
 
+  /** Reads the picked file in the browser and checks it is a recipe file; its name fills an empty title. */
+  const chooseRecipeFile = async (file: File) => {
+    setCreateError(null)
+    try {
+      const doc = parseRecipeFile(await file.text(), file.name)
+      setRecipeFile({ chosen: { fileName: file.name, ...summarizeRecipeFile(doc) }, doc })
+      createDraft.setValue((current) => ({
+        ...EMPTY_CREATE_RECIPE_DRAFT, ...current,
+        title: current?.title?.trim() ? current.title : (doc.name ?? ''),
+        description: current?.description?.trim() ? current.description : (doc.description ?? ''),
+      }))
+    } catch (error) {
+      // The parser's message starts with the file's name; the dialog already shows it.
+      const reason = errorMessage(error, 'it could not be read').replace(`${file.name}: `, '')
+      setRecipeFile({ chosen: { fileName: file.name, error: reason }, doc: null })
+    }
+  }
+
+  const handleImport = async (doc: RecipeFile) => {
+    try {
+      setCreating(true)
+      setCreateError(null)
+      const title = draft.title.trim()
+      const imported = await createRecipeFromFile(doc, title, draft.description.trim())
+      setCreateModalOpen(false)
+      setRecipeFile(null)
+      createDraft.clear()
+      const missing = describeMissingAssets(imported)
+      if (missing) notifyInfo(`Recipe imported. ${missing}`)
+      else notifySuccess('Recipe imported.')
+      onCreateRecipe?.({ recipeId: imported.recipeId, title, mode: 'import', recipeText: '' })
+    } catch (error) {
+      setCreateError(errorMessage(error, 'Unable to import this recipe'))
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const handleCreate = async () => {
     if (!draft.title.trim()) {
       setCreateError('Please enter a recipe name')
+      return
+    }
+    if (draft.mode === 'import') {
+      if (!recipeFile?.doc) {
+        setCreateError(recipeFile ? 'Choose a recipe file that can be imported.' : 'Choose a recipe file to import.')
+        return
+      }
+      await handleImport(recipeFile.doc)
       return
     }
     if (draft.mode === 'ai' && !draft.recipeText.trim()) {
@@ -271,6 +322,8 @@ export default function RecipeLibraryPage({
         onClose={closeCreateModal}
         draftRestored={createDraft.restored}
         onClearDraft={createDraft.clear}
+        chosenFile={recipeFile?.chosen ?? null}
+        onChooseFile={(file) => void chooseRecipeFile(file)}
       />
 
       <EditRecipeDetailsModal
