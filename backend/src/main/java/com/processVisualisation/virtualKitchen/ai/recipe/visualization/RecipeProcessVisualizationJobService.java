@@ -74,6 +74,16 @@ public class RecipeProcessVisualizationJobService {
         return startJob(userId, recipeId, processId, List.of(processId));
     }
 
+    /** {@link #startJob(Long, Long, Long)}, optionally regenerating images the process's steps already have. */
+    public VisualizationJobResponseDTO startJob(Long userId, Long recipeId, Long processId, boolean overwriteExisting) {
+        return startJob(userId, recipeId, processId, List.of(processId), overwriteExisting);
+    }
+
+    /** The 5-argument form, keeping every image the steps already have (only missing ones are drawn). */
+    public VisualizationJobResponseDTO startJob(Long userId, Long recipeId, Long processId, List<Long> promptScope) {
+        return startJob(userId, recipeId, processId, promptScope, false);
+    }
+
     /**
      * Validates the process and creates a {@code QUEUED} job synchronously (so a missing process
      * fails fast, before any job exists), then hands the actual generation off to the orchestrator
@@ -85,11 +95,18 @@ public class RecipeProcessVisualizationJobService {
      * ({@link VisualizationPromptBatchService}). Jobs started together for a recipe pass the same scope, so whichever
      * runs first writes the prompts for all of them and the others find theirs already written.
      *
-     * @param promptScope the processes visualized together with this one (including it)
+     * <p>
+     * With {@code overwriteExisting}, the steps' stored prompts and images are forgotten first (see
+     * {@link RecipeProcessVisualizationService#clearForRegeneration}), so every step gets a new prompt and image.
+     * Only a job this call actually starts clears anything: joining an already-running job changes nothing.
+     *
+     * @param promptScope       the processes visualized together with this one (including it)
+     * @param overwriteExisting regenerate and replace images the steps already have (otherwise they are kept)
      * @throws RecipeProcessAiException if the process cannot be found
      * @throws NoSuchElementException   if the process belongs to a different recipe
      */
-    public VisualizationJobResponseDTO startJob(Long userId, Long recipeId, Long processId, List<Long> promptScope) {
+    public VisualizationJobResponseDTO startJob(Long userId, Long recipeId, Long processId, List<Long> promptScope,
+                                                boolean overwriteExisting) {
         String activeKey = activeKey(processId);
         var running = visualizationJobRepository.findByActiveKey(activeKey);
         if (running.isPresent()) {
@@ -114,6 +131,7 @@ public class RecipeProcessVisualizationJobService {
         job.setActiveKey(activeKey);
         job.setStatus(VisualizationJobStatus.QUEUED);
         job.setTotalSteps(preparation.targets().size());
+        job.setOverwriteExisting(overwriteExisting);
         job.setCompletedSteps(0);
         job.setCreatedAt(Instant.now());
         job.setUpdatedAt(Instant.now());
@@ -130,6 +148,11 @@ public class RecipeProcessVisualizationJobService {
             throw e;
         }
         log.debug("event=visualization_job_queued jobId={} recipeId={} processId={}", job.getId(), recipeId, processId);
+        if (overwriteExisting) {
+            int cleared = recipeProcessVisualizationService.clearForRegeneration(recipeId, preparation.targets());
+            log.info("event=visualization_regenerate jobId={} recipeId={} processId={} clearedAssets={}",
+                    job.getId(), recipeId, processId, cleared);
+        }
 
         List<Long> scope = promptScope.contains(processId) ? List.copyOf(promptScope)
                 : java.util.stream.Stream.concat(promptScope.stream(), java.util.stream.Stream.of(processId)).toList();

@@ -1,8 +1,8 @@
 package com.processVisualisation.virtualKitchen.ai.recipe.visualization.controller;
 
 import com.processVisualisation.virtualKitchen.ai.platform.preference.RunModelChoices;
-import com.processVisualisation.virtualKitchen.ai.platform.preference.RunModelsRequestDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.visualization.RecipeProcessVisualizationJobService;
+import com.processVisualisation.virtualKitchen.ai.recipe.visualization.dto.VisualizationJobRequestDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.visualization.dto.VisualizationJobResponseDTO;
 import com.processVisualisation.virtualKitchen.auth.exception.AuthException;
 import com.processVisualisation.virtualKitchen.common.web.ApiResponse;
@@ -42,14 +42,16 @@ public class RecipeProcessVisualizationController {
      * process, that job is returned (with {@code reused=true}) instead of starting a second one.
      * <p>
      * The optional body names the models picked for this run (text for the image prompts, image for the pictures);
-     * without one, the user's account setting applies.
+     * without one, the user's account setting applies. {@code overwriteExisting} regenerates and replaces images the
+     * steps already have; by default they are kept and only missing images are drawn.
      */
     @PostMapping("/jobs")
     public ApiResponse<VisualizationJobResponseDTO> startJob(@PathVariable Long recipeId, @PathVariable Long processId,
-                                                             @RequestBody(required = false) RunModelsRequestDTO models) {
+                                                             @RequestBody(required = false) VisualizationJobRequestDTO request) {
         Long userId = currentUserId();
-        VisualizationJobResponseDTO data = runModelChoices.startWith(models != null ? models.getModelKeys() : null,
-                () -> recipeProcessVisualizationJobService.startJob(userId, recipeId, processId));
+        boolean overwriteExisting = request != null && request.isOverwriteExisting();
+        VisualizationJobResponseDTO data = runModelChoices.startWith(request != null ? request.getModelKeys() : null,
+                () -> recipeProcessVisualizationJobService.startJob(userId, recipeId, processId, overwriteExisting));
         return build(data, "Process visualization job started");
     }
 

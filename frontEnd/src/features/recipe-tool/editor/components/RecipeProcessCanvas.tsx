@@ -1365,11 +1365,12 @@ function RecipeProcessCanvasContent({
             ? 'One image per preparation flow. The text model writes the image prompts; the image model draws them.'
             : 'One image for every step of this process. The text model writes the image prompts; the image model draws them.'}
           capabilities={VISUALS_MODELS}
+          existing={{ images: nodes.filter((node) => isRecipeStepNode(node) && normalizeRecipeStepNodeData(node.data).visualization?.imageUrl).length }}
           confirmLabel="Generate visuals"
           onCancel={() => setVisualsModelsOpen(false)}
-          onConfirm={(modelKeys) => {
+          onConfirm={(modelKeys, overwriteExisting) => {
             setVisualsModelsOpen(false)
-            void visuals.generate(modelKeys)
+            void visuals.generate(modelKeys, overwriteExisting)
           }}
         />
       )}

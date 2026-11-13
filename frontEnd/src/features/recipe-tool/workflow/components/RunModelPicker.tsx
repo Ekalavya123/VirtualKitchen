@@ -3,6 +3,8 @@ import type { RunModelCapability } from '../../../../types/recipeAiWorkflow'
 import { runModelOptions } from '../../../../shared/format/modelOptions'
 import { RUN_MODEL_LABELS, runModelsFor, useRunModelChoices, type RunModelChoices } from '../model/runModels'
 import type { RunModels } from '../model/workflowSelection'
+import type { ExistingAssetCounts } from '../model/existingAssets'
+import ExistingAssetsChoice from './ExistingAssetsChoice'
 import '../../styles/modals.css'
 
 /** One select per capability. Renders nothing until the choices have loaded. */
@@ -39,25 +41,31 @@ export function RunModelSelects({ choices, capabilities, value, onChange, disabl
   )
 }
 
-const FOCUSABLE = 'button:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+const FOCUSABLE = 'button:not([disabled]), select:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
 
 /**
  * Asks which models to use before an AI action that has no form of its own starts (Generate Step Visuals, a
  * retry). Nothing is started until the user confirms; Esc, Cancel or the backdrop cancel.
  */
-export function ModelChoiceDialog({ title, description, capabilities, initial = {}, confirmLabel, onConfirm, onCancel }: {
+export function ModelChoiceDialog({ title, description, capabilities, initial = {}, existing, confirmLabel, onConfirm, onCancel }: {
   title: string
   description?: string
   capabilities: RunModelCapability[]
   /** Preselected models, e.g. the run's earlier choices for a retry. */
   initial?: RunModels
+  /** What the steps already have: when any, the dialog also asks to keep them (default) or replace them. */
+  existing?: ExistingAssetCounts
   confirmLabel: string
-  /** Every asked capability, '' where the user kept the account setting (so a retry can clear a run's choice). */
-  onConfirm: (modelKeys: RunModels) => void
+  /**
+   * `modelKeys`: every asked capability, '' where the user kept the account setting (so a retry can clear a run's
+   * choice). `overwriteExisting`: replace what the steps already have (false: keep it).
+   */
+  onConfirm: (modelKeys: RunModels, overwriteExisting: boolean) => void
   onCancel: () => void
 }) {
   const choices = useRunModelChoices()
   const [models, setModels] = useState<RunModels>(initial)
+  const [overwrite, setOverwrite] = useState(false)
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
   const onCancelRef = useRef(onCancel)
@@ -135,12 +143,13 @@ export function ModelChoiceDialog({ title, description, capabilities, initial = 
           ) : (
             <RunModelSelects choices={choices.data} capabilities={capabilities} value={models} onChange={setModels} />
           )}
+          {existing && <ExistingAssetsChoice counts={existing} overwrite={overwrite} onChange={setOverwrite} />}
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               type="button"
               className="model-choice-confirm"
               disabled={!choices.data && !choices.error}
-              onClick={() => onConfirm(runModelsFor(models, capabilities))}
+              onClick={() => onConfirm(runModelsFor(models, capabilities), overwrite)}
               style={{
                 padding: '8px 16px', borderRadius: 8, border: '1px solid var(--flow-accent)', background: 'var(--flow-accent)',
                 color: 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',

@@ -40,8 +40,11 @@ export function useProcessVisuals({ recipeId, processId, stepCount, unit = 'step
     }
   }, [])
 
-  /** `modelKeys`: the models the user picked for this run (see ModelChoiceDialog); omitted = account setting. */
-  const generate = useCallback(async (modelKeys?: RunModels) => {
+  /**
+   * `modelKeys`: the models the user picked for this run (see ModelChoiceDialog); omitted = account setting.
+   * `overwriteExisting`: regenerate and replace images steps already have (default: keep them).
+   */
+  const generate = useCallback(async (modelKeys?: RunModels, overwriteExisting = false) => {
     if (generating) return
     if (stepCount === 0) {
       setMessage({ type: 'error', text: 'No steps to visualize' })
@@ -50,7 +53,7 @@ export function useProcessVisuals({ recipeId, processId, stepCount, unit = 'step
     setMessage(null)
     setStarting(true)
     try {
-      await jobTracker.startVisuals(recipeId, processId, modelKeys)
+      await jobTracker.startVisuals(recipeId, processId, modelKeys, overwriteExisting)
     } catch (error) {
       if (!unmountedRef.current) {
         setMessage({ type: 'error', text: errorMessage(error, 'Unable to generate visuals right now.') })

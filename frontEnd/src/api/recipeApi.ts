@@ -258,16 +258,20 @@ export const RecipeJobsApi = {
  * process at a time: visualizing a process only generates images for its own STEP nodes.
  */
 export const RecipeProcessVisualizationApi = {
-  /** `modelKeys`: the models picked for this run (text for the image prompts, image for the pictures). */
+  /**
+   * `modelKeys`: the models picked for this run (text for the image prompts, image for the pictures).
+   * `overwriteExisting`: regenerate and replace images the steps already have (default: keep them, draw only missing).
+   */
   async startJob(
     recipeId: number,
     processId: number,
     modelKeys?: RecipeProcessGenerationRequest['modelKeys'],
+    overwriteExisting = false,
   ): Promise<RecipeProcessVisualizationJobResponse> {
-    return apiPost<RecipeProcessVisualizationJobResponse>(
-      API.recipeProcessVisualization.startJob(recipeId, processId),
-      modelKeys && Object.keys(modelKeys).length > 0 ? { modelKeys } : {},
-    )
+    return apiPost<RecipeProcessVisualizationJobResponse>(API.recipeProcessVisualization.startJob(recipeId, processId), {
+      ...(modelKeys && Object.keys(modelKeys).length > 0 ? { modelKeys } : {}),
+      ...(overwriteExisting ? { overwriteExisting: true } : {}),
+    })
   },
 
   async getJobStatus(recipeId: number, processId: number, jobId: string, signal?: AbortSignal): Promise<RecipeProcessVisualizationJobResponse> {

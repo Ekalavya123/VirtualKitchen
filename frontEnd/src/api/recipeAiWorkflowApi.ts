@@ -36,20 +36,32 @@ export const RecipeAiWorkflowApi = {
     signal?: AbortSignal,
     /** Price with these models instead of the run's ('' = account setting). */
     modelKeys?: RunModelKeys,
+    /** Price keeping (false) or replacing (true) what the steps already have; omitted = the run's choice. */
+    overwriteExisting?: boolean,
   ): Promise<RecipeAiWorkflowEstimate> {
-    const query = new URLSearchParams(Object.entries(modelKeys ?? {}).map(([capability, key]) => [capability, key ?? ''])).toString()
+    const params: Array<[string, string]> = Object.entries(modelKeys ?? {}).map(([capability, key]) => [capability, key ?? ''])
+    if (overwriteExisting !== undefined) params.push(['overwriteExisting', String(overwriteExisting)])
+    const query = new URLSearchParams(params).toString()
     const url = API.recipeAiWorkflows.approvalEstimate(recipeId, workflowId)
     return apiGet<RecipeAiWorkflowEstimate>(query ? `${url}?${query}` : url, { signal })
   },
 
   /**
    * `approvedRevision` must be the revision the editor just saved; a 409 means it moved on since. `modelKeys`: the
-   * models picked at approval ('' = account setting); omitted keeps the run's.
+   * models picked at approval ('' = account setting); omitted keeps the run's. `overwriteExisting`: replace (true) or
+   * keep (false) what the steps already have; omitted keeps the run's choice.
    */
-  async approve(recipeId: number, workflowId: string, approvedRevision: number, modelKeys?: RunModelKeys): Promise<RecipeAiWorkflowResponse> {
+  async approve(
+    recipeId: number,
+    workflowId: string,
+    approvedRevision: number,
+    modelKeys?: RunModelKeys,
+    overwriteExisting?: boolean,
+  ): Promise<RecipeAiWorkflowResponse> {
     return apiPost<RecipeAiWorkflowResponse>(API.recipeAiWorkflows.approve(recipeId, workflowId), {
       approvedRevision,
       ...(modelKeys ? { modelKeys } : {}),
+      ...(overwriteExisting !== undefined ? { overwriteExisting } : {}),
     })
   },
 

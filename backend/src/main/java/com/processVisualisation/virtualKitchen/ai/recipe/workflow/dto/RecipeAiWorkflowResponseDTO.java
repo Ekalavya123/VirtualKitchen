@@ -55,6 +55,9 @@ public class RecipeAiWorkflowResponseDTO {
      */
     private Map<String, String> modelKeys;
 
+    /** Whether the run regenerates and replaces images and narration the steps already have. */
+    private boolean overwriteExisting;
+
     @Data
     @Builder
     public static class TaskDTO {

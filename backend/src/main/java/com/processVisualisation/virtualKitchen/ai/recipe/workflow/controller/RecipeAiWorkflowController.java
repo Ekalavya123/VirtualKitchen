@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -61,17 +62,23 @@ public class RecipeAiWorkflowController {
     @GetMapping("/{workflowId}/estimate")
     public ApiResponse<RecipeAiWorkflowEstimateDTO> estimateApproval(
             @PathVariable Long recipeId, @PathVariable String workflowId,
-            // Models about to be approved with, as query parameters named by capability (TEXT_TO_IMAGE=key).
-            @RequestParam(required = false) Map<String, String> modelKeys) {
-        return build(workflowService.estimateApproval(currentUserId(), recipeId, workflowId, modelKeys), "AI usage estimate");
+            // Models about to be approved with, as query parameters named by capability (TEXT_TO_IMAGE=key), plus
+            // overwriteExisting=true|false for the keep-or-replace choice (absent: the run's choice).
+            @RequestParam(required = false) Map<String, String> params) {
+        Map<String, String> modelKeys = new LinkedHashMap<>(params != null ? params : Map.of());
+        String overwrite = modelKeys.remove(OVERWRITE_PARAM);
+        return build(workflowService.estimateApproval(currentUserId(), recipeId, workflowId, modelKeys,
+                overwrite == null || overwrite.isBlank() ? null : Boolean.parseBoolean(overwrite)), "AI usage estimate");
     }
+
+    static final String OVERWRITE_PARAM = "overwriteExisting";
 
     /** "Approve &amp; Continue": starts the selected visuals/narration from the saved, approved recipe. */
     @PostMapping("/{workflowId}/approve")
     public ApiResponse<RecipeAiWorkflowResponseDTO> approve(
             @PathVariable Long recipeId, @PathVariable String workflowId, @Valid @RequestBody RecipeAiWorkflowApproveRequestDTO request) {
         return build(workflowService.approve(currentUserId(), recipeId, workflowId, request.getApprovedRevision(),
-                        request.getModelKeys()),
+                        request.getModelKeys(), request.getOverwriteExisting()),
                 "Recipe process approved");
     }
 

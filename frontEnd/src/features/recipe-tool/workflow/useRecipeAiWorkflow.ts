@@ -43,8 +43,11 @@ export function useRecipeAiWorkflow(recipeId: number) {
     await tracker.startWorkflow(recipeId, request)
   }), [run, tracker, recipeId])
 
-  /** `modelKeys`: the models picked at approval ('' = account setting); omitted keeps the run's choices. */
-  const approve = useCallback((modelKeys?: RunModels) => run('approve', async () => {
+  /**
+   * `modelKeys`: the models picked at approval ('' = account setting); omitted keeps the run's choices.
+   * `overwriteExisting`: replace what the steps already have; omitted keeps the run's choice.
+   */
+  const approve = useCallback((modelKeys?: RunModels, overwriteExisting?: boolean) => run('approve', async () => {
     const workflow = tracked?.job
     if (!workflow || !session) return
     // Approval is a decision about what the user sees now: make sure that is what the backend holds.
@@ -53,7 +56,7 @@ export function useRecipeAiWorkflow(recipeId: number) {
       throw new Error(`Your latest changes couldn't be saved, so nothing was started. ${saved.error ?? 'Please try again.'}`)
     }
     try {
-      tracker.applyWorkflow(recipeId, await RecipeAiWorkflowApi.approve(recipeId, workflow.workflowId, session.getPersistedRevision(), modelKeys))
+      tracker.applyWorkflow(recipeId, await RecipeAiWorkflowApi.approve(recipeId, workflow.workflowId, session.getPersistedRevision(), modelKeys, overwriteExisting))
     } catch (caught) {
       if (httpStatusOf(caught) === 409) {
         // Typically an edit that saved in between: the user's next click approves that version.

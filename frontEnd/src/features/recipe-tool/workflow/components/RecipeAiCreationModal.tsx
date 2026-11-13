@@ -36,6 +36,7 @@ import { useConfirm } from '../../../../shared/components/confirm/confirmContext
 import { useConfirmDiscard } from '../../../../shared/components/confirm/useConfirmDiscard'
 import { runModelsFor, taskRunModelCapabilities, useRunModelChoices } from '../model/runModels'
 import { ModelChoiceDialog, RunModelSelects } from './RunModelPicker'
+import ExistingAssetsChoice from './ExistingAssetsChoice'
 import '../../styles/modals.css'
 
 type AiRecipeCreationDraft = { selection: WorkflowTaskSelection; recipeText: string }
@@ -170,6 +171,8 @@ function TaskSelectionStep({ recipeId, willReplaceMain, initialTasks, busy, erro
   const confirmDiscard = useConfirmDiscard()
   // Models for this run only; '' keeps the account setting. Priced in the estimate, charged when the run goes.
   const [runModels, setRunModels] = useState<RunModels>({})
+  // Steps that already have images/narration: keep them (default) or regenerate and replace them.
+  const [overwriteExisting, setOverwriteExisting] = useState(false)
   const modelChoices = useRunModelChoices()
 
   const existingStepCount = useMemo(
@@ -183,12 +186,19 @@ function TaskSelectionStep({ recipeId, willReplaceMain, initialTasks, busy, erro
   const runModelsKey = runCapabilities.map((capability) => runModels[capability] ?? '').join(',')
   const choices = modelChoices.data
 
+  // Keep-or-replace only means something for the recipe's existing steps: a newly generated process has none.
+  const keepOrReplaceApplies = !selection.PROCESS && (selection.VISUALS || selection.NARRATION)
+  const selectionRequest = () => ({
+    ...toTaskSelectionRequest(selection, runModels),
+    ...(keepOrReplaceApplies && overwriteExisting ? { overwriteExisting: true } : {}),
+  })
+
   // The estimate follows the selection (debounced, so ticking several boxes asks once).
   useEffect(() => {
     if (!selectionKey) return undefined // nothing selected: no estimate is shown
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
-      RecipeAiWorkflowApi.estimate(recipeId, toTaskSelectionRequest(selection, runModels), controller.signal)
+      RecipeAiWorkflowApi.estimate(recipeId, selectionRequest(), controller.signal)
         .then((result) => {
           setEstimate(result)
           setEstimateError(false)
@@ -201,14 +211,14 @@ function TaskSelectionStep({ recipeId, willReplaceMain, initialTasks, busy, erro
       window.clearTimeout(timer)
       controller.abort()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectionKey and runModelsKey capture the request
-  }, [recipeId, selectionKey, runModelsKey])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectionKey, runModelsKey and the choice capture the request
+  }, [recipeId, selectionKey, runModelsKey, overwriteExisting])
 
   const handleCreate = async () => {
     setTouched(true)
     if (problem) return
     const started = await onCreate({
-      selection: toTaskSelectionRequest(selection, runModels),
+      selection: selectionRequest(),
       recipeText: selection.PROCESS ? recipeText.trim() : undefined,
     })
     // Without a process to generate there is no text to keep: the selection has done its job.
@@ -264,6 +274,18 @@ function TaskSelectionStep({ recipeId, willReplaceMain, initialTasks, busy, erro
       ) : null}
 
       <RunModelSelects choices={choices} capabilities={runCapabilities} value={runModels} onChange={setRunModels} disabled={busy} />
+
+      {keepOrReplaceApplies && (
+        <ExistingAssetsChoice
+          counts={{
+            images: selection.VISUALS ? estimate?.existingImages : 0,
+            narrations: selection.NARRATION ? estimate?.existingNarrations : 0,
+          }}
+          overwrite={overwriteExisting}
+          onChange={setOverwriteExisting}
+          disabled={busy}
+        />
+      )}
 
       {selectionKey && <EstimatePanel estimate={estimate} failed={estimateError} />}
 
@@ -452,11 +474,13 @@ function ApprovalCard({ recipeId, workflow, processSummary, ai, onReview }: {
   const [approvalModels, setApprovalModels] = useState<RunModels>(() => ({ ...(workflow.modelKeys ?? {}) }))
   const approvalModelKeys = runModelsFor(approvalModels, approvalCapabilities)
   const approvalModelsKey = approvalCapabilities.map((capability) => approvalModelKeys[capability]).join(',')
+  // Keep (default) or replace images/narration the steps already have — starting from what the run chose.
+  const [overwrite, setOverwrite] = useState(Boolean(workflow.overwriteExisting))
 
   useEffect(() => {
     if (!ready || downstream.length === 0) return undefined
     const controller = new AbortController()
-    RecipeAiWorkflowApi.estimateApproval(recipeId, workflow.workflowId, controller.signal, approvalModelKeys)
+    RecipeAiWorkflowApi.estimateApproval(recipeId, workflow.workflowId, controller.signal, approvalModelKeys, overwrite)
       .then((result) => {
         setEstimate(result)
         setEstimateFailed(false)
@@ -466,7 +490,7 @@ function ApprovalCard({ recipeId, workflow, processSummary, ai, onReview }: {
       })
     return () => controller.abort()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- approvalModelsKey captures the models
-  }, [recipeId, workflow.workflowId, ready, downstream.length, approvalModelsKey])
+  }, [recipeId, workflow.workflowId, ready, downstream.length, approvalModelsKey, overwrite])
 
   const busy = ai.busy === 'approve'
   const confirm = useConfirm()
@@ -501,6 +525,18 @@ function ApprovalCard({ recipeId, workflow, processSummary, ai, onReview }: {
         />
       )}
 
+      {downstream.length > 0 && ready && (
+        <ExistingAssetsChoice
+          counts={{
+            images: downstream.includes('VISUALS') ? estimate?.existingImages : 0,
+            narrations: downstream.includes('NARRATION') ? estimate?.existingNarrations : 0,
+          }}
+          overwrite={overwrite}
+          onChange={setOverwrite}
+          disabled={busy}
+        />
+      )}
+
       {downstream.length > 0 && ready && <EstimatePanel estimate={estimate} failed={estimateFailed} title="Approving will use about" />}
 
       {!ready && <div style={subtleText}>Loading the generated recipe process into the editor…</div>}
@@ -508,7 +544,7 @@ function ApprovalCard({ recipeId, workflow, processSummary, ai, onReview }: {
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button type="button" onClick={onReview} style={secondaryButton}>Review &amp; Edit</button>
-        <button type="button" onClick={() => void ai.approve(downstream.length > 0 ? approvalModelKeys : undefined)} disabled={busy || !ready} style={primaryButton(busy, !ready)}>
+        <button type="button" onClick={() => void ai.approve(downstream.length > 0 ? approvalModelKeys : undefined, downstream.length > 0 ? overwrite : undefined)} disabled={busy || !ready} style={primaryButton(busy, !ready)}>
           {busy ? 'Saving & approving…' : downstream.length === 0 ? 'Approve' : 'Approve & Continue'}
         </button>
         {workflow.cancellable && (

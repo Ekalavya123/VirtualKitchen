@@ -327,6 +327,39 @@ public class RecipeProcessVisualizationService {
                 : VisualizationKeyBuilder.buildFlow(String.valueOf(recipeId), target.nodeId());
     }
 
+    /**
+     * "Regenerate and replace": forgets the stored prompt and image of every target, and of the shared panel images
+     * any of them was cut from, so the next run writes new prompts (from the steps as they are now) and draws new
+     * images instead of reusing them. The recipe's scene anchor is kept, so new images stay consistent with the rest
+     * of the recipe. The process nodes keep their current image until the new one is attached.
+     *
+     * @return how many assets were cleared
+     */
+    public int clearForRegeneration(Long recipeId, List<VisualTarget> targets) {
+        List<String> keys = targets.stream().map(target -> visualizationKey(recipeId, target)).toList();
+        List<VisualizationAsset> cleared = new ArrayList<>(assetRepository.findByVisualizationKeyIn(keys));
+
+        Set<String> stepIds = new HashSet<>();
+        targets.forEach(target -> stepIds.add(target.nodeId()));
+        String gridPrefix = VisualizationKeyBuilder.buildGrid(String.valueOf(recipeId), List.of());
+        for (VisualizationAsset grid : assetRepository.findByVisualizationKeyStartingWith(gridPrefix)) {
+            String panels = grid.getVisualizationKey().substring(gridPrefix.length());
+            if (Arrays.stream(panels.split("\\+")).anyMatch(stepIds::contains)) {
+                cleared.add(grid);
+            }
+        }
+
+        for (VisualizationAsset asset : cleared) {
+            asset.setImagePrompt(null);
+            asset.setImageUrl(null);
+            asset.setImageFailureReason(null);
+            asset.setReusesPrevious(null);
+            asset.setSourceGridKey(null);
+        }
+        assetRepository.saveAll(cleared);
+        return cleared.size();
+    }
+
     /** Whether the asset under this key already has its image (so no image call is made for it). */
     public boolean hasImage(String visualizationKey) {
         return assetRepository.findByVisualizationKey(visualizationKey)

@@ -100,6 +100,10 @@ class RecipeProcessVisualizationJobServiceTest {
             assetStore.put(saved.getVisualizationKey(), saved);
             return saved;
         });
+        when(assetRepository.findByVisualizationKeyIn(any())).thenAnswer(inv -> inv.<java.util.Collection<String>>getArgument(0).stream()
+                .map(assetStore::get).filter(java.util.Objects::nonNull).toList());
+        when(assetRepository.findByVisualizationKeyStartingWith(anyString())).thenAnswer(inv -> assetStore.values().stream()
+                .filter(asset -> asset.getVisualizationKey().startsWith(inv.getArgument(0))).toList());
         when(aiClient.chat(any())).thenReturn(AiResponse.builder().content("{\"imagePrompt\":\"p\"}").build());
         when(imageStorageClient.upload(any(), anyString(), anyString())).thenReturn("https://cdn.example/img.png");
 
@@ -323,6 +327,34 @@ class RecipeProcessVisualizationJobServiceTest {
         boolean sawCompletedWithErrors = updateCaptor.getAllValues().stream()
                 .anyMatch(u -> statusValue(u) == VisualizationJobStatus.COMPLETED_WITH_ERRORS);
         assertTrue(sawCompletedWithErrors);
+    }
+
+    @Test
+    void startJob_keepsExistingImagesByDefault_andRedrawsThemWhenAskedToRegenerate() throws Exception {
+        when(imageGenerationClient.generate(anyString()))
+                .thenReturn(new ImageGenerationClient.GeneratedImage("image/png", new byte[]{1, 2, 3}));
+        when(processRepository.findById(1L)).thenReturn(Optional.of(processWithSteps(1L, 2)));
+
+        service.startJob(1L, 100L, 1L);
+        verify(processRepository, timeout(5000).times(2)).setStepVisualization(eq(1L), anyString(), any(), any(), any());
+        int drawnFirst = imageCalls();
+        assertTrue(drawnFirst >= 2, "both steps drawn");
+
+        // Default: the steps already have images, so nothing is drawn again.
+        service.startJob(1L, 100L, 1L);
+        verify(processRepository, timeout(5000).times(4)).setStepVisualization(eq(1L), anyString(), any(), any(), any());
+        assertEquals(drawnFirst, imageCalls(), "existing images are kept");
+
+        // Regenerate and replace: both steps are drawn again (the scene anchor is kept, so exactly 2 more).
+        service.startJob(1L, 100L, 1L, true);
+        verify(processRepository, timeout(5000).times(6)).setStepVisualization(eq(1L), anyString(), any(), any(), any());
+        assertEquals(drawnFirst + 2, imageCalls());
+    }
+
+    private int imageCalls() {
+        return (int) org.mockito.Mockito.mockingDetails(imageGenerationClient).getInvocations().stream()
+                .filter(invocation -> invocation.getMethod().getName().startsWith("generate"))
+                .count();
     }
 
     @Test

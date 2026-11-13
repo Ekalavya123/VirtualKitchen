@@ -26,6 +26,12 @@ public class RecipeAiWorkflowApproveRequestDTO {
      */
     private Map<String, String> modelKeys;
 
+    /**
+     * Steps that already have an image or narration: true regenerates and replaces them, false keeps them. Null or
+     * absent keeps what the run was started with.
+     */
+    private Boolean overwriteExisting;
+
     public RecipeAiWorkflowApproveRequestDTO(Long approvedRevision) {
         this.approvedRevision = approvedRevision;
     }

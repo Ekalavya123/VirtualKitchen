@@ -164,7 +164,12 @@ export class JobTracker {
   }
 
   /** Starts (or joins the already-running) Generate Visuals job for a process. Resolves once the backend accepted it. */
-  async startVisuals(recipeId: number, processId: number, modelKeys?: RunModels): Promise<TrackedVisualsJob | undefined> {
+  async startVisuals(
+    recipeId: number,
+    processId: number,
+    modelKeys?: RunModels,
+    overwriteExisting = false,
+  ): Promise<TrackedVisualsJob | undefined> {
     const key = visualsJobKey(processId)
     if (this.starting.has(key)) return undefined
     const current = this.jobs.get(key)
@@ -175,7 +180,7 @@ export class JobTracker {
 
     this.starting.add(key)
     try {
-      const job = await RecipeProcessVisualizationApi.startJob(recipeId, processId, modelKeys)
+      const job = await RecipeProcessVisualizationApi.startJob(recipeId, processId, modelKeys, overwriteExisting)
       const tracked: TrackedVisualsJob = { kind: 'visuals', recipeId, processId, job, connectionLost: false, pollError: null }
       this.track(key, tracked)
       this.notifier.info(job.reused
