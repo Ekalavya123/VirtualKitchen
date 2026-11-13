@@ -192,9 +192,8 @@ public class RecipeProcessVisualizationJobService {
                     : null;
 
             // Read for every job: an admin can switch reference chaining (and the focused view it needs) at runtime.
-            BatchResult<VisualizationAsset> batch = recipeProcessVisualizationService.referenceChainEnabled()
-                    ? runChained(userId, recipeId, jobId, preparation.targets(), scene)
-                    : runParallel(userId, recipeId, jobId, preparation.targets(), scene);
+            BatchResult<VisualizationAsset> batch = runTargets(userId, recipeId, jobId, preparation.targets(), scene,
+                    recipeProcessVisualizationService.referenceChainEnabled());
 
             // Attach every asset that was actually produced, even ones with a null imageUrl —
             // generateImage() already swallows image-generation errors internally and returns such
@@ -239,48 +238,69 @@ public class RecipeProcessVisualizationJobService {
         }
     }
 
-    /** Every image at once, each against the scene anchor alone. */
-    private BatchResult<VisualizationAsset> runParallel(
-            Long userId, Long recipeId, String jobId, List<RecipeProcessVisualizationService.VisualTarget> targets,
-            RecipeProcessVisualizationService.SceneReference scene) {
-        List<NamedTask<VisualizationAsset>> tasks = targets.stream()
-                .map(target -> new NamedTask<VisualizationAsset>(
-                        target.nodeId(),
-                        () -> recipeProcessVisualizationService.resolveTarget(userId, recipeId, target, scene)
-                ))
-                .toList();
-        return visualizationTaskPool.submitAll(tasks, result -> recordStepResult(jobId, result));
+    /** Work run as one pool task: some targets, in order, and how to draw them. */
+    private record Group(List<RecipeProcessVisualizationService.VisualTarget> targets,
+                         com.processVisualisation.virtualKitchen.common.concurrent.Task<List<TaskResult<VisualizationAsset>>> run) {
     }
 
     /**
-     * Focused main steps that share a focus are drawn one after another, each against the image of the one before it
-     * (and the scene anchor), so the pan and the food in it carry over from step to step. Chains of different focus,
-     * preparation flows and steps without a focus still run in parallel, as one pool task each. Results come back in
-     * the order of {@code targets}, each recorded as its step finishes.
+     * Draws every target of a job; results come back in the order of {@code targets}, each recorded as its step
+     * finishes.
+     * <ul>
+     *   <li>{@code chained}: focused main steps that share a focus are drawn one after another, each against the
+     *       image of the one before it (and the scene anchor), so the pan and the food in it carry over. Otherwise
+     *       every main step is drawn on its own against the scene anchor alone.</li>
+     *   <li>Each Preparation flow is one task: its steps are drawn in groups sharing one panel image
+     *       ({@link #runPreparationFlow}).</li>
+     *   <li>With look-alike skipping on, a main step marked as looking like the step before reuses the image of the
+     *       nearest earlier main step instead of an image call, once the others are drawn.</li>
+     * </ul>
+     * Chains, flows and single steps run in parallel, as one pool task each.
      */
-    private BatchResult<VisualizationAsset> runChained(
+    private BatchResult<VisualizationAsset> runTargets(
             Long userId, Long recipeId, String jobId, List<RecipeProcessVisualizationService.VisualTarget> targets,
-            RecipeProcessVisualizationService.SceneReference scene) {
+            RecipeProcessVisualizationService.SceneReference scene, boolean chained) {
+        boolean skipLookAlike = recipeProcessVisualizationService.skipLookAlikeSteps();
         Map<VisualFocus, List<RecipeProcessVisualizationService.VisualTarget>> chains = new java.util.EnumMap<>(VisualFocus.class);
-        List<List<RecipeProcessVisualizationService.VisualTarget>> groups = new java.util.ArrayList<>();
+        Map<String, List<RecipeProcessVisualizationService.VisualTarget>> flows = new java.util.LinkedHashMap<>();
+        List<Group> groups = new java.util.ArrayList<>();
+        List<RecipeProcessVisualizationService.VisualTarget> lookAlikes = new java.util.ArrayList<>();
         for (RecipeProcessVisualizationService.VisualTarget target : targets) {
-            VisualFocus focus = recipeProcessVisualizationService.chainFocus(recipeId, target).orElse(null);
+            if (target.isPreparationStep()) {
+                List<RecipeProcessVisualizationService.VisualTarget> flow = flows.get(target.prepFlow().id());
+                if (flow == null) {
+                    List<RecipeProcessVisualizationService.VisualTarget> created = new java.util.ArrayList<>();
+                    flows.put(target.prepFlow().id(), created);
+                    groups.add(new Group(created,
+                            () -> runPreparationFlow(userId, recipeId, jobId, created, scene, chained, skipLookAlike)));
+                    flow = created;
+                }
+                flow.add(target);
+                continue;
+            }
+            if (skipLookAlike && recipeProcessVisualizationService.marksLookAlike(recipeId, target)) {
+                lookAlikes.add(target);
+                continue;
+            }
+            VisualFocus focus = chained ? recipeProcessVisualizationService.chainFocus(recipeId, target).orElse(null) : null;
             if (focus == null) {
-                groups.add(List.of(target));
+                List<RecipeProcessVisualizationService.VisualTarget> single = List.of(target);
+                groups.add(new Group(single, () -> runChain(userId, recipeId, jobId, single, scene)));
                 continue;
             }
             List<RecipeProcessVisualizationService.VisualTarget> chain = chains.get(focus);
             if (chain == null) {
-                chain = new java.util.ArrayList<>();
-                chains.put(focus, chain);
-                groups.add(chain);
+                List<RecipeProcessVisualizationService.VisualTarget> created = new java.util.ArrayList<>();
+                chains.put(focus, created);
+                groups.add(new Group(created, () -> runChain(userId, recipeId, jobId, created, scene)));
+                chain = created;
             }
             chain.add(target);
         }
 
         List<NamedTask<List<TaskResult<VisualizationAsset>>>> tasks = groups.stream()
                 .map(group -> new NamedTask<List<TaskResult<VisualizationAsset>>>(
-                        group.get(0).nodeId(), () -> runChain(userId, recipeId, jobId, group, scene)))
+                        group.targets().get(0).nodeId(), group.run()))
                 .toList();
         BatchResult<List<TaskResult<VisualizationAsset>>> batch = visualizationTaskPool.submitAll(tasks, null);
 
@@ -290,8 +310,8 @@ public class RecipeProcessVisualizationJobService {
             if (groupResult.isSuccess() && groupResult.value() != null) {
                 groupResult.value().forEach(result -> byNodeId.put(result.taskId(), result));
             }
-            // A chain that died outside its steps (it never should) fails the steps it did not get to.
-            for (RecipeProcessVisualizationService.VisualTarget target : groups.get(i)) {
+            // A group that died outside its steps (it never should) fails the steps it did not get to.
+            for (RecipeProcessVisualizationService.VisualTarget target : groups.get(i).targets()) {
                 if (byNodeId.containsKey(target.nodeId())) continue;
                 Throwable error = groupResult.error() != null ? groupResult.error()
                         : new IllegalStateException("Visualization chain ended before this step");
@@ -299,6 +319,19 @@ public class RecipeProcessVisualizationJobService {
                 recordStepResult(jobId, failed);
                 byNodeId.put(target.nodeId(), failed);
             }
+        }
+
+        // Look-alike main steps, in cooking order: each copies the nearest earlier main step that has an image.
+        List<RecipeProcessVisualizationService.VisualTarget> mainSteps = targets.stream()
+                .filter(target -> !target.isPreparationStep()).toList();
+        for (RecipeProcessVisualizationService.VisualTarget target : lookAlikes) {
+            VisualizationAsset source = null;
+            for (int i = mainSteps.indexOf(target) - 1; i >= 0 && source == null; i--) {
+                source = imageOf(byNodeId.get(mainSteps.get(i).nodeId()));
+            }
+            TaskResult<VisualizationAsset> result = reuseOrDraw(userId, recipeId, target, source, scene);
+            recordStepResult(jobId, result);
+            byNodeId.put(target.nodeId(), result);
         }
         return new BatchResult<>(targets.stream().map(target -> byNodeId.get(target.nodeId())).toList());
     }
@@ -312,14 +345,8 @@ public class RecipeProcessVisualizationJobService {
         for (RecipeProcessVisualizationService.VisualTarget target : chain) {
             TaskResult<VisualizationAsset> result;
             try {
-                // The previous image is only read back when this step still has an image to draw against it.
-                RecipeProcessVisualizationService.PreviousStep previous = previousAsset == null
-                        || recipeProcessVisualizationService.hasImage(
-                                RecipeProcessVisualizationService.visualizationKey(recipeId, target))
-                        ? null
-                        : sceneAnchorService.readStepImage(previousAsset).orElse(null);
-                result = TaskResult.success(target.nodeId(),
-                        recipeProcessVisualizationService.resolveTarget(userId, recipeId, target, scene, previous));
+                result = TaskResult.success(target.nodeId(), recipeProcessVisualizationService.resolveTarget(
+                        userId, recipeId, target, scene, previousFor(recipeId, List.of(target), previousAsset)));
             } catch (Throwable t) {
                 log.debug("event=task_failed taskId={} errorType={}", target.nodeId(), t.getClass().getSimpleName(), t);
                 result = TaskResult.failure(target.nodeId(), t);
@@ -329,6 +356,129 @@ public class RecipeProcessVisualizationJobService {
             previousAsset = result.isSuccess() ? result.value() : null;
         }
         return results;
+    }
+
+    /**
+     * One Preparation flow, in cooking order. Steps that already have an image keep it. With look-alike skipping on,
+     * steps marked as looking like the step before are left out and then copy the nearest earlier step of the flow
+     * that has an image. The steps left to draw are split into groups of {@code preparationStepsPerImage} (4, 2 or 1,
+     * see {@link RecipeProcessVisualizationService#chunkSizes}): a group of one is drawn on its own, a larger group as
+     * one panel image cut into each step's image. With {@code chained}, each group is drawn against the last image of
+     * the group before it.
+     */
+    private List<TaskResult<VisualizationAsset>> runPreparationFlow(
+            Long userId, Long recipeId, String jobId, List<RecipeProcessVisualizationService.VisualTarget> flow,
+            RecipeProcessVisualizationService.SceneReference scene, boolean chained, boolean skipLookAlike) {
+        Map<String, TaskResult<VisualizationAsset>> byNodeId = new java.util.HashMap<>();
+        List<RecipeProcessVisualizationService.VisualTarget> toDraw = new java.util.ArrayList<>();
+        List<RecipeProcessVisualizationService.VisualTarget> lookAlikes = new java.util.ArrayList<>();
+        for (int i = 0; i < flow.size(); i++) {
+            RecipeProcessVisualizationService.VisualTarget target = flow.get(i);
+            if (recipeProcessVisualizationService.hasImage(RecipeProcessVisualizationService.visualizationKey(recipeId, target))) {
+                // Already drawn: resolving it makes no call and returns the stored image.
+                TaskResult<VisualizationAsset> result = attempt(target,
+                        () -> recipeProcessVisualizationService.resolveTarget(userId, recipeId, target, scene));
+                recordStepResult(jobId, result);
+                byNodeId.put(target.nodeId(), result);
+            } else if (skipLookAlike && i > 0 && recipeProcessVisualizationService.marksLookAlike(recipeId, target)) {
+                lookAlikes.add(target);
+            } else {
+                toDraw.add(target);
+            }
+        }
+
+        int perImage = recipeProcessVisualizationService.preparationStepsPerImage();
+        VisualizationAsset previousAsset = null;
+        int start = 0;
+        for (int size : RecipeProcessVisualizationService.chunkSizes(toDraw.size(), perImage)) {
+            List<RecipeProcessVisualizationService.VisualTarget> chunk = toDraw.subList(start, start + size);
+            start += size;
+            RecipeProcessVisualizationService.PreviousStep previous;
+            try {
+                previous = chained ? previousFor(recipeId, chunk, previousAsset) : null;
+            } catch (RuntimeException e) {
+                previous = null;
+            }
+            List<TaskResult<VisualizationAsset>> results = drawChunk(userId, recipeId, chunk, scene, previous);
+            for (TaskResult<VisualizationAsset> result : results) {
+                recordStepResult(jobId, result);
+                byNodeId.put(result.taskId(), result);
+            }
+            VisualizationAsset last = imageOf(results.get(results.size() - 1));
+            previousAsset = last != null ? last : previousAsset;
+        }
+
+        for (RecipeProcessVisualizationService.VisualTarget target : lookAlikes) {
+            VisualizationAsset source = null;
+            for (int i = flow.indexOf(target) - 1; i >= 0 && source == null; i--) {
+                source = imageOf(byNodeId.get(flow.get(i).nodeId()));
+            }
+            TaskResult<VisualizationAsset> result = reuseOrDraw(userId, recipeId, target, source, scene);
+            recordStepResult(jobId, result);
+            byNodeId.put(target.nodeId(), result);
+        }
+        return flow.stream().map(target -> byNodeId.get(target.nodeId())).toList();
+    }
+
+    /** One group of a Preparation flow: a single step on its own, or 2 or 4 steps as one panel image. */
+    private List<TaskResult<VisualizationAsset>> drawChunk(
+            Long userId, Long recipeId, List<RecipeProcessVisualizationService.VisualTarget> chunk,
+            RecipeProcessVisualizationService.SceneReference scene, RecipeProcessVisualizationService.PreviousStep previous) {
+        if (chunk.size() == 1) {
+            RecipeProcessVisualizationService.VisualTarget target = chunk.get(0);
+            return List.of(attempt(target,
+                    () -> recipeProcessVisualizationService.resolveTarget(userId, recipeId, target, scene, previous)));
+        }
+        try {
+            List<VisualizationAsset> assets = recipeProcessVisualizationService.resolveGrid(userId, recipeId, chunk, scene, previous);
+            List<TaskResult<VisualizationAsset>> results = new java.util.ArrayList<>();
+            for (int i = 0; i < chunk.size(); i++) {
+                results.add(TaskResult.success(chunk.get(i).nodeId(), assets.get(i)));
+            }
+            return results;
+        } catch (Throwable t) {
+            log.debug("event=task_failed taskId={} errorType={}", chunk.get(0).nodeId(), t.getClass().getSimpleName(), t);
+            return chunk.stream().map(target -> TaskResult.<VisualizationAsset>failure(target.nodeId(), t)).toList();
+        }
+    }
+
+    /**
+     * The previous image to draw {@code targets} against: {@code previousAsset}'s, read back only when the first of
+     * them still has an image to draw.
+     */
+    private RecipeProcessVisualizationService.PreviousStep previousFor(
+            Long recipeId, List<RecipeProcessVisualizationService.VisualTarget> targets, VisualizationAsset previousAsset) {
+        if (previousAsset == null || recipeProcessVisualizationService.hasImage(
+                RecipeProcessVisualizationService.visualizationKey(recipeId, targets.get(0)))) {
+            return null;
+        }
+        return sceneAnchorService.readStepImage(previousAsset).orElse(null);
+    }
+
+    /** A look-alike step copies {@code source}'s image; without one (it failed or is missing) it is drawn itself. */
+    private TaskResult<VisualizationAsset> reuseOrDraw(
+            Long userId, Long recipeId, RecipeProcessVisualizationService.VisualTarget target, VisualizationAsset source,
+            RecipeProcessVisualizationService.SceneReference scene) {
+        return attempt(target, () -> source != null
+                ? recipeProcessVisualizationService.reuseImage(recipeId, target, source)
+                : recipeProcessVisualizationService.resolveTarget(userId, recipeId, target, scene));
+    }
+
+    private TaskResult<VisualizationAsset> attempt(RecipeProcessVisualizationService.VisualTarget target,
+                                                   java.util.function.Supplier<VisualizationAsset> work) {
+        try {
+            return TaskResult.success(target.nodeId(), work.get());
+        } catch (Throwable t) {
+            log.debug("event=task_failed taskId={} errorType={}", target.nodeId(), t.getClass().getSimpleName(), t);
+            return TaskResult.failure(target.nodeId(), t);
+        }
+    }
+
+    /** The asset of a result that has an image, else null. */
+    private static VisualizationAsset imageOf(TaskResult<VisualizationAsset> result) {
+        return result != null && result.isSuccess() && result.value() != null
+                && result.value().getImageUrl() != null && !result.value().getImageUrl().isBlank()
+                ? result.value() : null;
     }
 
     private void recordStepResult(String jobId, TaskResult<VisualizationAsset> result) {

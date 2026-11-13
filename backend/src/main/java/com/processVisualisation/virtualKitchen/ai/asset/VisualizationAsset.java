@@ -54,6 +54,19 @@ public class VisualizationAsset {
     private String imageUrl;
 
     /**
+     * Set by the prompt writer on a step whose picture would look the same as the previous step's (resting, setting
+     * aside, keeping warm). With look-alike skipping on, such a step gets no image call: it reuses the previous
+     * step's {@link #imageUrl}. Null on assets written before the flag existed.
+     */
+    private Boolean reusesPrevious;
+
+    /**
+     * Set on a step image cut from a shared panel image (several Preparation steps drawn as one grid): the grid
+     * asset's key ({@code recipeId::grid::...}). Null on images drawn on their own.
+     */
+    private String sourceGridKey;
+
+    /**
      * Why {@link #imageUrl} is null, when it is — the generation or upload failure's
      * real cause, rather than the generic "image generation failed" the job layer used
      * to infer from a null URL alone. Null whenever {@link #imageUrl} is populated.

@@ -1242,6 +1242,31 @@ button.rp-continuation:hover {
   color: var(--flow-text-muted);
 }
 
+/* A preparation step with its own image: the point beside a small picture of it. */
+.rp-flow-point.has-image > .rp-flow-point-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 12px;
+  align-items: start;
+}
+
+.rp-flow-point-media {
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--flow-surface-muted);
+}
+
+@media (max-width: 560px) {
+  .rp-flow-point.has-image > .rp-flow-point-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rp-flow-point-media {
+    max-width: 280px;
+  }
+}
+
 .rp-flow-output {
   padding-top: 10px;
   border-top: 1px dashed var(--flow-border);

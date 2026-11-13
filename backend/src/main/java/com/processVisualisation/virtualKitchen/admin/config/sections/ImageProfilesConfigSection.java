@@ -22,7 +22,9 @@ import java.util.Map;
  *       {@link VisualizationImageProperties} and read by every new visuals job. With the focused view off, images
  *       are made exactly as before it existed;</li>
  *   <li>image profiles: width, height and steps for each image purpose, plus the default profile. Applied to
- *       {@link VisualizationImageProperties}, which {@code VisualizationImageProfiles} reads for every image.</li>
+ *       {@link VisualizationImageProperties}, which {@code VisualizationImageProfiles} reads for every image;</li>
+ *   <li>image cost: how many Preparation steps share one generated image (1, 2 or 4) and whether look-alike steps
+ *       reuse the previous step's image.</li>
  * </ul>
  * Images already generated are unchanged.
  */
@@ -49,6 +51,11 @@ public class ImageProfilesConfigSection implements ConfigSection {
     static final String SCENE_ANCHOR_ENABLED = "sceneAnchor.enabled";
     static final String FOCUSED_VIEW_ENABLED = "focusedView.enabled";
     static final String REFERENCE_CHAIN_ENABLED = "referenceChain.enabled";
+    static final String PREPARATION_STEPS_PER_IMAGE = "preparation.stepsPerImage";
+    static final String SKIP_LOOK_ALIKE_STEPS = "lookAlike.skip";
+
+    private static final List<String> STEPS_PER_IMAGE =
+            VisualizationImageProperties.STEPS_PER_IMAGE_OPTIONS.stream().map(String::valueOf).toList();
 
     private final VisualizationImageProperties properties;
     private final VisualizationSceneAnchorService sceneAnchorService;
@@ -56,6 +63,8 @@ public class ImageProfilesConfigSection implements ConfigSection {
     /** The configured switches, before any admin override. */
     private final boolean baselineFocusedView;
     private final boolean baselineReferenceChain;
+    private final int baselineStepsPerImage;
+    private final boolean baselineSkipLookAlike;
 
     public ImageProfilesConfigSection(VisualizationImageProperties properties,
                                       VisualizationSceneAnchorService sceneAnchorService) {
@@ -63,6 +72,8 @@ public class ImageProfilesConfigSection implements ConfigSection {
         this.sceneAnchorService = sceneAnchorService;
         this.baselineFocusedView = properties.isFocusedViewEnabled();
         this.baselineReferenceChain = properties.isReferenceChainEnabled();
+        this.baselineStepsPerImage = properties.effectivePreparationStepsPerImage();
+        this.baselineSkipLookAlike = properties.isSkipLookAlikeSteps();
         PURPOSES.keySet().forEach(purpose -> baseline.put(purpose, copy(profile(purpose))));
     }
 
@@ -102,6 +113,17 @@ public class ImageProfilesConfigSection implements ConfigSection {
                         + "counter and lighting. Costs one extra image per recipe. Only image models that take a "
                         + "reference image (Gemini) use the image; others get the dish context line. Applies to the "
                         + "next visuals job."));
+        fields.add(Fields.select(PREPARATION_STEPS_PER_IMAGE, "Preparation steps per image", "Image cost",
+                STEPS_PER_IMAGE, baselineStepsPerImage, overrides,
+                "Needs the focused cooking view. Several preparation steps are drawn as equal panels of one image, "
+                        + "which is then cut into one image per step: 4 costs about a quarter of an image per step, "
+                        + "2 about half, 1 draws every step on its own. Fewer panels give bigger, more detailed "
+                        + "pictures."));
+        fields.add(Fields.toggle(SKIP_LOOK_ALIKE_STEPS, "Skip look-alike steps", "Image cost",
+                baselineSkipLookAlike, overrides,
+                "Steps the prompt writer marks as looking the same as the step before (resting, setting aside, "
+                        + "keeping warm) reuse the previous step's image instead of paying for a new one. Applies to "
+                        + "preparation and cooking steps."));
         baseline.forEach((purpose, base) -> {
             String group = PURPOSES.get(purpose);
             fields.add(Fields.select(key(purpose, "width"), "Width (px)", group, SIZES, base.getWidth(), overrides, null));
@@ -133,11 +155,20 @@ public class ImageProfilesConfigSection implements ConfigSection {
         boolean referenceChainEnabled = overrides.containsKey(REFERENCE_CHAIN_ENABLED)
                 ? Boolean.parseBoolean(overrides.get(REFERENCE_CHAIN_ENABLED))
                 : baselineReferenceChain;
+        int stepsPerImage = Fields.intValue(overrides, PREPARATION_STEPS_PER_IMAGE, baselineStepsPerImage);
+        if (!VisualizationImageProperties.STEPS_PER_IMAGE_OPTIONS.contains(stepsPerImage)) {
+            throw new IllegalArgumentException("Preparation steps per image must be one of " + STEPS_PER_IMAGE);
+        }
+        boolean skipLookAlike = overrides.containsKey(SKIP_LOOK_ALIKE_STEPS)
+                ? Boolean.parseBoolean(overrides.get(SKIP_LOOK_ALIKE_STEPS))
+                : baselineSkipLookAlike;
 
         // Everything is parsed above, so nothing below can fail halfway through.
         sceneAnchorService.setEnabled(sceneAnchorEnabled);
         properties.setFocusedViewEnabled(focusedViewEnabled);
         properties.setReferenceChainEnabled(referenceChainEnabled);
+        properties.setPreparationStepsPerImage(stepsPerImage);
+        properties.setSkipLookAlikeSteps(skipLookAlike);
         properties.setDefaultProfile(next.remove(DEFAULT));
         Map<String, Profile> profiles = new LinkedHashMap<>(properties.getProfiles());
         next.forEach((purpose, profile) -> {

@@ -78,6 +78,16 @@ public class VisualizationImageProfiles {
         return properties.isFocusedViewEnabled() && properties.isReferenceChainEnabled();
     }
 
+    /** How many Preparation steps share one generated image (1, 2 or 4); only with the focused view on. */
+    public int preparationStepsPerImage() {
+        return properties.effectivePreparationStepsPerImage();
+    }
+
+    /** Whether steps marked as looking like the previous one reuse its image instead of getting their own. */
+    public boolean skipLookAlikeSteps() {
+        return properties.isSkipLookAlikeSteps();
+    }
+
     /** The camera, lighting, style and default equipment of focused images. */
     public VisualizationImageProperties.Scene scene() {
         return properties.getScene();

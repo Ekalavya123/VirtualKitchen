@@ -218,7 +218,7 @@ public class RecipeProcessVisualizationPromptBuilder {
     // ---------------------------------------------------------------------------------------------------------
 
     /** Version of the focused batch prompt; logged with every batch like {@link #BATCH_PROMPT_VERSION}. */
-    public static final String FOCUSED_BATCH_PROMPT_VERSION = "4";
+    public static final String FOCUSED_BATCH_PROMPT_VERSION = "5";
 
     /** System prompt of the focused batch call: one {@link ActionContext} per image, and the recipe's equipment. */
     public String buildFocusedBatchSystemPrompt() {
@@ -229,7 +229,7 @@ public class RecipeProcessVisualizationPromptBuilder {
 
                 Return strict JSON only: {"dishContext": "...", "scene": {"vessel": "...", "stove": "...", \
                 "surface": "...", "cuttingBoard": "...", "prepBowl": "...", "servingDish": "..."}, \
-                "prompts": [{"id": "...", "focus": "...", "state": "...", "action": "..."}]}.
+                "prompts": [{"id": "...", "focus": "...", "state": "...", "action": "...", "sameAsPrevious": false}]}.
                 No markdown, prose, or code fences.
 
                 - When asked for a SCENE, also write:
@@ -264,8 +264,15 @@ public class RecipeProcessVisualizationPromptBuilder {
                 before", "the previous image" or another id: each entry must read on its own.
                 - Each Preparation is its own flow: do not carry state between preparations or from the main steps. \
                 A MAIN step that uses a prepared component shows it by name.
+                - Preparation steps of one component continue from each other like MAIN steps do, but never from \
+                another component's steps.
                 - A Preparation listed with focus STORYBOARD: state lists its panels in order, one short clause each, \
                 ending with the finished component; action stays empty.
+                - sameAsPrevious: true ONLY when a photo of this step would look practically the same as a photo of \
+                the step listed just before it in the same group: same focus, nothing added, nothing visibly changed \
+                (resting, setting aside, keeping warm, waiting, covering and leaving). Anything that adds an \
+                ingredient, cuts, mixes, changes colour or texture, or moves the food elsewhere is false. The first \
+                step of a group is always false. When unsure, false.
                 - No text, labels, captions or watermarks.
                 """;
     }
@@ -284,7 +291,31 @@ public class RecipeProcessVisualizationPromptBuilder {
             prompt.append("DISH: ").append(dishName.trim()).append("\n\n");
         }
         List<BatchTarget> flows = targets.stream().filter(target -> target.target().flow() != null).toList();
-        List<BatchTarget> steps = targets.stream().filter(target -> target.target().flow() == null).toList();
+        List<BatchTarget> prepSteps = targets.stream().filter(target -> target.target().isPreparationStep()).toList();
+        List<BatchTarget> steps = targets.stream()
+                .filter(target -> target.target().flow() == null && !target.target().isPreparationStep()).toList();
+
+        if (!prepSteps.isEmpty()) {
+            prompt.append("PREPARATION STEPS (one image each, a single close-up still frame of the step; made before or "
+                    + "alongside cooking, grouped by the component they make):\n");
+            String currentFlow = null;
+            for (BatchTarget target : prepSteps) {
+                RecipeProcessVisualizationService.PrepFlow prepFlow = target.target().prepFlow();
+                if (!java.util.Objects.equals(currentFlow, prepFlow.id())) {
+                    currentFlow = prepFlow.id();
+                    String output = StringUtils.hasText(prepFlow.outputName()) ? prepFlow.outputName().trim()
+                            : "a prepared component";
+                    prompt.append("Making ").append(output).append(":\n");
+                }
+                RecipeProcessVisualizationInput step = target.target().step();
+                prompt.append(target.id()).append(": ").append(describeStep(step)).append('\n');
+                if (StringUtils.hasText(step.previousExpectedOutput())) {
+                    prompt.append("  Continues from: ").append(step.previousExpectedOutput()).append('\n');
+                }
+                prompt.append("  Default focus: ").append(focusById.get(target.id())).append('\n');
+            }
+            prompt.append('\n');
+        }
 
         if (!flows.isEmpty()) {
             prompt.append("PREPARATIONS (one image each, made before or alongside cooking):\n");
@@ -393,6 +424,52 @@ public class RecipeProcessVisualizationPromptBuilder {
         } else if (references.sceneAnchor()) {
             text.append('\n').append(REFERENCE_INSTRUCTION);
         }
+        return text.toString();
+    }
+
+    /** One panel of a shared panel image: a step's stored text and what it centres on. */
+    public record GridPanel(String stepText, VisualFocus focus) {
+    }
+
+    static final String GRID_PREVIOUS_INSTRUCTION = "The reference image shows the earlier steps of this preparation. "
+            + "Keep the same equipment, surface, lighting and camera in every panel, and continue the food from it.";
+
+    /** Where each panel sits, by panel count. */
+    static List<String> panelPositions(int panels) {
+        return panels == 2 ? List.of("Top panel", "Bottom panel")
+                : List.of("Top-left panel", "Top-right panel", "Bottom-left panel", "Bottom-right panel");
+    }
+
+    /**
+     * The text sent to the image model for several Preparation steps drawn as one image of equal panels (2 stacked
+     * top and bottom, or 4 in a 2x2 grid), each panel framed like that step's own focused image. The image is cut
+     * into one image per step afterwards, so the panels must be equal and separated by plain gutters.
+     *
+     * @param panels the steps in cooking order, 2 or 4 of them
+     * @param previousReference whether the image before this one in the preparation is sent as a reference
+     */
+    public String buildGridImageRequestText(List<GridPanel> panels, SceneContext scene,
+                                            VisualizationImageProperties.Scene style, String dishContext,
+                                            boolean previousReference) {
+        List<String> positions = panelPositions(panels.size());
+        String layout = panels.size() == 2
+                ? "2 equal wide panels stacked one above the other"
+                : "4 equal square panels in a 2x2 grid";
+        String camera = "camera about " + style.getCameraAngle() + " degrees above the counter looking down";
+        StringBuilder text = new StringBuilder();
+        text.append("One image made of ").append(layout).append(", separated by thin plain white gutters that run ")
+                .append("straight across the whole image. Panels are read left to right, top to bottom, in cooking ")
+                .append("order. Each panel is a close-up photo, ").append(camera).append(". No text, numbers, labels ")
+                .append("or borders.\n");
+        for (int i = 0; i < panels.size(); i++) {
+            GridPanel panel = panels.get(i);
+            text.append(positions.get(i)).append(": ").append(panel.focus().framing(scene)).append(' ')
+                    .append(panel.stepText().trim()).append('\n');
+        }
+        text.append(styleLine(style)).append(" Every panel uses the same equipment, lighting and style.\n");
+        text.append(FOCUSED_GUARDRAIL);
+        if (StringUtils.hasText(dishContext)) text.append("\nContext: ").append(dishContext.trim());
+        if (previousReference) text.append('\n').append(GRID_PREVIOUS_INSTRUCTION);
         return text.toString();
     }
 

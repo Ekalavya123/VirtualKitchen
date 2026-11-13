@@ -26,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -117,7 +118,11 @@ public class VisualizationPromptBatchService {
 
     /** The focused batch answer: the recipe's equipment (when asked for) and one {@link ActionContext} per target id. */
     record FocusedOutput(String dishContext, SceneContext scene, List<Entry> prompts) {
-        record Entry(String id, String focus, String state, String action) {
+        record Entry(String id, String focus, String state, String action, Boolean sameAsPrevious) {
+
+            Entry(String id, String focus, String state, String action) {
+                this(id, focus, state, action, null);
+            }
         }
     }
 
@@ -139,6 +144,7 @@ public class VisualizationPromptBatchService {
         collect(recipeId, steps, "m", missing, keyById, ignoredReferences);
         Map<String, VisualFocus> focusById = new LinkedHashMap<>();
         missing.forEach(target -> focusById.put(target.id(), visualizationService.defaultFocus(target.target())));
+        Set<String> firstOfGroup = firstOfGroup(flows, steps);
 
         // The equipment is written once per recipe, with or without a scene anchor: every focused prompt uses it.
         boolean sceneNeeded = visualizationService.findScene(recipeId)
@@ -170,7 +176,11 @@ public class VisualizationPromptBatchService {
                         : VisualFocus.parse(entry.focus()).orElse(defaultFocus);
                 String text = new ActionContext(focus, entry.state(), entry.action()).describe();
                 if (!StringUtils.hasText(text)) continue;
-                visualizationService.savePrompt(keyById.get(target.id()), text, focus);
+                // The first step of a flow (or of the main steps) has nothing before it to look like.
+                boolean reusesPrevious = Boolean.TRUE.equals(entry.sameAsPrevious())
+                        && target.target().flow() == null
+                        && !firstOfGroup.contains(target.target().nodeId());
+                visualizationService.savePrompt(keyById.get(target.id()), text, focus, reusesPrevious);
                 written++;
             }
             start += MAX_TARGETS_PER_REQUEST;
@@ -250,7 +260,8 @@ public class VisualizationPromptBatchService {
                 new Field("id", RecipeProcessOutputSchema.string(), true),
                 new Field("focus", RecipeProcessOutputSchema.string(), true),
                 new Field("state", RecipeProcessOutputSchema.string(), true),
-                new Field("action", RecipeProcessOutputSchema.string(), true)));
+                new Field("action", RecipeProcessOutputSchema.string(), true),
+                new Field("sameAsPrevious", Map.of("type", "boolean"), true)));
         Map<String, Object> scene = RecipeProcessOutputSchema.object(List.of(
                 new Field("vessel", RecipeProcessOutputSchema.string(), true),
                 new Field("stove", RecipeProcessOutputSchema.string(), true),
@@ -329,6 +340,18 @@ public class VisualizationPromptBatchService {
                 recipeId, RecipeProcessVisualizationPromptBuilder.BATCH_PROMPT_VERSION, missing.size(), written,
                 missing.size() - written, sceneNeeded, sceneWritten);
         return written;
+    }
+
+    /** The node ids that start a group: the first step of each Preparation flow, and of each process's main steps. */
+    static Set<String> firstOfGroup(List<VisualTarget> preparationTargets, List<VisualTarget> mainTargets) {
+        Set<String> first = new java.util.HashSet<>();
+        Set<String> seenFlows = new java.util.HashSet<>();
+        for (VisualTarget target : preparationTargets) {
+            String group = target.isPreparationStep() ? target.prepFlow().id() : target.nodeId();
+            if (seenFlows.add(group)) first.add(target.nodeId());
+        }
+        if (!mainTargets.isEmpty()) first.add(mainTargets.get(0).nodeId());
+        return first;
     }
 
     private boolean anyImageMissing(Long recipeId, List<VisualTarget> targets) {

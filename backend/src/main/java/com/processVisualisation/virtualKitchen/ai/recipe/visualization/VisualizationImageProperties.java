@@ -72,6 +72,27 @@ public class VisualizationImageProperties {
      */
     private volatile boolean referenceChainEnabled = true;
 
+    /** The values {@link #preparationStepsPerImage} may take. */
+    public static final java.util.List<Integer> STEPS_PER_IMAGE_OPTIONS = java.util.List.of(1, 2, 4);
+
+    /**
+     * With the focused view on: how many Preparation steps share one generated image (1, 2 or 4). Several steps are
+     * drawn as equal panels of one image, which is then cut into one image per step, so a step costs a fraction of an
+     * image. 1 draws every step on its own.
+     */
+    private volatile int preparationStepsPerImage = 4;
+
+    /**
+     * Steps the prompt writer marks as looking the same as the step before them (resting, setting aside, keeping
+     * warm) get no image of their own and reuse the previous step's image. Off: every step is drawn.
+     */
+    private volatile boolean skipLookAlikeSteps = true;
+
+    /** {@link #preparationStepsPerImage}, with any value outside {@link #STEPS_PER_IMAGE_OPTIONS} read as 1. */
+    public int effectivePreparationStepsPerImage() {
+        return STEPS_PER_IMAGE_OPTIONS.contains(preparationStepsPerImage) ? preparationStepsPerImage : 1;
+    }
+
     /** What a focused image centres on, per purpose ({@link VisualFocus} names); others use {@link #defaultFocus}. */
     private Map<String, String> focusByPurpose = new LinkedHashMap<>(Map.of(
             INGREDIENT_PREPARATION, VisualFocus.CUTTING_BOARD.name(),

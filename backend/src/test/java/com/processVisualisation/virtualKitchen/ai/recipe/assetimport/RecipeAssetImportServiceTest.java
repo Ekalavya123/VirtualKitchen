@@ -143,6 +143,16 @@ class RecipeAssetImportServiceTest {
     }
 
     @Test
+    void withTheFocusedView_aPreparationImageIsKeyedAsItsOwnStep_soTheNextVisualsJobKeepsIt() {
+        when(visualization.focusedViewEnabled()).thenReturn(true);
+
+        Response response = service.importAssets(OWNER, RECIPE, images(new AssetRef(PREPARATION, "p", SOURCE_IMAGE, null)));
+
+        assertEquals(1, response.images().copied());
+        verify(visualization).savePrompt("200::p", RecipeAssetImportService.IMPORTED_PROMPT);
+    }
+
+    @Test
     void eachBadImageFailsAlone_withAReason_andTheGoodOneIsStillCopied() {
         String elsewhere = "https://evil.example/internal/metadata";
         String missing = SOURCE_IMAGE + "?gone";

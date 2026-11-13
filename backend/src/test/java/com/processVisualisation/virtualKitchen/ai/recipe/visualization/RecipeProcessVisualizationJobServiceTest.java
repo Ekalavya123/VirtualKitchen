@@ -153,6 +153,7 @@ class RecipeProcessVisualizationJobServiceTest {
                 imageArtifactConsumer,
                 new RecipeStepVocabularyProvider(),
                 new VisualizationImageProfiles(imageProperties, new RecipeStepVocabularyProvider()));
+        recipeProcessVisualizationService.setImageStorageClient(imageStorageClient);
 
         visualizationJobRepository = mock(VisualizationJobRepository.class);
         when(visualizationJobRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
@@ -744,6 +745,132 @@ class RecipeProcessVisualizationJobServiceTest {
                 assertEquals(2, references.getAllValues().get(i).size(), "and the chain picks up again after it");
             }
         }
+    }
+
+    // --- Preparation steps sharing one panel image, and look-alike steps ------------------------------
+
+    /** The focused batch answer for a five-step preparation; the last step only rests, like the one before it. */
+    private static final String MARINADE_ANSWER = "{\"prompts\":["
+            + "{\"id\":\"p1\",\"focus\":\"CUTTING_BOARD\",\"state\":\"PREP1 raw chicken\",\"action\":\"a knife cutting\",\"sameAsPrevious\":false},"
+            + "{\"id\":\"p2\",\"focus\":\"PREP_BOWL\",\"state\":\"PREP2 chicken pieces\",\"action\":\"yogurt poured\",\"sameAsPrevious\":false},"
+            + "{\"id\":\"p3\",\"focus\":\"PREP_BOWL\",\"state\":\"PREP3 chicken in yogurt\",\"action\":\"spices added\",\"sameAsPrevious\":false},"
+            + "{\"id\":\"p4\",\"focus\":\"PREP_BOWL\",\"state\":\"PREP4 coated chicken\",\"action\":\"a spoon mixing\",\"sameAsPrevious\":false},"
+            + "{\"id\":\"p5\",\"focus\":\"PREP_BOWL\",\"state\":\"PREP5 coated chicken\",\"action\":\"\",\"sameAsPrevious\":true}]}";
+
+    /** A 2x2 panel image with a plain white gutter cross, as a provider would return it. */
+    private static byte[] panelImage() throws Exception {
+        java.awt.image.BufferedImage image = new java.awt.image.BufferedImage(64, 64, java.awt.image.BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = image.createGraphics();
+        g.setColor(java.awt.Color.WHITE);
+        g.fillRect(0, 0, 64, 64);
+        g.setColor(new java.awt.Color(120, 60, 20));
+        g.fillRect(0, 0, 30, 30);
+        g.fillRect(34, 0, 30, 30);
+        g.fillRect(0, 34, 30, 30);
+        g.fillRect(34, 34, 30, 30);
+        g.dispose();
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        javax.imageio.ImageIO.write(image, "png", out);
+        return out.toByteArray();
+    }
+
+    private Map<String, String> givenMarinadePreparation(int stepsPerImage, boolean skipLookAlike) throws Exception {
+        imageProperties.setFocusedViewEnabled(true);
+        imageProperties.setPreparationStepsPerImage(stepsPerImage);
+        imageProperties.setSkipLookAlikeSteps(skipLookAlike);
+        when(aiClient.chat(any())).thenReturn(AiResponse.builder().content(MARINADE_ANSWER).build());
+        AtomicLong uploads = new AtomicLong();
+        Map<String, String> uploadedPaths = new ConcurrentHashMap<>();
+        when(imageStorageClient.upload(any(), anyString(), anyString())).thenAnswer(inv -> {
+            String url = "https://cdn.example/" + uploads.incrementAndGet() + ".png";
+            uploadedPaths.put(url, inv.getArgument(2));
+            return url;
+        });
+        byte[] panels = panelImage();
+        when(imageStorageClient.download(anyString())).thenReturn(new ImageStorageClient.StoredImage("image/png", panels));
+        when(imageGenerationClient.generate(anyString()))
+                .thenReturn(new ImageGenerationClient.GeneratedImage("image/png", panels));
+        when(imageGenerationClient.generate(anyString(), anyList(), any()))
+                .thenReturn(new ImageGenerationClient.GeneratedImage("image/png", panels));
+        Process preparation = processWithSteps(3L, 5);
+        preparation.setType(ProcessType.SUBPROCESS);
+        List<Process.ProcessEdge> edges = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            Process.ProcessEdge edge = new Process.ProcessEdge();
+            edge.setId("e" + i);
+            edge.setSource("node-" + i);
+            edge.setTarget("node-" + (i + 1));
+            edges.add(edge);
+        }
+        preparation.setEdges(edges);
+        when(processRepository.findById(3L)).thenReturn(Optional.of(preparation));
+        return uploadedPaths;
+    }
+
+    /** The image URL attached to each step, once all five are attached. */
+    private Map<String, String> attachedUrls() {
+        ArgumentCaptor<String> nodes = ArgumentCaptor.forClass(String.class);
+        ArgumentCaptor<String> urls = ArgumentCaptor.forClass(String.class);
+        verify(processRepository, timeout(10000).times(5)).setStepVisualization(eq(3L), nodes.capture(), any(), any(), urls.capture());
+        Map<String, String> byNode = new LinkedHashMap<>();
+        for (int i = 0; i < nodes.getAllValues().size(); i++) {
+            byNode.put(nodes.getAllValues().get(i), urls.getAllValues().get(i));
+        }
+        return byNode;
+    }
+
+    @Test
+    void preparation_fourStepsShareOnePanelImage_cutIntoEachStepsOwnImage_andALookAlikeStepReusesTheOneBefore() throws Exception {
+        Map<String, String> uploadedPaths = givenMarinadePreparation(4, true);
+
+        service.startJob(1L, 100L, 3L);
+        Map<String, String> urls = attachedUrls();
+
+        // One image call for five steps: steps 1-4 as panels, step 5 copies step 4.
+        ArgumentCaptor<String> texts = ArgumentCaptor.forClass(String.class);
+        verify(imageGenerationClient, times(1)).generate(texts.capture(), anyList(), any());
+        String text = texts.getValue();
+        assertTrue(text.contains("4 equal square panels in a 2x2 grid"), text);
+        assertTrue(text.contains("Top-left panel: A wooden cutting board"), text);
+        assertTrue(text.indexOf("PREP1") < text.indexOf("PREP2") && text.indexOf("PREP3") < text.indexOf("PREP4"), text);
+        assertFalse(text.contains("PREP5"), text);
+
+        // The panel image is stored once, then each panel as its own step image.
+        assertEquals(5, uploadedPaths.size(), "the panel image plus four cut panels");
+        assertEquals(4, java.util.stream.IntStream.range(0, 4).mapToObj(i -> urls.get("node-" + i)).distinct().count());
+        for (int i = 0; i < 4; i++) {
+            assertTrue(uploadedPaths.get(urls.get("node-" + i)).startsWith("visualizations/100::node-" + i + "/"),
+                    uploadedPaths.get(urls.get("node-" + i)));
+        }
+        assertEquals(urls.get("node-3"), urls.get("node-4"), "the resting step shows the image of the step before");
+    }
+
+    @Test
+    void preparation_onePerImage_drawsEveryStepOnItsOwn() throws Exception {
+        givenMarinadePreparation(1, true);
+
+        service.startJob(1L, 100L, 3L);
+        Map<String, String> urls = attachedUrls();
+
+        ArgumentCaptor<String> texts = ArgumentCaptor.forClass(String.class);
+        verify(imageGenerationClient, times(4)).generate(texts.capture(), anyList(), any());
+        texts.getAllValues().forEach(text -> assertFalse(text.contains("panels"), text));
+        assertEquals(urls.get("node-3"), urls.get("node-4"));
+    }
+
+    @Test
+    void preparation_lookAlikeSkippingOff_drawsTheRestingStepToo() throws Exception {
+        givenMarinadePreparation(4, false);
+
+        service.startJob(1L, 100L, 3L);
+        Map<String, String> urls = attachedUrls();
+
+        // Four steps as one panel image, the fifth on its own.
+        ArgumentCaptor<String> texts = ArgumentCaptor.forClass(String.class);
+        verify(imageGenerationClient, times(2)).generate(texts.capture(), anyList(), any());
+        assertEquals(1, texts.getAllValues().stream().filter(text -> text.contains("2x2 grid")).count());
+        assertTrue(texts.getAllValues().stream().anyMatch(text -> text.contains("PREP5") && !text.contains("panel")));
+        assertEquals(5, urls.values().stream().distinct().count());
     }
 
     private Process processWithActions(Long id, String... actions) {

@@ -84,6 +84,17 @@ test('naming an image setting twice, or a non-boolean, is rejected', () => {
   assert.throws(() => load({ combos: [{ name: 'a', text: 't', anchor: 'yes' }] }), /"combos\[0\]\.anchor" must be true or false/)
 })
 
+test('stepsPerImage and skipLookAlike set the image cost settings for a combo', () => {
+  const config = load({ combos: [{ name: 'cheap', text: 't', image: 'gemini-image', stepsPerImage: 4, skipLookAlike: true }] })
+  assert.deepEqual(config.combos[0].adminConfig, {
+    images: { 'lookAlike.skip': 'true', 'preparation.stepsPerImage': '4' },
+  })
+  assert.throws(() => load({ combos: [{ name: 'a', text: 't', stepsPerImage: 3 }] }),
+    /"combos\[0\]\.stepsPerImage" must be one of 1, 2, 4/)
+  assert.throws(() => load({ combos: [{ name: 'a', text: 't', stepsPerImage: 2, adminConfig: { images: { 'preparation.stepsPerImage': 4 } } }] }),
+    /sets images\.preparation\.stepsPerImage twice/)
+})
+
 test('reference without the focused view is rejected: it would silently not happen', () => {
   assert.throws(() => load({ combos: [{ name: 'a', text: 't', image: 'i', reference: true, focusedView: false }] }),
     /"reference": true with "focusedView": false/)

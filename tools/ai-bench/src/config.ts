@@ -46,7 +46,12 @@ export const IMAGE_SETTINGS = {
   reference: 'referenceChain.enabled',
   /** The Focused Cooking View; false makes images as they were before it existed. */
   focusedView: 'focusedView.enabled',
+  /** Steps the prompt writer marks as looking like the step before reuse its image instead of a new one. */
+  skipLookAlike: 'lookAlike.skip',
 } as const
+/** How many Preparation steps share one generated image (1, 2 or 4), as a combo's "stepsPerImage". */
+export const STEPS_PER_IMAGE_SETTING = 'preparation.stepsPerImage'
+export const STEPS_PER_IMAGE_VALUES = [1, 2, 4] as const
 export const IMAGE_SECTION = 'images'
 
 export type Combo = {
@@ -140,8 +145,8 @@ const adminConfig = (raw: unknown, field: string): Combo['adminConfig'] => {
 }
 
 /**
- * Folds a combo's image booleans (anchor, reference, focusedView) into its adminConfig. Naming the same
- * setting both ways is an error rather than a silent winner.
+ * Folds a combo's image settings (the booleans anchor, reference, focusedView, skipLookAlike, and stepsPerImage)
+ * into its adminConfig. Naming the same setting both ways is an error rather than a silent winner.
  */
 const withImageSettings = (value: Record<string, unknown>, config: Combo['adminConfig'], field: string): Combo['adminConfig'] => {
   const images: Record<string, string> = { ...(config?.[IMAGE_SECTION] ?? {}) }
@@ -152,6 +157,17 @@ const withImageSettings = (value: Record<string, unknown>, config: Combo['adminC
     if (typeof setting !== 'boolean') fail(`"${field}.${name}" must be true or false`)
     if (key in images) fail(`"${field}" sets ${IMAGE_SECTION}.${key} twice: as "${name}" and in "adminConfig"`)
     images[key] = String(setting)
+    any = true
+  }
+  const stepsPerImage = value.stepsPerImage
+  if (stepsPerImage !== undefined && stepsPerImage !== null) {
+    if (!STEPS_PER_IMAGE_VALUES.includes(stepsPerImage as 1 | 2 | 4)) {
+      fail(`"${field}.stepsPerImage" must be one of ${STEPS_PER_IMAGE_VALUES.join(', ')}`)
+    }
+    if (STEPS_PER_IMAGE_SETTING in images) {
+      fail(`"${field}" sets ${IMAGE_SECTION}.${STEPS_PER_IMAGE_SETTING} twice: as "stepsPerImage" and in "adminConfig"`)
+    }
+    images[STEPS_PER_IMAGE_SETTING] = String(stepsPerImage)
     any = true
   }
   if (images[IMAGE_SETTINGS.reference] === 'true' && images[IMAGE_SETTINGS.focusedView] === 'false') {

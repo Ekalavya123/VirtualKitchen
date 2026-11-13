@@ -17,6 +17,7 @@ import com.processVisualisation.virtualKitchen.ai.provider.dto.AiResponse;
 import com.processVisualisation.virtualKitchen.ai.recipe.visualization.RecipeProcessVisualizationService.FlowContext;
 import com.processVisualisation.virtualKitchen.ai.recipe.visualization.RecipeProcessVisualizationService.VisualPreparation;
 import com.processVisualisation.virtualKitchen.ai.recipe.visualization.RecipeProcessVisualizationService.VisualTarget;
+import com.processVisualisation.virtualKitchen.ai.recipe.visualization.RecipeProcessVisualizationService.PrepFlow;
 import com.processVisualisation.virtualKitchen.recipe.model.Process;
 import com.processVisualisation.virtualKitchen.recipe.model.ProcessType;
 import org.junit.jupiter.api.BeforeEach;
@@ -338,11 +339,11 @@ class VisualizationPromptBatchServiceTest {
 
         // The writer moved the camera to the board for m1; an unknown focus keeps the step's default.
         verify(visualizationService).savePrompt(VisualizationKeyBuilder.build("100", "main-0"),
-                "Half an onion in small dice. A knife chopping.", VisualFocus.CUTTING_BOARD);
+                "Half an onion in small dice. A knife chopping.", VisualFocus.CUTTING_BOARD, false);
         verify(visualizationService).savePrompt(VisualizationKeyBuilder.build("100", "main-1"),
-                "Oil in the pan.", VisualFocus.COOKING_VESSEL);
+                "Oil in the pan.", VisualFocus.COOKING_VESSEL, false);
         // An empty entry is left to the per-step fallback.
-        verify(visualizationService, never()).savePrompt(eq(VisualizationKeyBuilder.build("100", "main-2")), anyString(), any());
+        verify(visualizationService, never()).savePrompt(eq(VisualizationKeyBuilder.build("100", "main-2")), anyString(), any(), any());
         verify(visualizationService).saveSceneContext(RECIPE, new SceneContext("a steel kadai", "a black gas stove",
                 "a granite countertop", "a wooden cutting board", "a steel bowl", "a white plate"), "Part of making Tomato Masala");
         verify(visualizationService, never()).saveScenePrompt(any(), any(), any());
@@ -372,19 +373,37 @@ class VisualizationPromptBatchServiceTest {
     }
 
     @Test
-    void focusedView_aMultiStepPreparationStaysAStoryboard_whateverFocusTheWriterNames() {
+    void focusedView_listsPreparationStepsPerFlow_andStoresLookAlikeSteps_neverForAFlowsFirstStep() {
         when(visualizationService.focusedViewEnabled()).thenReturn(true);
-        when(visualizationService.defaultFocus(any())).thenReturn(VisualFocus.STORYBOARD);
+        when(visualizationService.defaultFocus(any())).thenReturn(VisualFocus.PREP_BOWL);
         when(visualizationService.findScene(RECIPE)).thenReturn(Optional.empty());
-        givenPreparationWithFlows(1);
+        PrepFlow chicken = new PrepFlow("out-a", "Marinated Chicken");
+        PrepFlow onions = new PrepFlow("out-b", "Chopped Onions");
+        when(visualizationService.prepareVisualTargets(PREP)).thenReturn(new VisualPreparation(process(PREP, ProcessType.SUBPROCESS), List.of(
+                new VisualTarget("a1", input("Cut chicken"), null, chicken),
+                new VisualTarget("a2", input("Marinate"), null, chicken),
+                new VisualTarget("a3", input("Rest 30 min"), null, chicken),
+                new VisualTarget("b1", input("Chop onions"), null, onions))));
         when(aiClient.chat(any())).thenReturn(AiResponse.builder().content("{\"prompts\":["
-                + "{\"id\":\"p1\",\"focus\":\"PLATE\",\"state\":\"Panel 1: cut chicken; panel 2: chicken in yogurt\",\"action\":\"\"}]}").build());
+                + "{\"id\":\"p1\",\"focus\":\"CUTTING_BOARD\",\"state\":\"Raw chicken\",\"action\":\"Cutting\",\"sameAsPrevious\":false},"
+                + "{\"id\":\"p2\",\"focus\":\"PREP_BOWL\",\"state\":\"Chicken in yogurt\",\"action\":\"Mixing\",\"sameAsPrevious\":false},"
+                + "{\"id\":\"p3\",\"focus\":\"PREP_BOWL\",\"state\":\"Chicken in yogurt\",\"action\":\"\",\"sameAsPrevious\":true},"
+                + "{\"id\":\"p4\",\"focus\":\"CUTTING_BOARD\",\"state\":\"Chopped onion\",\"action\":\"\",\"sameAsPrevious\":true}]}").build());
 
-        service.ensurePrompts(USER, RECIPE, List.of(PREP));
+        assertEquals(4, service.ensurePrompts(USER, RECIPE, List.of(PREP)));
 
-        verify(visualizationService).savePrompt(VisualizationKeyBuilder.buildFlow("100", "flow-0"),
-                "Panel 1: cut chicken; panel 2: chicken in yogurt.", VisualFocus.STORYBOARD);
-        assertTrue(capturedRequests().get(0).getUserPrompt().contains("Focus: STORYBOARD"));
+        verify(visualizationService).savePrompt(VisualizationKeyBuilder.build("100", "a1"),
+                "Raw chicken. Cutting.", VisualFocus.CUTTING_BOARD, false);
+        verify(visualizationService).savePrompt(VisualizationKeyBuilder.build("100", "a3"),
+                "Chicken in yogurt.", VisualFocus.PREP_BOWL, true);
+        // The first step of a flow has nothing before it to look like.
+        verify(visualizationService).savePrompt(VisualizationKeyBuilder.build("100", "b1"),
+                "Chopped onion.", VisualFocus.CUTTING_BOARD, false);
+        String prompt = capturedRequests().get(0).getUserPrompt();
+        assertTrue(prompt.contains("PREPARATION STEPS"), prompt);
+        assertTrue(prompt.contains("Making Marinated Chicken:"), prompt);
+        assertTrue(prompt.contains("Making Chopped Onions:"), prompt);
+        assertFalse(prompt.contains("STORYBOARD"), prompt);
     }
 
     @Test

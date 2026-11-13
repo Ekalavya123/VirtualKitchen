@@ -23,6 +23,14 @@
       { "name": "before", "image": "gemini-image", "speech": null,
         "focusedView": false, "anchor": true }
     ],
+    [
+      { "name": "prep-1-per-image", "text": "gemini-flash", "image": "gemini-image", "speech": null,
+        "focusedView": true, "stepsPerImage": 1, "skipLookAlike": false },
+      { "name": "prep-2-per-image", "image": "gemini-image", "speech": null,
+        "focusedView": true, "stepsPerImage": 2, "skipLookAlike": true },
+      { "name": "prep-4-per-image", "image": "gemini-image", "speech": null,
+        "focusedView": true, "stepsPerImage": 4, "skipLookAlike": true }
+    ],
     { "name": "deepinfra-all", "text": "deepinfra-deepseek-v4-flash", "image": "deepinfra-flux2-klein", "speech": "deepinfra-mimo-tts" },
     { "name": "local-text", "text": "ollama-qwen" }
   ],

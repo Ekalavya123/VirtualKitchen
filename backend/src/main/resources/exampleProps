@@ -190,6 +190,13 @@ ai.visualization.image.focused-view-enabled=true
 # that takes reference images: Gemini, or DeepInfra with ai.deepinfra.image.edit-endpoint set). Those steps run one
 # after another instead of in parallel.
 ai.visualization.image.reference-chain-enabled=true
+# Image cost (Admin > Config > Images > Image cost). With the focused view on, this many Preparation steps (1, 2 or 4)
+# are drawn as equal panels of ONE image (2x2 grid, or two stacked panels), which the backend cuts into one image per
+# step. 4 costs about a quarter of an image per step; 1 draws every step on its own.
+ai.visualization.image.preparation-steps-per-image=4
+# Steps the prompt writer marks as looking the same as the step before (resting, setting aside, keeping warm) reuse
+# the previous step's image instead of a new one. Preparation and cooking steps.
+ai.visualization.image.skip-look-alike-steps=true
 # What a focused image centres on, per image purpose (CUTTING_BOARD, COOKING_VESSEL, PREP_BOWL, PLATE). Built-in:
 # ingredient-preparation=CUTTING_BOARD, serving=PLATE, everything else default-focus. focus-by-category wins over it
 # (built-in: coating=PREP_BOWL, dough=PREP_BOWL).

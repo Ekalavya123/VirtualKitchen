@@ -154,8 +154,9 @@ public class RecipeAssetImportService {
             return "No link to the original image";
         }
         String recipeKey = String.valueOf(recipeId);
-        // A Preparation's image belongs to its flow and is keyed by the step that makes the flow's output.
-        String key = process.get().getType() == ProcessType.SUBPROCESS
+        // With the focused view, every Preparation step has its own image, keyed like any step. Without it, a
+        // Preparation's image belongs to its flow and is keyed by the step that makes the flow's output.
+        String key = process.get().getType() == ProcessType.SUBPROCESS && !visualizationService.focusedViewEnabled()
                 ? VisualizationKeyBuilder.buildFlow(recipeKey, entry.stepId())
                 : VisualizationKeyBuilder.build(recipeKey, entry.stepId());
         if (visualizationService.hasImage(key)) {
