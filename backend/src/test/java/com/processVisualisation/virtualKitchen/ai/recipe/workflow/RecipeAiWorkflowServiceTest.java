@@ -327,6 +327,61 @@ class RecipeAiWorkflowServiceTest {
     }
 
     @Test
+    void modelsPickedAtApprovalReplaceTheRunsChoices() {
+        List<String> ttsModelAtStart = new ArrayList<>();
+        when(narrationService.ensureAll(eq(USER), eq(RECIPE), anyLong(), anyList())).thenAnswer(inv -> {
+            ttsModelAtStart.add(AiRunModels.keyFor(AiCapability.TEXT_TO_SPEECH).orElse(null));
+            return List.of();
+        });
+        RecipeAiTaskSelectionDTO selection = new RecipeAiTaskSelectionDTO(List.of(PROCESS, NARRATION), false);
+        selection.setModelKeys(new LinkedHashMap<>(Map.of("TEXT_TO_TEXT", "premium-text", "TEXT_TO_SPEECH", "old-tts")));
+        service.create(USER, RECIPE, new RecipeAiWorkflowCreateRequestDTO(selection, "Boil 2 eggs"));
+        completeGeneration(true);
+
+        RecipeAiWorkflowResponseDTO approved = service.approve(USER, RECIPE, stored.getId(), 3L,
+                new LinkedHashMap<>(Map.of("TEXT_TO_SPEECH", "new-tts")));
+
+        assertEquals(List.of("new-tts", "new-tts"), ttsModelAtStart);
+        assertEquals(Map.of("TEXT_TO_TEXT", "premium-text", "TEXT_TO_SPEECH", "new-tts"), stored.getModelKeys(),
+                "capabilities not picked again keep the run's choice");
+        assertEquals(stored.getModelKeys(), approved.getModelKeys());
+    }
+
+    @Test
+    void aBlankModelAtApprovalGoesBackToTheAccountSetting() {
+        RecipeAiTaskSelectionDTO selection = new RecipeAiTaskSelectionDTO(List.of(PROCESS, NARRATION), false);
+        selection.setModelKeys(new LinkedHashMap<>(Map.of("TEXT_TO_SPEECH", "old-tts")));
+        service.create(USER, RECIPE, new RecipeAiWorkflowCreateRequestDTO(selection, "Boil 2 eggs"));
+        completeGeneration(true);
+
+        service.approve(USER, RECIPE, stored.getId(), 3L, new LinkedHashMap<>(Map.of("TEXT_TO_SPEECH", "")));
+
+        assertEquals(Map.of(), stored.getModelKeys());
+    }
+
+    @Test
+    void aRetryRunsWithTheModelsPickedForIt() {
+        approvedWorkflow(VISUALS);
+        stored.setVisualizationJobs(new ArrayList<>(List.of(
+                new RecipeAiWorkflow.VisualizationJobRef(MAIN, "j-main"),
+                new RecipeAiWorkflow.VisualizationJobRef(SUB, "j-sub"))));
+        doReturn(List.of(
+                vizJob("j-main", VisualizationJobStatus.COMPLETED, 2, 2),
+                vizJob("j-sub", VisualizationJobStatus.COMPLETED_WITH_ERRORS, 1, 0)))
+                .when(visualizationJobRepository).findAllById(any());
+        List<String> imageModelAtStart = new ArrayList<>();
+        when(visualizationJobService.startJob(eq(USER), eq(RECIPE), anyLong(), anyList())).thenAnswer(inv -> {
+            imageModelAtStart.add(AiRunModels.keyFor(AiCapability.TEXT_TO_IMAGE).orElse(null));
+            return VisualizationJobResponseDTO.builder().jobId("viz-retry").processId(inv.getArgument(2)).build();
+        });
+
+        service.retryTask(USER, RECIPE, stored.getId(), VISUALS, new LinkedHashMap<>(Map.of("TEXT_TO_IMAGE", "better-image")));
+
+        assertEquals(List.of("better-image"), imageModelAtStart);
+        assertEquals(Map.of("TEXT_TO_IMAGE", "better-image"), stored.getModelKeys());
+    }
+
+    @Test
     void theRunsNarrationModelIsInScopeWhileNarrationStarts() {
         List<String> ttsModelAtStart = new ArrayList<>();
         when(narrationService.ensureAll(eq(USER), eq(RECIPE), anyLong(), anyList())).thenAnswer(inv -> {
@@ -576,6 +631,7 @@ class RecipeAiWorkflowServiceTest {
                     case "activeKey" -> stored.setActiveKey((String) value);
                     case "completedAt" -> stored.setCompletedAt((Instant) value);
                     case "dismissedAt" -> stored.setDismissedAt((Instant) value);
+                    case "modelKeys" -> stored.setModelKeys(new LinkedHashMap<>((Map<String, String>) value));
                     default -> { }
                 }
             });

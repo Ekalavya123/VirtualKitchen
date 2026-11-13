@@ -3,17 +3,24 @@
  * fetching) so it is unit-tested.
  */
 import { isInKitchen, stockLevels, type StockFields } from '../inventory/inventoryVisibility.ts'
+import { compareByTime, recipeUpdatedTime } from '../../recipes/recipeListing.ts'
 
 const time = (value: string | null | undefined): number => {
   const parsed = value ? Date.parse(value) : Number.NaN
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-/** The newest `limit` recipes (by creation date; undated ones last, in their original order). */
-export const recentRecipes = <T extends { id: number; createdAt?: string }>(recipes: T[], limit = 4): T[] =>
+/**
+ * The `limit` most recently updated recipes (last change, else creation; recipes saved before dates were recorded
+ * come after every dated one, highest id first).
+ */
+export const recentRecipes = <T extends { id: number; createdAt?: string | null; updatedAt?: string | null }>(
+  recipes: T[],
+  limit = 4,
+): T[] =>
   recipes
-    .map((recipe, index) => ({ recipe, index, time: time(recipe.createdAt) }))
-    .sort((a, b) => b.time - a.time || a.index - b.index)
+    .map((recipe) => ({ recipe, id: recipe.id, time: recipeUpdatedTime(recipe) }))
+    .sort((a, b) => compareByTime(b, a))
     .slice(0, limit)
     .map((entry) => entry.recipe)
 

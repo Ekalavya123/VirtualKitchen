@@ -19,6 +19,7 @@ import com.processVisualisation.virtualKitchen.recipe.validation.ProcessValidati
 import com.processVisualisation.virtualKitchen.recipe.validation.ProcessValidator;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -82,6 +83,7 @@ public class ProcessService {
 
         processValidator.validateOrThrow(process);
         Process saved = processRepository.save(process);
+        touchRecipe(recipeId);
         return processMapper.toDTO(saved);
     }
 
@@ -147,6 +149,7 @@ public class ProcessService {
 
         processValidator.validateOrThrow(process);
         Process saved = processRepository.save(process);
+        touchRecipe(recipeId);
         return processMapper.toDTO(saved);
     }
 
@@ -209,6 +212,7 @@ public class ProcessService {
             }
             throw e;
         }
+        touchRecipe(recipeId);
         return new ProcessBatchUpdateResponseDTO(
                 revision,
                 saved.stream().map(processMapper::toDTO).collect(Collectors.toList()));
@@ -260,6 +264,12 @@ public class ProcessService {
         }
 
         processRepository.deleteById(processId);
+        touchRecipe(recipeId);
+    }
+
+    /** The recipe changed when one of its processes did: keeps "recently updated" true to editing its steps. */
+    private void touchRecipe(Long recipeId) {
+        recipeTemplateRepository.touchUpdatedAt(recipeId, LocalDateTime.now());
     }
 
     /**
@@ -367,7 +377,9 @@ public class ProcessService {
         copy.setDescription(original.getDescription());
 
         processValidator.validateOrThrow(copy);
-        return processRepository.save(copy);
+        Process saved = processRepository.save(copy);
+        touchRecipe(original.getRecipeId());
+        return saved;
     }
 
     private Process findProcessOrThrow(Long processId) {

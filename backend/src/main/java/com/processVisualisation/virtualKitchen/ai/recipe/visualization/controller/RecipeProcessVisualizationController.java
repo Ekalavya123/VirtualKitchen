@@ -1,5 +1,7 @@
 package com.processVisualisation.virtualKitchen.ai.recipe.visualization.controller;
 
+import com.processVisualisation.virtualKitchen.ai.platform.preference.RunModelChoices;
+import com.processVisualisation.virtualKitchen.ai.platform.preference.RunModelsRequestDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.visualization.RecipeProcessVisualizationJobService;
 import com.processVisualisation.virtualKitchen.ai.recipe.visualization.dto.VisualizationJobResponseDTO;
 import com.processVisualisation.virtualKitchen.auth.exception.AuthException;
@@ -9,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,9 +27,12 @@ import java.time.LocalDateTime;
 public class RecipeProcessVisualizationController {
 
     private final RecipeProcessVisualizationJobService recipeProcessVisualizationJobService;
+    private final RunModelChoices runModelChoices;
 
-    public RecipeProcessVisualizationController(RecipeProcessVisualizationJobService recipeProcessVisualizationJobService) {
+    public RecipeProcessVisualizationController(RecipeProcessVisualizationJobService recipeProcessVisualizationJobService,
+                                                RunModelChoices runModelChoices) {
         this.recipeProcessVisualizationJobService = recipeProcessVisualizationJobService;
+        this.runModelChoices = runModelChoices;
     }
 
     /**
@@ -34,10 +40,16 @@ public class RecipeProcessVisualizationController {
      * the actual generation work runs on a background task pool. Poll {@link #getJobStatus} with
      * the returned jobId for progress/completion. If a visualization is already running for this
      * process, that job is returned (with {@code reused=true}) instead of starting a second one.
+     * <p>
+     * The optional body names the models picked for this run (text for the image prompts, image for the pictures);
+     * without one, the user's account setting applies.
      */
     @PostMapping("/jobs")
-    public ApiResponse<VisualizationJobResponseDTO> startJob(@PathVariable Long recipeId, @PathVariable Long processId) {
-        VisualizationJobResponseDTO data = recipeProcessVisualizationJobService.startJob(currentUserId(), recipeId, processId);
+    public ApiResponse<VisualizationJobResponseDTO> startJob(@PathVariable Long recipeId, @PathVariable Long processId,
+                                                             @RequestBody(required = false) RunModelsRequestDTO models) {
+        Long userId = currentUserId();
+        VisualizationJobResponseDTO data = runModelChoices.startWith(models != null ? models.getModelKeys() : null,
+                () -> recipeProcessVisualizationJobService.startJob(userId, recipeId, processId));
         return build(data, "Process visualization job started");
     }
 

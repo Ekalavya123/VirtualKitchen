@@ -211,6 +211,23 @@
   color: var(--flow-success-strong);
 }
 
+/* "View full image", on the image's bottom-right corner: a box with the image's own shape lays it out there. */
+.recipe-card-zoom-anchor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  aspect-ratio: 4 / 3;
+  pointer-events: none;
+}
+
+.recipe-card-zoom-anchor .image-zoom-button {
+  top: auto;
+  bottom: 0.6rem;
+  right: 0.6rem;
+  pointer-events: auto;
+}
+
 /* The card's "⋯" menu, on the image's top-right corner (qualified to win over .action-menu's own position). */
 .recipe-card .recipe-card-actions {
   position: absolute;

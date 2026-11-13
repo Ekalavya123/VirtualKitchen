@@ -201,7 +201,7 @@ function FlowItem({ flow, navigate, onOpenStep }: { flow: RecipeTimelineFlow; na
                   </div>
                   {flow.stepImages && (
                     <div className="rp-flow-point-media">
-                      <RecipeImage src={item.imageUrl} alt="" fallbackIcon={item.icon} />
+                      <RecipeImage src={item.imageUrl} alt={`${flow.title}: ${item.name}`} caption={item.instructionText || item.name} fallbackIcon={item.icon} />
                     </div>
                   )}
                 </div>
@@ -221,7 +221,7 @@ function FlowItem({ flow, navigate, onOpenStep }: { flow: RecipeTimelineFlow; na
         {/* An older preparation's one image for the whole flow (a storyboard of its steps when it has several). */}
         {hasImage && (
           <div className="rp-step-media">
-            <RecipeImage src={flow.imageUrl} alt="" fallbackIcon="🔪" />
+            <RecipeImage src={flow.imageUrl} alt={flow.title} caption={flow.title} fallbackIcon="🔪" />
           </div>
         )}
       </article>
@@ -269,7 +269,12 @@ function StepItem({ step, navigate, onOpenStep }: { step: RecipeTimelineStep; na
 
         {hasImage && (
           <div className="rp-step-media">
-            <RecipeImage src={step.imageUrl} alt="" fallbackIcon={step.icon} />
+            <RecipeImage
+              src={step.imageUrl}
+              alt={`Step ${step.number}: ${step.name}`}
+              caption={`Step ${step.number} — ${step.instructionText || step.name}`}
+              fallbackIcon={step.icon}
+            />
           </div>
         )}
       </article>

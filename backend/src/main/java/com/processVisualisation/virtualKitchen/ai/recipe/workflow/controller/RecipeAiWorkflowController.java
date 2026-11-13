@@ -1,5 +1,6 @@
 package com.processVisualisation.virtualKitchen.ai.recipe.workflow.controller;
 
+import com.processVisualisation.virtualKitchen.ai.platform.preference.RunModelsRequestDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.workflow.RecipeAiWorkflowService;
 import com.processVisualisation.virtualKitchen.ai.recipe.workflow.dto.RecipeAiTaskSelectionDTO;
 import com.processVisualisation.virtualKitchen.ai.recipe.workflow.dto.RecipeAiWorkflowApproveRequestDTO;
@@ -17,9 +18,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * REST controller for AI Recipe Creation: one user-controlled workflow over process generation,
@@ -56,23 +59,29 @@ public class RecipeAiWorkflowController {
 
     /** What approving would cost now, priced against the recipe's currently saved steps. */
     @GetMapping("/{workflowId}/estimate")
-    public ApiResponse<RecipeAiWorkflowEstimateDTO> estimateApproval(@PathVariable Long recipeId, @PathVariable String workflowId) {
-        return build(workflowService.estimateApproval(currentUserId(), recipeId, workflowId), "AI usage estimate");
+    public ApiResponse<RecipeAiWorkflowEstimateDTO> estimateApproval(
+            @PathVariable Long recipeId, @PathVariable String workflowId,
+            // Models about to be approved with, as query parameters named by capability (TEXT_TO_IMAGE=key).
+            @RequestParam(required = false) Map<String, String> modelKeys) {
+        return build(workflowService.estimateApproval(currentUserId(), recipeId, workflowId, modelKeys), "AI usage estimate");
     }
 
     /** "Approve &amp; Continue": starts the selected visuals/narration from the saved, approved recipe. */
     @PostMapping("/{workflowId}/approve")
     public ApiResponse<RecipeAiWorkflowResponseDTO> approve(
             @PathVariable Long recipeId, @PathVariable String workflowId, @Valid @RequestBody RecipeAiWorkflowApproveRequestDTO request) {
-        return build(workflowService.approve(currentUserId(), recipeId, workflowId, request.getApprovedRevision()),
+        return build(workflowService.approve(currentUserId(), recipeId, workflowId, request.getApprovedRevision(),
+                        request.getModelKeys()),
                 "Recipe process approved");
     }
 
-    /** Retries only the failed part of one task. */
+    /** Retries only the failed part of one task, optionally with models picked again for it. */
     @PostMapping("/{workflowId}/tasks/{task}/retry")
     public ApiResponse<RecipeAiWorkflowResponseDTO> retryTask(
-            @PathVariable Long recipeId, @PathVariable String workflowId, @PathVariable RecipeAiTaskType task) {
-        return build(workflowService.retryTask(currentUserId(), recipeId, workflowId, task), "Task retry started");
+            @PathVariable Long recipeId, @PathVariable String workflowId, @PathVariable RecipeAiTaskType task,
+            @RequestBody(required = false) RunModelsRequestDTO models) {
+        return build(workflowService.retryTask(currentUserId(), recipeId, workflowId, task,
+                models != null ? models.getModelKeys() : null), "Task retry started");
     }
 
     /** Discards a workflow waiting for approval (the only point where nothing is still running). */

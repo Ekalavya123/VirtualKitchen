@@ -7,6 +7,7 @@ import { formatDateTime } from '../../../shared/format/date'
 import { formatMoney } from '../../../shared/format/money'
 import { useApiData } from '../../../shared/hooks/useApiData'
 import { OrderStatusBadge, OrderThumb, recipeOrderPath } from '../../recipe-order'
+import { ImageZoomButton } from '../../../shared/components/image-viewer/ZoomableImage'
 import CatalogItemImage from '../components/CatalogItemImage'
 import { firstName, greetingFor, pantrySummary, recentOrders, recentRecipes } from './overviewSummary'
 import './OverviewPage.css'
@@ -81,10 +82,10 @@ function RecentRecipesCard({ recipes, onOpenRecipe }: { recipes: Recipe[]; onOpe
   return (
     <ul className="overview-recipe-list">
       {recentRecipes(recipes).map((recipe) => (
-        <li key={recipe.id}>
+        <li key={recipe.id} className="overview-recipe-item">
           <button type="button" className="overview-recipe" onClick={() => onOpenRecipe(recipe.id)}>
             <span className="overview-recipe-thumb">
-              <CatalogItemImage src={recipe.thumbnailUrl} alt="" fallbackIcon="🍳" />
+              <CatalogItemImage src={recipe.thumbnailUrl} alt="" fallbackIcon="🍳" zoomable={false} />
             </span>
             <span className="overview-recipe-text">
               <strong>{recipe.name}</strong>
@@ -94,6 +95,9 @@ function RecentRecipesCard({ recipes, onOpenRecipe }: { recipes: Recipe[]; onOpe
               {recipe.visibility === 'PUBLIC' ? 'Public' : 'Private'}
             </span>
           </button>
+          {recipe.thumbnailUrl && (
+            <ImageZoomButton className="overview-recipe-zoom" src={recipe.thumbnailUrl} alt={recipe.name} caption={recipe.name} />
+          )}
         </li>
       ))}
     </ul>
@@ -191,7 +195,7 @@ export default function OverviewPage({ userId, userName, kitchenId, onOpenRecipe
                   {orders.data.map((entry) => entry.kind === 'recipe' ? (
                     <li key={entry.key}>
                       <Link className="overview-order" to={recipeOrderPath(entry.order.id)}>
-                        <OrderThumb src={entry.order.recipe?.thumbnailUrl} alt="" icon={entry.order.recipe?.fallbackIcon} size="sm" />
+                        <OrderThumb src={entry.order.recipe?.thumbnailUrl} alt="" icon={entry.order.recipe?.fallbackIcon} size="sm" zoomable={false} />
                         <span className="overview-order-text">
                           <strong>{entry.order.recipe?.name ?? 'Recipe'} <span className="vk-chip vk-chip-demo">Demo</span></strong>
                           <small>{entry.order.orderCode} · {formatDateTime(entry.order.timestamps?.createdAt, '')}</small>

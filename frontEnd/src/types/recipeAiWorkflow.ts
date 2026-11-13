@@ -95,4 +95,6 @@ export interface RecipeAiWorkflowResponse {
   createdAt?: string | null
   completedAt?: string | null
   reused: boolean
+  /** The models this run uses where it overrides the account setting (what approval and retry pickers start from). */
+  modelKeys?: Partial<Record<RunModelCapability, string>>
 }

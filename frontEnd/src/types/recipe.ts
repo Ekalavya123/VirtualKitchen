@@ -157,6 +157,8 @@ export interface RecipeProcessGenerationRequest {
   targetProcess?: EditTargetProcess
   /** EDIT only: the node selected in the editor. */
   selectedNodeId?: string | null
+  /** Models picked for this run (capability → model key); omitted capabilities use the account setting. */
+  modelKeys?: Partial<Record<'TEXT_TO_TEXT' | 'TEXT_TO_IMAGE' | 'TEXT_TO_SPEECH', string>>
 }
 
 export type RecipeProcessGenerationJobStatus = 'QUEUED' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED'

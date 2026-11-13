@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { Recipe } from '../../../api'
 import recipeIcon from '../../../assets/kitchen/recipeIcon.png'
 import ActionMenu, { type ActionMenuItem } from '../../../shared/components/ActionMenu'
+import { ImageZoomButton } from '../../../shared/components/image-viewer/ZoomableImage'
 import { formatDate } from '../../../shared/format/date'
 import type { RecipeScope } from '../useRecipeLibrary'
 
@@ -108,6 +109,11 @@ export default function RecipeCard({
       </button>
 
       {/* Overlays on the image corners — siblings of the open-button, so they never open the recipe. */}
+      {showThumbnail && (
+        <div className="recipe-card-zoom-anchor">
+          <ImageZoomButton src={recipe.thumbnailUrl!} alt={recipe.name} caption={recipe.name} />
+        </div>
+      )}
       {variant === 'mine' && (
         <span
           className={`recipe-card-visibility${isPublic ? ' is-public' : ''}`}

@@ -13,6 +13,17 @@ describe('recentRecipes', () => {
     assert.deepEqual(recentRecipes(recipes, 3).map((recipe) => recipe.id), [3, 4, 1])
     assert.deepEqual(recentRecipes(recipes).map((recipe) => recipe.id), [3, 4, 1, 2])
   })
+
+  it('lists the most recently updated first', () => {
+    const recipes = [
+      { id: 1, createdAt: '2026-01-01T10:00:00', updatedAt: '2026-07-01T10:00:00' },
+      { id: 2, createdAt: '2026-05-01T10:00:00' },
+      { id: 3, createdAt: '2026-03-01T10:00:00', updatedAt: '2026-03-02T10:00:00' },
+      { id: 4 },
+      { id: 5 },
+    ]
+    assert.deepEqual(recentRecipes(recipes).map((recipe) => recipe.id), [1, 2, 3, 5])
+  })
 })
 
 describe('pantrySummary', () => {

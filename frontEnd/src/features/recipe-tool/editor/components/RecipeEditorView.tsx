@@ -20,6 +20,7 @@ import { getPreparationFlows, getPreparationProcess } from '../../model/preparat
 import { generationJobKey, isTrackedJobActive, isWorkflowOpen, workflowJobKey } from '../../jobs/jobTracker'
 import { useJobTracker, useTrackedJob } from '../../jobs/useJobTracker'
 import RecipeAiCreationModal from '../../workflow/components/RecipeAiCreationModal'
+import type { RunModels } from '../../workflow/model/workflowSelection'
 import { clearDraft, draftKeys } from '../../../../shared/drafts/draftStore'
 import { workflowBadge, workflowChipLabel, workflowHeadline } from '../../workflow/model/workflowView'
 import type { RecipeAiTaskType } from '../../../../types/recipeAiWorkflow'
@@ -287,11 +288,11 @@ export default function RecipeEditorView({
    * app-level JobTracker, so the user can close the modal, switch processes or leave the tool; the
    * effect below loads the result once it's ready, whenever that is.
    */
-  const runGeneration = useCallback(async (recipeText: string) => {
+  const runGeneration = useCallback(async (recipeText: string, modelKeys: RunModels) => {
     if (generating) return
     setStartingGeneration('CREATE')
     try {
-      await jobTracker.startGeneration(recipeId, { mode: 'CREATE', recipeText })
+      await jobTracker.startGeneration(recipeId, { mode: 'CREATE', recipeText, modelKeys })
     } finally {
       setStartingGeneration(null)
     }
@@ -306,13 +307,14 @@ export default function RecipeEditorView({
    * and the selected node are sent; the AI answers with the smallest set of changes, which the
    * effect below offers for review once the background job finishes.
    */
-  const runEdit = useCallback(async (instruction: string) => {
+  const runEdit = useCallback(async (instruction: string, modelKeys: RunModels) => {
     if (generating || !session || !editableTarget) return
     setStartingGeneration('EDIT')
     try {
       await jobTracker.startGeneration(recipeId, {
         mode: 'EDIT',
         recipeText: instruction,
+        modelKeys,
         targetProcess: serializeProcessForEdit(editableTarget, session.getProcesses()),
         selectedNodeId: canvasSelectedNodeId,
       })

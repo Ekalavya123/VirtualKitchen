@@ -1,4 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { ImageZoomButton } from '../../../shared/components/image-viewer/ZoomableImage'
+import { useImageLightbox } from '../../../shared/components/image-viewer/useImageLightbox'
 import NarrationControls from './narration/NarrationControls'
 import type { NarrationPhase } from './narration/narrationPlayer'
 import { useNarrationPlayer } from './narration/useNarrationPlayer'
@@ -65,6 +67,9 @@ function StepStage({ step, narrationText, revealMode, paused, progress, narratio
   const showImage = imageStatus === 'loaded'
   // Until the narration state has loaded (or when a step has none), fall back to the step's own text.
   const text = narrationText?.trim() || step.instruction?.trim() || step.title.trim() || 'Untitled step'
+  // Full-size view: click the image (mouse/touch) or its corner button (keyboard). Opens over the walkthrough.
+  const lightbox = useImageLightbox()
+  const fullImage = imageUrl ? { src: imageUrl, alt: step.title, caption: step.instruction?.trim() || step.title } : null
 
   return (
     <div className={`recipe-slideshow-body ${showImage ? 'recipe-slideshow-body-image' : 'recipe-slideshow-body-text'}`}>
@@ -74,10 +79,14 @@ function StepStage({ step, narrationText, revealMode, paused, progress, narratio
           className={`recipe-slideshow-image${showImage ? ' is-loaded' : ''}`}
           src={imageUrl}
           alt={step.title}
+          style={showImage ? { cursor: 'zoom-in' } : undefined}
+          onClick={() => fullImage && lightbox.open(fullImage)}
           onLoad={() => setImage({ url: imageUrl, status: 'loaded' })}
           onError={() => setImage({ url: imageUrl, status: 'error' })}
         />
       )}
+      {showImage && fullImage && <ImageZoomButton {...fullImage} onOpen={lightbox.open} />}
+      {lightbox.element}
       <AnimatedInstruction
         // A different text (e.g. the narration script arriving) restarts the reveal cleanly.
         key={text}

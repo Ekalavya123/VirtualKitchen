@@ -176,6 +176,23 @@ public class RecipeAiWorkflowService {
         return choices;
     }
 
+    /**
+     * The run's model choices with {@code changes} applied, as picked again before approving or retrying: a key
+     * replaces the run's choice for its capability, a blank entry clears it (back to the account setting), and a
+     * capability not mentioned keeps the run's choice. Null changes nothing.
+     */
+    private Map<String, String> withRunChoices(Map<String, String> current, Map<String, String> changes) {
+        Map<String, String> merged = new LinkedHashMap<>(current != null ? current : Map.of());
+        if (changes == null) {
+            return merged;
+        }
+        changes.forEach((capability, key) -> {
+            if (key == null || key.isBlank()) merged.remove(capability);
+        });
+        merged.putAll(runChoices(changes));
+        return merged;
+    }
+
     // --- estimate ------------------------------------------------------------------------------
 
     /**
@@ -199,9 +216,14 @@ public class RecipeAiWorkflowService {
      * currently saved steps (so edits made during review are reflected).
      */
     public RecipeAiWorkflowEstimateDTO estimateApproval(Long userId, Long recipeId, String workflowId) {
+        return estimateApproval(userId, recipeId, workflowId, null);
+    }
+
+    /** {@link #estimateApproval(Long, Long, String)} priced with the models the user is about to approve with. */
+    public RecipeAiWorkflowEstimateDTO estimateApproval(Long userId, Long recipeId, String workflowId, Map<String, String> modelKeys) {
         RecipeAiWorkflow workflow = findOwned(userId, recipeId, workflowId);
         List<RecipeAiTaskType> downstream = workflow.getSelectedTasks().stream().filter(RecipeAiTaskType::isDownstream).toList();
-        try (AiRunModels.Scope ignored = AiRunModels.open(workflow.getModelKeys())) {
+        try (AiRunModels.Scope ignored = AiRunModels.open(withRunChoices(workflow.getModelKeys(), modelKeys))) {
             return estimator.estimate(userId, downstream, remainingStepCounts(userId, recipeId, savedSteps(recipeId)));
         }
     }
@@ -288,8 +310,18 @@ public class RecipeAiWorkflowService {
      * @throws RecipeAiWorkflowException       (409) if the workflow isn't waiting for approval
      */
     public RecipeAiWorkflowResponseDTO approve(Long userId, Long recipeId, String workflowId, Long approvedRevision) {
+        return approve(userId, recipeId, workflowId, approvedRevision, null);
+    }
+
+    /**
+     * {@link #approve(Long, Long, String, Long)} with the models picked again at approval ({@code modelKeys}, see
+     * {@link #withRunChoices}); they replace the run's choices for the downstream tasks and anything retried later.
+     */
+    public RecipeAiWorkflowResponseDTO approve(Long userId, Long recipeId, String workflowId, Long approvedRevision,
+                                               Map<String, String> modelKeys) {
         RecipeTemplate recipe = requireOwned(recipeId, userId);
         RecipeAiWorkflow workflow = findOwned(userId, recipeId, workflowId);
+        Map<String, String> runModels = withRunChoices(workflow.getModelKeys(), modelKeys);
         Resolution current = resolve(userId, workflow);
         if (current.status() != RecipeAiWorkflowStatus.WAITING_FOR_APPROVAL) {
             throw RecipeAiWorkflowException.conflict("This AI Recipe Creation is not waiting for approval");
@@ -331,6 +363,7 @@ public class RecipeAiWorkflowService {
                 query(where("_id").is(workflowId).and("approvedSnapshot").is(null)
                         .and("status").ne(RecipeAiWorkflowStatus.CANCELLED)),
                 new Update().set("approvedSnapshot", snapshot)
+                        .set("modelKeys", runModels)
                         .set("status", RecipeAiWorkflowStatus.RUNNING_DOWNSTREAM_TASKS)
                         .set("updatedAt", now()),
                 FindAndModifyOptions.options().returnNew(true),
@@ -367,8 +400,18 @@ public class RecipeAiWorkflowService {
      * narration is re-requested only for its failed steps (READY narration is never regenerated).
      */
     public RecipeAiWorkflowResponseDTO retryTask(Long userId, Long recipeId, String workflowId, RecipeAiTaskType task) {
+        return retryTask(userId, recipeId, workflowId, task, null);
+    }
+
+    /**
+     * {@link #retryTask(Long, Long, String, RecipeAiTaskType)} with the models picked again for the retry
+     * ({@code modelKeys}, see {@link #withRunChoices}); they become the run's choices from here on.
+     */
+    public RecipeAiWorkflowResponseDTO retryTask(Long userId, Long recipeId, String workflowId, RecipeAiTaskType task,
+                                                 Map<String, String> modelKeys) {
         requireOwned(recipeId, userId);
         RecipeAiWorkflow workflow = findOwned(userId, recipeId, workflowId);
+        Map<String, String> runModels = withRunChoices(workflow.getModelKeys(), modelKeys);
         Resolution current = resolve(userId, workflow);
         RecipeAiWorkflowResponseDTO.TaskDTO taskState = current.task(task);
         if (!workflow.isSelected(task) || !taskState.isRetryable()) {
@@ -378,9 +421,10 @@ public class RecipeAiWorkflowService {
             throw RecipeAiWorkflowException.conflict("Narration failed moments ago; try again in a few seconds");
         }
         reopen(workflow);
+        workflow.setModelKeys(runModels);
 
         RecipeProcessGenerationJobResponseDTO generation = null;
-        Update update = new Update().set("updatedAt", now()).unset("completedAt");
+        Update update = new Update().set("updatedAt", now()).set("modelKeys", runModels).unset("completedAt");
         switch (task) {
             case PROCESS -> {
                 generation = startGeneration(userId, workflow);
@@ -749,6 +793,7 @@ public class RecipeAiWorkflowService {
                 .approvedAt(workflow.getApprovedSnapshot() != null ? workflow.getApprovedSnapshot().getApprovedAt() : null)
                 .createdAt(workflow.getCreatedAt())
                 .completedAt(workflow.getCompletedAt())
+                .modelKeys(workflow.getModelKeys() != null ? new LinkedHashMap<>(workflow.getModelKeys()) : new LinkedHashMap<>())
                 .reused(reused)
                 .build();
     }

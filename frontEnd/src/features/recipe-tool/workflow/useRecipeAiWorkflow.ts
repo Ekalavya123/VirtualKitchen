@@ -6,6 +6,7 @@ import { useRecipeSession } from '../session/sessionContext'
 import { workflowJobKey } from '../jobs/jobTracker'
 import { useJobTracker, useTrackedJob } from '../jobs/useJobTracker'
 import { errorMessage } from '../../../shared/errors'
+import type { RunModels } from './model/workflowSelection'
 
 export type WorkflowAction = 'start' | 'approve' | 'retry' | 'discard' | 'dismiss'
 
@@ -42,7 +43,8 @@ export function useRecipeAiWorkflow(recipeId: number) {
     await tracker.startWorkflow(recipeId, request)
   }), [run, tracker, recipeId])
 
-  const approve = useCallback(() => run('approve', async () => {
+  /** `modelKeys`: the models picked at approval ('' = account setting); omitted keeps the run's choices. */
+  const approve = useCallback((modelKeys?: RunModels) => run('approve', async () => {
     const workflow = tracked?.job
     if (!workflow || !session) return
     // Approval is a decision about what the user sees now: make sure that is what the backend holds.
@@ -51,7 +53,7 @@ export function useRecipeAiWorkflow(recipeId: number) {
       throw new Error(`Your latest changes couldn't be saved, so nothing was started. ${saved.error ?? 'Please try again.'}`)
     }
     try {
-      tracker.applyWorkflow(recipeId, await RecipeAiWorkflowApi.approve(recipeId, workflow.workflowId, session.getPersistedRevision()))
+      tracker.applyWorkflow(recipeId, await RecipeAiWorkflowApi.approve(recipeId, workflow.workflowId, session.getPersistedRevision(), modelKeys))
     } catch (caught) {
       if (httpStatusOf(caught) === 409) {
         // Typically an edit that saved in between: the user's next click approves that version.
@@ -62,10 +64,11 @@ export function useRecipeAiWorkflow(recipeId: number) {
     }
   }), [run, tracked, session, tracker, recipeId])
 
-  const retry = useCallback((task: RecipeAiTaskType) => run('retry', async () => {
+  /** `modelKeys`: the models picked for the retry ('' = account setting); omitted keeps the run's choices. */
+  const retry = useCallback((task: RecipeAiTaskType, modelKeys?: RunModels) => run('retry', async () => {
     const workflow = tracked?.job
     if (!workflow) return
-    tracker.applyWorkflow(recipeId, await RecipeAiWorkflowApi.retryTask(recipeId, workflow.workflowId, task))
+    tracker.applyWorkflow(recipeId, await RecipeAiWorkflowApi.retryTask(recipeId, workflow.workflowId, task, modelKeys))
   }), [run, tracked, tracker, recipeId])
 
   const discard = useCallback(() => run('discard', async () => {

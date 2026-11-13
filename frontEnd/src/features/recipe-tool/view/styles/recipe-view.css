@@ -698,6 +698,12 @@
   background: var(--flow-surface-muted);
 }
 
+/* The zoom trigger around a step image fills the media box the image is absolutely placed in. */
+.rp-step-media > .image-zoom-trigger {
+  position: absolute;
+  inset: 0;
+}
+
 .rp-step-media .rp-image {
   position: absolute;
   inset: 0;

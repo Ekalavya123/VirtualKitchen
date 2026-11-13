@@ -18,6 +18,8 @@ export interface Recipe {
   name: string
   description?: string
   createdAt?: string
+  /** Last change to the recipe or any of its processes. Absent on recipes saved before dates were recorded. */
+  updatedAt?: string
   createdBy?: number
   visibility?: RecipeVisibility
   /** The public recipe this one was copied from ("Add to My Recipes"); null when it wasn't copied. */
@@ -256,8 +258,16 @@ export const RecipeJobsApi = {
  * process at a time: visualizing a process only generates images for its own STEP nodes.
  */
 export const RecipeProcessVisualizationApi = {
-  async startJob(recipeId: number, processId: number): Promise<RecipeProcessVisualizationJobResponse> {
-    return apiPost<RecipeProcessVisualizationJobResponse>(API.recipeProcessVisualization.startJob(recipeId, processId), {})
+  /** `modelKeys`: the models picked for this run (text for the image prompts, image for the pictures). */
+  async startJob(
+    recipeId: number,
+    processId: number,
+    modelKeys?: RecipeProcessGenerationRequest['modelKeys'],
+  ): Promise<RecipeProcessVisualizationJobResponse> {
+    return apiPost<RecipeProcessVisualizationJobResponse>(
+      API.recipeProcessVisualization.startJob(recipeId, processId),
+      modelKeys && Object.keys(modelKeys).length > 0 ? { modelKeys } : {},
+    )
   },
 
   async getJobStatus(recipeId: number, processId: number, jobId: string, signal?: AbortSignal): Promise<RecipeProcessVisualizationJobResponse> {
